@@ -1,0 +1,131 @@
+<div class="profile-container-premium">
+    
+    <div class="profile-sidebar-card">
+        <div class="profile-cover"></div>
+        <div class="profile-avatar-section">
+            <div class="avatar-ring">
+                <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" id="profile-preview-img" alt="Avatar">
+                <div class="edit-avatar-btn" onclick="document.getElementById('upload-avatar').click()" title="Cambiar Foto">
+                    <i class='bx bxs-camera'></i>
+                </div>
+                <input type="file" id="upload-avatar" hidden accept="image/*">
+            </div>
+            <h2 id="display-name">Cargando...</h2>
+            <p class="role-badge" id="display-rol">...</p>
+        </div>
+
+        <div class="profile-stats">
+            <div class="stat-item">
+                <span class="label">Cargo</span>
+                <span class="value">
+                    <i class='bx bxs-briefcase-alt-2'></i> 
+                    <span id="display-cargo">Cargando...</span>
+                </span>
+            </div>
+            
+            <div class="stat-item">
+                <span class="label">Sede</span>
+                <span class="value">
+                    <i class='bx bxs-building-house'></i> 
+                    <span id="display-sede">-</span>
+                </span>
+            </div>
+
+            <div class="stat-item">
+                <span class="label">Móvil</span>
+                <span class="value">
+                    <i class='bx bxs-phone'></i> 
+                    <span id="display-celular">-</span>
+                </span>
+            </div>
+
+            <div class="stat-item">
+                <span class="label">Correo</span>
+                <span class="value" style="font-size: 11px;"> <i class='bx bxs-envelope'></i> 
+                    <span id="display-email">-</span>
+                </span>
+            </div>
+
+            <div class="stat-item">
+                <span class="label">Dirección</span>
+                <span class="value" style="font-size: 11px;">
+                    <i class='bx bxs-map'></i> 
+                    <span id="display-direccion">-</span>
+                </span>
+            </div>
+
+            <div class="stat-item">
+                <span class="label">Estado</span>
+                <span class="value status-active"><i class='bx bxs-circle'></i> Activo</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="profile-content-card">
+        <div class="card-header">
+            <h3>Actualizar mis Datos</h3>
+            <p>Gestiona tu información personal y de puesto.</p>
+        </div>
+
+        <form id="form-update-profile">
+            
+            <div class="form-section-label"><i class='bx bx-user'></i> Identidad</div>
+            <div class="form-grid-row">
+                <div class="input-group">
+                    <input type="text" id="me-nombres" required placeholder=" ">
+                    <label>Nombres</label>
+                </div>
+                <div class="input-group">
+                    <input type="text" id="me-apellidos" required placeholder=" ">
+                    <label>Apellidos</label>
+                </div>
+            </div>
+
+            <div class="form-section-label"><i class='bx bx-id-card'></i> Puesto y Ubicación</div>
+            <div class="form-grid-row">
+                <div class="input-group">
+                    <input type="text" id="me-cargo" required placeholder=" ">
+                    <label>Cargo / Puesto Laboral</label>
+                </div>
+                <div class="input-group">
+                    <select id="me-sede">
+                        <option value="" disabled selected>Cargando...</option>
+                    </select>
+                    <label class="static">Sede Asignada</label>
+                </div>
+            </div>
+
+            <div class="form-grid-row">
+                <div class="input-group">
+                    <input type="tel" id="me-celular" placeholder=" ">
+                    <label>Celular Corporativo</label>
+                </div>
+                <div class="input-group">
+                    <input type="text" id="me-direccion" placeholder=" ">
+                    <label>Dirección Domiciliaria</label>
+                </div>
+            </div>
+
+            <div class="form-section-label"><i class='bx bx-shield-quarter'></i> Seguridad</div>
+            <div class="input-group full-width">
+                <input type="email" id="me-email" readonly class="readonly-input" placeholder=" ">
+                <label>Correo Corporativo (No editable)</label>
+                <i class='bx bx-lock-alt input-icon-right'></i>
+            </div>
+
+            <div class="form-grid-row">
+                <div class="input-group full-width">
+                    <input type="password" id="me-password" placeholder=" ">
+                    <label>Nueva Contraseña (Opcional)</label>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="button" class="btn-cancel" onclick="location.reload()">Cancelar</button>
+                <button type="submit" class="btn-save">
+                    <i class='bx bx-save'></i> Guardar Cambios
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

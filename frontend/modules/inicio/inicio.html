@@ -1,0 +1,130 @@
+<div class="dashboard-container fade-in">
+    
+    <div class="welcome-header">
+        <div class="welcome-text">
+            <h1>Hola, <span id="welcome-user">Usuario</span> 👋</h1>
+            <p>Aquí tienes el pulso de tu negocio en tiempo real.</p>
+        </div>
+        <div class="header-widgets">
+            <div class="date-widget">
+                <i class='bx bx-calendar'></i>
+                <span id="current-date">Cargando fecha...</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="kpi-dashboard-grid">
+        <div class="kpi-card-modern sales">
+            <div class="kpi-icon-wrapper">
+                <i class='bx bx-trending-up'></i>
+            </div>
+            <div class="kpi-content">
+                <span>Ventas del Día</span>
+                <h3 id="dash-ventas-hoy">S/ 0.00</h3>
+                <small class="trend positive">Actualizado ahora</small>
+            </div>
+            <div class="kpi-bg-icon"><i class='bx bx-cart'></i></div>
+        </div>
+
+        <div class="kpi-card-modern events">
+            <div class="kpi-icon-wrapper">
+                <i class='bx bx-party'></i>
+            </div>
+            <div class="kpi-content">
+                <span>Eventos Hoy</span>
+                <h3 id="dash-eventos-hoy">0</h3>
+                <small>Fiestas programadas</small>
+            </div>
+            <div class="kpi-bg-icon"><i class='bx bx-cake'></i></div>
+        </div>
+
+        <div class="action-card-modern" onclick="loadModule('ventas')">
+            <div class="action-content">
+                <h4>Nueva Venta</h4>
+                <p>Ir al POS</p>
+            </div>
+            <div class="action-icon"><i class='bx bx-right-arrow-alt'></i></div>
+        </div>
+
+        <div class="action-card-modern secondary" onclick="loadModule('crm')">
+            <div class="action-content">
+                <h4>Nueva Reserva</h4>
+                <p>Crear Lead</p>
+            </div>
+            <div class="action-icon"><i class='bx bx-plus'></i></div>
+        </div>
+    </div>
+
+    <div class="dashboard-main-grid">
+        
+        <div class="left-panel">
+            <h4 class="section-label">ACCESOS DIRECTOS</h4>
+            <div class="shortcuts-grid">
+                <div class="shortcut-item" onclick="loadModule('calendario')">
+                    <i class='bx bx-calendar'></i> <span>Calendario</span>
+                </div>
+                <div class="shortcut-item" onclick="loadModule('caja')">
+                    <i class='bx bx-wallet'></i> <span>Caja</span>
+                </div>
+                <div class="shortcut-item" onclick="loadModule('inventario')">
+                    <i class='bx bx-box'></i> <span>Stock</span>
+                </div>
+                <div class="shortcut-item" onclick="loadModule('facturas')">
+                    <i class='bx bx-receipt'></i> <span>Gastos</span>
+                </div>
+            </div>
+
+            <div class="status-widget mt-4">
+                <div class="widget-header">
+                    <h4>Disponibilidad de Sedes</h4>
+                    <i class='bx bx-building-house'></i>
+                </div>
+                
+                <div class="status-list">
+                    
+                    <div class="status-item">
+                        <span class="status-dot online"></span>
+                        <span>Primavera</span>
+                        <small class="status-badge">Disponible</small>
+                    </div>
+
+                    <div class="status-item">
+                        <span class="status-dot online"></span>
+                        <span>La Molina</span>
+                        <small class="status-badge">Disponible</small>
+                    </div>
+
+                    <div class="status-item">
+                        <span class="status-dot online"></span>
+                        <span>San Juan de Lurigancho</span>
+                        <small class="status-badge">Disponible</small>
+                    </div>
+
+                    <div class="status-item" style="opacity: 0.6;">
+                        <span class="status-dot" style="background: #cbd5e1; box-shadow: none;"></span>
+                        <span>ReX</span>
+                        <small class="status-badge" style="background: #f1f5f9; color: #94a3b8;">Solo Arcade</small>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="widget-card">
+                <div class="widget-header">
+                    <h4>Agenda del Día</h4>
+                    <button class="btn-text" onclick="loadModule('calendario')">Ver todo</button>
+                </div>
+                <div class="events-list-compact" id="lista-eventos-hoy">
+                    <div class="empty-state-widget">
+                        <img src="https://cdn-icons-png.flaticon.com/512/7486/7486744.png" alt="Relax" width="60">
+                        <p>No hay más eventos por hoy.</p>
+                        <button class="btn-small" onclick="loadModule('crm')">Agendar uno</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>

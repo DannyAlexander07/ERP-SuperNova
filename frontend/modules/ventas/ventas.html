@@ -1,0 +1,139 @@
+<!-- Ubicacion: SuperNova/frontend/modules/ventas/ventas.html -->
+<div class="pos-container">
+    
+    <div class="pos-catalog">
+        <div class="catalog-header">
+            <!-- Nueva barra de título -->
+            <div class="catalog-title-bar">
+                <div>
+                    <h2>Ventas en caja</h2>
+                    <p>Selecciona productos y finaliza el cobro en segundos.</p>
+                </div>
+                <div class="catalog-meta">
+                    <span class="meta-pill">
+                        <i class='bx bx-store-alt'></i> Módulo POS
+                    </span>
+                    <span class="meta-pill status-pill">
+                        <span class="status-dot"></span> Caja abierta
+                    </span>
+                </div>
+            </div>
+
+            <!-- Buscador -->
+            <div class="search-bar">
+                <i class='bx bx-search'></i>
+                <input 
+                    type="text" 
+                    id="pos-search" 
+                    placeholder="Buscar producto (Nombre o Código)..." 
+                    onkeyup="filtrarProductosPOS()"
+                >
+            </div>
+
+            <!-- Tabs categorías -->
+            <div class="category-tabs">
+                <button class="cat-btn active" onclick="filtrarCategoriaPOS('todos', this)">Todo</button>
+                <button class="cat-btn" onclick="filtrarCategoriaPOS('Cafeteria', this)">Cafetería</button>
+                <button class="cat-btn" onclick="filtrarCategoriaPOS('Taquilla', this)">Taquilla</button>
+                <button class="cat-btn" onclick="filtrarCategoriaPOS('Merch', this)">Merch</button>
+                <button class="cat-btn" onclick="filtrarCategoriaPOS('Arcade', this)">Arcade</button>
+            </div>
+        </div>
+
+        <div class="products-grid" id="pos-products-container"></div>
+    </div>
+
+    <div class="pos-ticket" id="ticket-panel">
+        <div class="ticket-header">
+            <div class="ticket-title">
+                <div class="ticket-icon">
+                    <i class='bx bx-receipt'></i>
+                </div>
+                <div>
+                    <h3>Orden de venta</h3>
+                    <span class="ticket-subtitle">Caja 01 · POS SuperNova</span>
+                </div>
+            </div>
+            <i class='bx bx-x close-ticket-mobile' onclick="toggleCarritoMovil()"></i>
+        </div>
+
+        <div class="ticket-items" id="pos-cart-items"></div>
+
+        <div class="ticket-footer">
+            <div class="ticket-summary">
+                <div class="summary-row">
+                    <span>Subtotal</span>
+                    <span id="lbl-subtotal">S/ 0.00</span>
+                </div>
+                <div class="summary-row">
+                    <span>IGV (18%)</span>
+                    <span id="lbl-igv">S/ 0.00</span>
+                </div>
+                <div class="summary-row total">
+                    <span>Total</span>
+                    <span id="lbl-total">S/ 0.00</span>
+                </div>
+            </div>
+            <button class="btn-checkout" onclick="abrirModalCobro()">
+                COBRAR <i class='bx bx-right-arrow-alt'></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="float-cart-btn" onclick="toggleCarritoMovil()">
+        <i class='bx bx-cart'></i>
+        <span id="float-total">S/ 0.00</span>
+    </div>
+
+    <div id="modal-cobro" class="modal-overlay">
+        <div class="modal-content center-modal" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Finalizar venta</h3>
+                <button class="btn-close" onclick="cerrarModalCobro()">
+                    <i class='bx bx-x'></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <h2 class="total-amount-display" id="modal-total-display">S/ 0.00</h2>
+                
+                <div class="payment-methods-grid">
+                    <label class="method-card">
+                        <input type="radio" name="pago" value="Efectivo" checked>
+                        <div class="card-content">
+                            <i class='bx bx-money'></i>
+                            Efectivo
+                        </div>
+                    </label>
+                    <label class="method-card">
+                        <input type="radio" name="pago" value="Yape">
+                        <div class="card-content">
+                            <i class='bx bx-qr-scan'></i>
+                            Yape/Plin
+                        </div>
+                    </label>
+                    <label class="method-card">
+                        <input type="radio" name="pago" value="Tarjeta">
+                        <div class="card-content">
+                            <i class='bx bx-credit-card'></i>
+                            Tarjeta
+                        </div>
+                    </label>
+                </div>
+
+                <div class="input-group" style="margin-top:25px;">
+                    <input type="text" id="cliente-dni" placeholder=" ">
+                    <label>DNI / RUC Cliente (Opcional)</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button 
+                    class="btn-primary full-width" 
+                    style="height: 50px; font-size: 18px; justify-content: center;" 
+                    onclick="procesarVenta()"
+                >
+                    Confirmar pago
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

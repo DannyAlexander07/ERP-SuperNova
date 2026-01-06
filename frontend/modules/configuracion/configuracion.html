@@ -1,0 +1,138 @@
+<div class="config-container">
+    
+    <div class="module-header">
+        <div class="header-titles">
+            <h2 id="config-title">Administración de Usuarios</h2>
+            <p id="config-desc">Crea y gestiona las cuentas de acceso al sistema.</p>
+        </div>
+        <div class="header-actions">
+            <button class="btn-secondary" id="btn-toggle-view" onclick="toggleUserView()">
+                <i class='bx bx-list-ul'></i> Ver Lista de Usuarios
+            </button>
+        </div>
+    </div>
+
+    <div id="view-create">
+        <form id="form-crear-usuario-completo" class="grid-layout">
+            <div class="card-block photo-section">
+                <h3>Avatar Corporativo</h3>
+                <div class="photo-upload-container" title="Clic para cambiar foto" onclick="document.getElementById('input-foto').click()">
+                    <div class="photo-preview-wrapper">
+                        <div class="photo-preview">
+                            <img src="https://cdn-icons-png.flaticon.com/512/149/149071.png" id="preview-img" alt="Avatar">
+                        </div>
+                        <div class="photo-overlay">
+                            <i class='bx bxs-camera-plus'></i>
+                            <span>Subir Foto</span>
+                        </div>
+                    </div>
+                    <p class="photo-hint">Formatos: JPG, PNG. Máx 2MB.</p>
+                    <input type="file" id="input-foto" hidden accept="image/*" onclick="event.stopPropagation()">
+                </div>
+            </div>
+
+            <div class="card-block info-section">
+                <h3>Información Personal</h3>
+                <div class="form-row">
+                    <div class="input-group">
+                        <input type="text" id="nombres" required placeholder=" ">
+                        <label>Nombres</label>
+                    </div>
+                    <div class="input-group">
+                        <input type="text" id="apellidos" required placeholder=" ">
+                        <label>Apellidos Paterno y Materno</label>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="input-group">
+                        <input type="text" id="dni" required placeholder=" " maxlength="8" pattern="[0-9]*">
+                        <label>DNI / Documento Identidad</label>
+                    </div>
+                    <div class="input-group">
+                        <input type="date" id="fechaNacimiento" required placeholder=" ">
+                        <label class="static">Fecha de Nacimiento</label>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="input-group">
+                        <input type="tel" id="celular" required placeholder=" ">
+                        <label>Celular Personal</label>
+                    </div>
+                     <div class="input-group">
+                        <input type="text" id="direccion" placeholder=" ">
+                        <label>Dirección Domiciliaria</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-block security-section">
+                <h3>Datos de Puesto y Acceso</h3>
+                <div class="form-row">
+                    <div class="input-group">
+                        <input type="text" id="cargo" required placeholder=" ">
+                        <label>Cargo / Puesto Laboral</label>
+                    </div>
+                    <div class="input-group">
+                        <select id="sede" required>
+                            <option value="" disabled selected>Cargando sedes...</option>
+                        </select>
+                        <label class="static">Sede Asignada</label>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="input-group">
+                        <select id="rol" required>
+                            <option value="" disabled selected></option>
+                            <option value="admin">Administrador</option>
+                            <option value="gerente">Gerente</option>
+                            <option value="logistica">Logística</option>
+                            <option value="colaborador">Colaborador</option>
+                        </select>
+                        <label class="static">Rol de Sistema</label>
+                    </div>
+                     <div class="input-group">
+                        <input type="email" id="email" required placeholder=" " autocomplete="off">
+                        <label>Correo Corporativo</label>
+                    </div>
+                </div>
+                <div class="input-group full">
+                    <input type="password" id="password" required placeholder=" " autocomplete="new-password">
+                    <label>Contraseña Temporal</label>
+                </div>
+                 <div class="action-wrapper">
+                    <button type="submit" class="btn-save">
+                        <i class='bx bx-user-plus'></i> Registrar Usuario
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div id="view-list" style="display: none;">
+        <div class="card-block full-width-card">
+            <div class="table-toolbar-simple">
+                <div class="search-box-simple">
+                    <i class='bx bx-search'></i>
+                    <input type="text" id="buscador-usuarios" placeholder="Buscar usuario...">
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="user-table">
+                    <thead>
+                        <tr>
+                            <th>Usuario</th>
+                            <th>Cargo / Sede</th>
+                            <th>Rol</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-usuarios-body">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>

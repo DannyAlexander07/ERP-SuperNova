@@ -1,0 +1,148 @@
+<div class="table-module-container">
+    
+    <div class="module-header">
+        <div class="header-titles">
+            <h2>Directorio de Clientes (CRM)</h2>
+            <p>Gestiona la base de datos de padres y cumpleañeros.</p>
+        </div>
+        <button class="btn-primary" onclick="abrirModalCliente()">
+            <i class='bx bx-user-plus'></i> Nuevo Cliente
+        </button>
+    </div>
+
+    <div class="table-toolbar">
+        <div class="search-box">
+            <i class='bx bx-search'></i>
+            <input type="text" id="buscador-clientes" placeholder="Buscar por nombre, DNI o teléfono...">
+        </div>
+        <div class="filter-actions">
+            <button class="btn-icon" onclick="exportarClientes()" title="Exportar Excel">
+                <i class='bx bxs-file-export' style="color: #1D6F42;"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="premium-table">
+            <thead>
+                <tr>
+                    <th>Cliente (Titular)</th>
+                    <th>Contacto</th>
+                    <th>Hijo Principal</th> <th>Categoría</th>
+                    <th>Última Visita</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-clientes-body">
+                </tbody>
+        </table>
+    </div>
+
+    <div class="pagination">
+        <span class="page-info">Mostrando clientes activos</span>
+        <div class="page-controls">
+            <button disabled><i class='bx bx-chevron-left'></i></button>
+            <button class="active">1</button>
+            <button>2</button>
+            <button><i class='bx bx-chevron-right'></i></button>
+        </div>
+    </div>
+
+    <div id="modal-cliente" class="modal-overlay">
+        <div class="modal-content slide-in-right">
+            <div class="modal-header">
+                <h3 id="modal-title">Nuevo Cliente</h3>
+                <button class="btn-close" onclick="cerrarModalCliente()"><i class='bx bx-x'></i></button>
+            </div>
+            
+            <div class="modal-body">
+                <form id="form-cliente">
+                    <input type="hidden" id="cli-id">
+
+                    <h4 class="form-subtitle">Datos del Titular (Apoderado)</h4>
+                    
+                    <div class="input-group">
+                        <input type="text" id="cli-nombre" required placeholder=" ">
+                        <label>Nombre Completo</label>
+                    </div>
+
+                    <div class="row-grid">
+                        <div class="input-group">
+                            <input type="text" id="cli-dni" required placeholder=" " maxlength="15">
+                            <label>DNI / CE</label>
+                        </div>
+                        <div class="input-group">
+                            <input type="text" id="cli-ruc" placeholder=" " maxlength="11">
+                            <label>RUC (Opcional)</label>
+                        </div>
+                    </div>
+
+                    <div class="row-grid">
+                        <div class="input-group">
+                            <input type="tel" id="cli-telefono" required placeholder=" ">
+                            <label>Celular / WhatsApp</label>
+                        </div>
+                        <div class="input-group">
+                            <input type="email" id="cli-email" placeholder=" ">
+                            <label>Correo Electrónico</label>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <input type="text" id="cli-direccion" placeholder=" ">
+                        <label>Dirección / Distrito</label>
+                    </div>
+
+                    <h4 class="form-subtitle" style="color: #e91e63;">Datos del Niño (Cumpleañero)</h4>
+                    
+                    <div class="row-grid">
+                        <div class="input-group">
+                            <input type="text" id="cli-hijo" placeholder=" ">
+                            <label>Nombre del Niño(a)</label>
+                        </div>
+                        <div class="input-group">
+                            <select id="cli-parentesco">
+                                <option value="Madre">Madre</option>
+                                <option value="Padre">Padre</option>
+                                <option value="Familiar">Otro Familiar</option>
+                            </select>
+                            <label class="static">Parentesco del Titular</label>
+                        </div>
+                    </div>
+
+                    <div class="row-grid">
+                        <div class="input-group">
+                            <input type="date" id="cli-nacimiento" placeholder=" ">
+                            <label class="static">Fecha de Nacimiento</label>
+                        </div>
+                        <div class="input-group">
+                            <input type="text" id="cli-edad-calc" readonly placeholder=" " style="background:#f0f0f0;">
+                            <label class="static">Edad Actual</label>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <input type="text" id="cli-alergias" placeholder=" " style="border-color: #e91e63;">
+                        <label style="color: #e91e63;">⚠ Alergias o Condiciones Médicas</label>
+                    </div>
+
+                    <h4 class="form-subtitle">Clasificación</h4>
+                    <div class="input-group">
+                        <select id="cli-categoria">
+                            <option value="nuevo" selected>Nuevo</option>
+                            <option value="frecuente">Frecuente</option>
+                            <option value="vip">VIP</option>
+                        </select>
+                        <label class="static">Categoría de Cliente</label>
+                    </div>
+
+                </form>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="cerrarModalCliente()">Cancelar</button>
+                <button class="btn-primary" onclick="guardarCliente()">Guardar Ficha</button>
+            </div>
+        </div>
+    </div>
+</div>

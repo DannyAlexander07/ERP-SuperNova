@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuperNova | Panel Logistico</title>
+    
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/notifications.css">
+</head>
+<body>
+
+    <nav class="sidebar close">
+        <header>
+            <div class="image-text">
+                <span class="image">
+                    <i class='bx bxs-planet logo-icon'></i> 
+                </span>
+                <div class="text logo-text">
+                    <span class="name">SuperNova</span>
+                    <span class="profession">Logística</span>
+                </div>
+            </div>
+            <i class='bx bx-chevron-right toggle'></i>
+        </header>
+
+        <div class="menu-bar">
+            <div class="menu">
+                <ul class="menu-links" id="sidebar-menu">
+                    </ul>
+            </div>
+
+            <div class="bottom-content">
+                <div class="profile-card" id="btn-mi-perfil" title="Mi Perfil">
+                    <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="" class="profile-img" id="sidebar-profile-img">
+                    <div class="profile-info">
+                         <span class="name" id="sidebar-profile-name">Cargando...</span>
+                         <span class="role" id="sidebar-profile-role">...</span>
+                    </div>
+                </div>
+                
+                <div class="logout-box">
+                    <a href="#" onclick="cerrarSesion()">
+                        <i class='bx bx-log-out icon'></i>
+                        <span class="text nav-text">Cerrar Sesión</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <section class="home">
+        <div class="header-text">
+            <i class='bx bx-menu mobile-toggle' onclick="toggleMenuMovil()"></i>
+            <div class="text" id="titulo-modulo">Dashboard Principal</div>
+        </div>
+
+        <div id="contenedor-dinamico" class="contenedor-modulo">
+            <h1>Bienvenido al Sistema SuperNova</h1>
+            <p>Selecciona una opcion del menu para comenzar.</p>
+        </div>
+    </section>
+
+    <script src="js/dashboard.js"></script>
+    <script src="js/notifications.js"></script>
+</body>
+</html>

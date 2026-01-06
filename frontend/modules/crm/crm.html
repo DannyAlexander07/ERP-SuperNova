@@ -1,0 +1,196 @@
+<div class="crm-container fade-in">
+    
+    <div class="module-header">
+        <div class="header-titles">
+            <h2>CRM / Embudo de Ventas</h2>
+            <p>Gestiona y mueve tus prospectos hasta el cierre.</p>
+        </div>
+        <div class="header-actions">
+            <button class="btn-primary" onclick="abrirModalLead()">
+                <i class='bx bx-plus'></i> Nuevo Lead
+            </button>
+        </div>
+    </div>
+
+    <div class="kanban-board-wrapper">
+        <div class="kanban-board">
+            <div class="kanban-column" id="col-nuevo" data-estado="nuevo" ondrop="drop(event)" ondragover="allowDrop(event)">
+                <div class="column-header header-blue">
+                    <div class="header-title"><i class='bx bx-sun'></i> <span>NUEVO</span></div>
+                    <span class="count badge-blue" id="count-nuevo">0</span>
+                </div>
+                <div class="column-body custom-scroll" id="list-nuevo"></div>
+            </div>
+
+            <div class="kanban-column" id="col-contactado" data-estado="contactado" ondrop="drop(event)" ondragover="allowDrop(event)">
+                <div class="column-header header-purple">
+                    <div class="header-title"><i class='bx bx-message-dots'></i> <span>CONTACTADO</span></div>
+                    <span class="count badge-purple" id="count-contactado">0</span>
+                </div>
+                <div class="column-body custom-scroll" id="list-contactado"></div>
+            </div>
+
+            <div class="kanban-column" id="col-cerrado" data-estado="cerrado" ondrop="drop(event)" ondragover="allowDrop(event)">
+                <div class="column-header header-green">
+                    <div class="header-title"><i class='bx bx-check-circle'></i> <span>CERRADO</span></div>
+                    <span class="count badge-green" id="count-cerrado">0</span>
+                </div>
+                <div class="column-body custom-scroll" id="list-cerrado"></div>
+            </div>
+            
+        </div>
+    </div>
+
+    <div id="modal-lead" class="modal-overlay">
+        <div class="modal-content slide-in-right">
+            <div class="modal-header">
+                <h3>Nuevo Prospecto</h3>
+                <button class="btn-close" onclick="cerrarModalLead()"><i class='bx bx-x'></i></button>
+            </div>
+            
+                <div class="modal-body">
+                    <form id="form-lead">
+                        <input type="hidden" id="lead-id">
+                        
+                        <h4 class="form-subtitle">Datos del Contacto</h4>
+                        
+                        <div class="row-grid">
+                            <div class="form-group">
+                                <label>Nombre Apoderado <span class="req">*</span></label>
+                                <div class="input-wrapper">
+                                    <i class='bx bx-user'></i>
+                                    <input type="text" id="lead-nombre" required placeholder="Ej: María Pérez" autocomplete="off">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Correo Electrónico</label>
+                                <div class="input-wrapper">
+                                    <i class='bx bx-envelope'></i>
+                                    <input type="email" id="lead-email" placeholder="Ej: correo@empresa.com" autocomplete="off">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row-grid">
+                            <div class="form-group">
+                                <label>WhatsApp / Celular <span class="req">*</span></label>
+                                <div class="input-wrapper">
+                                    <i class='bx bx-phone'></i>
+                                    <input type="tel" id="lead-telefono" required placeholder="999 888 777" autocomplete="off">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Canal de Origen</label>
+                                <div class="input-wrapper">
+                                    <i class='bx bx-globe'></i>
+                                    <select id="lead-canal">
+                                        <option value="WhatsApp">WhatsApp</option>
+                                        <option value="Facebook">Facebook Ads</option>
+                                        <option value="Instagram">Instagram</option>
+                                        <option value="Web">Página Web</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h4 class="form-subtitle mt-3">Detalles del Evento</h4>
+                        
+                        <div class="form-group">
+                            <label>Nombre del Cumpleañero(a)</label>
+                            <div class="input-wrapper">
+                                <i class='bx bx-cake'></i>
+                                <input type="text" id="lead-hijo" placeholder="Ej: Mateo" autocomplete="off">
+                            </div>
+                        </div>
+                        
+                        <div class="row-grid">
+                            <div class="form-group">
+                                <label>Fecha Tentativa</label>
+                                <div class="input-wrapper">
+                                    <input type="date" id="lead-fecha"> 
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Hora Inicio</label>
+                                <div class="input-wrapper">
+                                    <i class='bx bx-time'></i>
+                                    <input type="time" id="lead-hora-inicio" value="16:00" autocomplete="off"> 
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Hora Fin</label>
+                                <div class="input-wrapper">
+                                    <i class='bx bx-time'></i>
+                                    <input type="time" id="lead-hora-fin" value="19:00" autocomplete="off"> 
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row-grid">
+                            <div class="form-group">
+                                <label>Sede Interés</label>
+                                <div class="input-wrapper">
+                                    <i class='bx bx-building'></i>
+                                    <select id="lead-sede" onchange="cargarSalasPorSede()"> 
+                                        <option value="">Seleccionar...</option>
+                                        <option value="3">Primavera</option>
+                                        <option value="4">La Molina</option>
+                                        <option value="5">ReX</option>
+                                        <option value="6">San Juan de Lurigancho</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Sala / Espacio</label>
+                                <div class="input-wrapper">
+                                    <i class='bx bx-door-open'></i>
+                                    <select id="lead-sala" disabled>
+                                        <option value="">← Elige sede primero</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group"></div>
+                        </div>
+
+                        <div class="row-grid">
+                            <div class="form-group">
+                                <label>Paquete Interés</label>
+                                <div class="input-wrapper">
+                                    <i class='bx bx-gift'></i>
+                                    <select id="lead-paquete">
+                                        <option value="">Seleccionar...</option>
+                                        <option value="Basico">Paquete Básico</option>
+                                        <option value="Galactico">Paquete Galáctico</option>
+                                        <option value="SuperNova">Paquete SuperNova</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Valor Estimado (S/)</label>
+                                <div class="input-wrapper">
+                                    <i class='bx bx-money'></i>
+                                    <input type="number" id="lead-valor" placeholder="0.00" autocomplete="off">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Notas / Comentarios</label>
+                            <div class="input-wrapper">
+                                <textarea id="lead-obs" rows="2" placeholder="Ej: Preguntó por paquete galáctico..." autocomplete="off"></textarea>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            
+            <div class="modal-footer">
+                <button type="button" id="btn-cobrar-saldo" class="btn-secondary" style="display:none; background-color: #599c75; color: white; margin-right: 10px; outline: none; border: none; padding: 10px 15px; border-radius: 10px;">
+                    💰 Cobrar Saldo (50%)
+                </button>
+                <button class="btn-cancel" onclick="cerrarModalLead()">Cancelar</button>
+                <button class="btn-primary" onclick="guardarLead()">Guardar Lead</button>
+            </div>
+        </div>
+    </div>
+</div>

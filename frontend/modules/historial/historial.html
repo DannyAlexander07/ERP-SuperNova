@@ -1,0 +1,53 @@
+<div class="table-module-container fade-in">
+    <div class="module-header">
+        <div class="header-titles">
+            <h2>📜 Historial de Ventas POS</h2>
+            <p>Registro detallado de todas las transacciones generadas en caja.</p>
+        </div>
+        <div class="header-actions">
+            <button class="btn-secondary" onclick="exportarHistorialVentas()">
+                <i class='bx bxs-file-export'></i> Exportar Excel
+            </button>
+        </div>
+    </div>
+
+    <div class="table-toolbar">
+        <div class="search-box">
+            <i class='bx bx-search'></i>
+            <input type="text" id="historial-search" placeholder="Buscar por cliente, ticket o DNI..." onkeyup="filtrarHistorial()">
+        </div>
+        <div class="filter-actions">
+            <input type="date" id="filtro-fecha-historial" class="date-filter" onchange="filtrarHistorial()">
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="premium-table">
+            <thead>
+                <tr>
+                    <th>Ticket N°</th>
+                    <th>Emisión</th>
+                    <th>Cliente / Doc</th>
+                    <th>Sede / Usuario</th>
+                    <th>Monto Total</th>
+                    <th>Método</th>
+                    <th>Detalles</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-historial-body">
+                <tr><td colspan="7" style="text-align:center">Cargando historial de ventas...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="modal-detalle-venta" class="modal-overlay">
+    <div class="modal-content slide-in-right" style="max-width: 500px;">
+        <div class="modal-header">
+            <h3>Detalle Ticket N° <span id="detalle-ticket-id"></span></h3>
+            <button class="btn-close" onclick="cerrarModalDetalle()"><i class='bx bx-x'></i></button>
+        </div>
+        <div class="modal-body" id="detalle-venta-body">
+            </div>
+    </div>
+</div>

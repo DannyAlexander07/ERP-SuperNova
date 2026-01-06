@@ -1,0 +1,221 @@
+/* =========================================
+   MÓDULO HISTORIAL DE VENTAS
+========================================= */
+
+.table-module-container {
+    background: white;
+    padding: 25px;
+    border-radius: 20px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.03);
+    border: 1px solid #f1f5f9;
+}
+
+/* HEADER */
+.module-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.header-titles h2 {
+    font-size: 26px;
+    font-weight: 800;
+    color: #1e293b;
+    margin-bottom: 5px;
+}
+
+.header-titles p {
+    font-size: 14px;
+    color: #64748b;
+}
+
+/* TOOLBAR (Buscador + Filtros) */
+.table-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.search-box {
+    position: relative;
+    flex: 1;
+    max-width: 400px;
+}
+
+.search-box i {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+    font-size: 18px;
+}
+
+.search-box input {
+    width: 100%;
+    padding: 12px 15px 12px 40px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    font-size: 14px;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.search-box input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.filter-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.date-filter {
+    padding: 10px 15px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    color: #475569;
+    outline: none;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+/* TABLA RESPONSIVA */
+.table-responsive {
+    overflow-x: auto;
+    border-radius: 12px;
+    border: 1px solid #f1f5f9;
+}
+
+.premium-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 800px; /* Evita que se rompa en móvil */
+}
+
+.premium-table th {
+    background: #f8fafc;
+    padding: 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.premium-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 14px;
+    color: #334155;
+    vertical-align: middle;
+}
+
+.premium-table tr:last-child td {
+    border-bottom: none;
+}
+
+.premium-table tr:hover {
+    background-color: #f8fafc;
+}
+
+/* Botones de Acción en Tabla */
+.btn-action {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 18px;
+    transition: 0.2s;
+    margin-right: 5px;
+}
+
+.btn-view { background: #e0f2fe; color: #0284c7; }
+.btn-view:hover { background: #0284c7; color: white; }
+
+.btn-pdf { background: #fee2e2; color: #ef4444; }
+.btn-pdf:hover { background: #ef4444; color: white; }
+
+/* MODAL */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(5px);
+    z-index: 2000; display: none; justify-content: center; align-items: center;
+}
+
+.modal-overlay.active { display: flex; animation: fadeIn 0.2s; }
+
+.modal-content {
+    background: white; border-radius: 16px; width: 90%; max-width: 500px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.2); overflow: hidden;
+}
+
+.modal-header {
+    padding: 20px; border-bottom: 1px solid #f1f5f9;
+    display: flex; justify-content: space-between; align-items: center;
+}
+
+/* --- BOTÓN SECUNDARIO (Exportar) --- */
+.btn-secondary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    color: #475569;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+}
+
+.btn-secondary:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    color: #1e293b;
+}
+
+.btn-secondary i {
+    font-size: 18px;
+    color: #10b981; /* Verde Excel */
+}
+
+
+.modal-body { padding: 25px; font-size: 14px; color: #475569; }
+
+.btn-close { background: none; border: none; font-size: 24px; color: #94a3b8; cursor: pointer; }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* --- RESPONSIVE --- */
+@media (max-width: 768px) {
+    .module-header { flex-direction: column; align-items: flex-start; }
+    .table-toolbar { flex-direction: column; align-items: stretch; }
+    .search-box { max-width: 100%; }
+    .filter-actions { justify-content: space-between; }
+    .date-filter { flex: 1; }
+        .header-actions {
+        width: 100%;
+    }
+    .btn-secondary {
+        width: 100%;
+        justify-content: center;
+    }
+}

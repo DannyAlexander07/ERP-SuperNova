@@ -1,0 +1,111 @@
+<div class="caja-container fade-in">
+    
+    <div class="module-header">
+        <div class="header-titles">
+            <h2>Flujo de Caja y Tesorería</h2>
+            <p>Control de ingresos y egresos de dinero en efectivo/bancos.</p>
+        </div>
+        <button class="btn-primary" onclick="abrirModalMovimiento()">
+            <i class='bx bx-transfer-alt'></i> Registrar Movimiento
+        </button>
+    </div>
+
+    <div class="kpi-grid">
+        <div class="kpi-card ingreso">
+            <div class="kpi-icon"><i class='bx bx-trending-up'></i></div>
+            <div class="kpi-data">
+                <span class="kpi-label">Ingresos (Hoy)</span>
+                <h3 id="kpi-ingresos">S/ 0.00</h3>
+            </div>
+        </div>
+
+        <div class="kpi-card egreso">
+            <div class="kpi-icon"><i class='bx bx-trending-down'></i></div>
+            <div class="kpi-data">
+                <span class="kpi-label">Egresos (Hoy)</span>
+                <h3 id="kpi-egresos">S/ 0.00</h3>
+            </div>
+        </div>
+
+        <div class="kpi-card saldo">
+            <div class="kpi-icon"><i class='bx bx-wallet'></i></div>
+            <div class="kpi-data">
+                <span class="kpi-label">Saldo en Caja</span>
+                <h3 id="kpi-saldo">S/ 0.00</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-module-container" style="margin-top: 20px;">
+        <div class="table-responsive">
+            <table class="premium-table">
+                <thead>
+                    <tr>
+                        <th>Hora</th>
+                        <th>Tipo</th>
+                        <th>Origen / Detalle</th>
+                        <th>Método</th>
+                        <th>Monto</th>
+                        <th>Usuario</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-caja-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="modal-caja" class="modal-overlay">
+        <div class="modal-content center-modal" style="width: 400px;">
+            <div class="modal-header">
+                <h3>Registrar Movimiento</h3>
+                <button class="btn-close" onclick="cerrarModalCaja()"><i class='bx bx-x'></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="form-caja">
+                    
+                    <div class="input-group">
+                        <label class="static">Tipo de Movimiento</label>
+                        <select id="mov-tipo" onchange="toggleTipoMovimiento()" required>
+                            <option value="INGRESO">🟢 Ingreso de Dinero</option>
+                            <option value="EGRESO">🔴 Salida de Dinero</option>
+                        </select>
+                    </div>
+
+                    <div class="input-group">
+                        <label class="static">Concepto</label>
+                        <select id="mov-origen">
+                            <option value="MANUAL">Ajuste Manual / Aporte</option>
+                            <option value="GASTO_CHICA">Gasto Caja Chica</option>
+                            <option value="VENTA_EXTRA">Venta Extraordinaria</option>
+                        </select>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Monto (S/)</label>
+                        <input type="number" id="mov-monto" required placeholder=" " step="0.01">
+                    </div>
+
+                    <div class="input-group">
+                        <label class="static">Método de Pago</label>
+                        <select id="mov-metodo">
+                            <option value="EFECTIVO">Efectivo</option>
+                            <option value="YAPE">Yape / Plin</option>
+                            <option value="TRANSFERENCIA">Transferencia</option>
+                            <option value="TARJETA">Tarjeta</option>
+                        </select>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Descripción (Ej: Taxi, Almuerzo)</label>
+                        <input type="text" id="mov-desc" placeholder=" " required>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn-cancel" onclick="cerrarModalCaja()">Cancelar</button>
+                        <button type="submit" class="btn-primary">Guardar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,137 @@
+/* --- CONTENEDOR DE NOTIFICACIONES (TOASTS) --- */
+#toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.toast {
+    background: white;
+    padding: 15px 20px;
+    border-radius: 12px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 300px;
+    transform: translateX(120%); /* Empieza escondido a la derecha */
+    transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+    border-left: 5px solid #ccc;
+}
+
+.toast.show {
+    transform: translateX(0);
+}
+
+.toast-content {
+    flex: 1;
+}
+
+.toast-title {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 2px;
+    color: #333;
+}
+
+.toast-msg {
+    font-size: 13px;
+    color: #666;
+}
+
+/* VARIANTES */
+.toast.success { border-left-color: #2ecc71; }
+.toast.success i { color: #2ecc71; font-size: 24px; }
+
+.toast.error { border-left-color: #e74c3c; }
+.toast.error i { color: #e74c3c; font-size: 24px; }
+
+.toast.info { border-left-color: #3498db; }
+.toast.info i { color: #3498db; font-size: 24px; }
+
+
+/* --- MODAL DE CONFIRMACIÓN (Reemplazo de confirm) --- */
+.custom-confirm-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: 10000;
+    display: none; /* Oculto por defecto */
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.custom-confirm-overlay.active {
+    display: flex;
+    opacity: 1;
+}
+
+.confirm-box {
+    background: white;
+    padding: 30px;
+    border-radius: 16px;
+    width: 400px;
+    text-align: center;
+    transform: scale(0.9);
+    transition: transform 0.2s ease;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+}
+
+.custom-confirm-overlay.active .confirm-box {
+    transform: scale(1);
+}
+
+.confirm-icon {
+    font-size: 50px;
+    color: #f39c12;
+    margin-bottom: 15px;
+}
+
+.confirm-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 10px;
+}
+
+.confirm-desc {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 25px;
+}
+
+.confirm-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.btn-confirm-yes {
+    background: #e74c3c; /* Rojo para acciones peligrosas */
+    color: white;
+    border: none;
+    padding: 10px 25px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-confirm-no {
+    background: white;
+    border: 1px solid #ddd;
+    color: #555;
+    padding: 10px 25px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+}

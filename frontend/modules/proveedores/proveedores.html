@@ -1,0 +1,135 @@
+<div class="table-module-container">
+    
+    <div class="module-header">
+        <div class="header-titles">
+            <h2>Gestión de Proveedores</h2>
+            <p>Administra la cartera de socios comerciales y sus condiciones de crédito.</p>
+        </div>
+        <button class="btn-primary" onclick="abrirModalProveedor()">
+            <i class='bx bx-plus'></i> Nuevo Proveedor
+        </button>
+    </div>
+
+    <div class="table-toolbar">
+        <div class="search-box">
+            <i class='bx bx-search'></i>
+            <input type="text" id="buscador-proveedores" placeholder="Buscar por RUC o Razón Social...">
+        </div>
+        <div class="filter-actions">
+            <button class="btn-icon" title="Filtros"><i class='bx bx-filter-alt'></i></button>
+            <button class="btn-icon" title="Exportar Excel"><i class='bx bx-download'></i></button>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="premium-table">
+            <thead>
+                <tr>
+                    <th>RUC</th>
+                    <th>Razón Social</th>
+                    <th>Categoría</th>
+                    <th>Contacto</th>
+                    <th>Crédito</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-proveedores-body">
+                </tbody>
+        </table>
+    </div>
+
+    <div class="pagination">
+        <span class="page-info">Mostrando registros recientes</span>
+        <div class="page-controls">
+            <button disabled><i class='bx bx-chevron-left'></i></button>
+            <button class="active">1</button>
+            <button>2</button>
+            <button><i class='bx bx-chevron-right'></i></button>
+        </div>
+    </div>
+
+    <div id="modal-proveedor" class="modal-overlay">
+        <div class="modal-content slide-in-right">
+            <div class="modal-header">
+                <h3>Nuevo Socio Comercial</h3>
+                <button class="btn-close" onclick="cerrarModalProveedor()"><i class='bx bx-x'></i></button>
+            </div>
+            
+            <div class="modal-body">
+                <form id="form-nuevo-proveedor">
+                    
+                    <input type="hidden" id="prov-id">
+
+                    <h4 class="form-subtitle">Datos Fiscales</h4>
+                    
+                    <div class="input-group">
+                        <input type="text" id="prov-ruc" required placeholder=" " maxlength="11" pattern="[0-9]*">
+                        <label>RUC / DNI</label>
+                    </div>
+
+                    <div class="input-group">
+                        <input type="text" id="prov-razon" required placeholder=" ">
+                        <label>Razón Social / Nombre Completo</label>
+                    </div>
+
+                    <div class="input-group">
+                        <input type="text" id="prov-direccion" placeholder=" ">
+                        <label>Dirección Fiscal</label>
+                    </div>
+
+                    <h4 class="form-subtitle">Condiciones Comerciales</h4>
+                    
+                    <div class="row-grid">
+                        <div class="input-group">
+                            <select id="prov-categoria" required>
+                                <option value="" disabled selected>Seleccionar...</option>
+                                <option value="alimentos">Alimentos y Bebidas</option>
+                                <option value="limpieza">Limpieza y Mantenimiento</option>
+                                <option value="servicios">Servicios (Luz/Agua/Net)</option>
+                                <option value="merchandising">Merchandising/Juguetes</option>
+                                <option value="activos">Equipos y Maquinaria</option>
+                                <option value="varios">Varios / Freelance</option>
+                            </select>
+                            <label class="static">Categoría</label>
+                        </div>
+
+                        <div class="input-group">
+                            <input type="number" id="prov-dias" required placeholder=" " value="0">
+                            <label>Días de Crédito</label>
+                        </div>
+                    </div>
+
+                    <h4 class="form-subtitle">Contacto y Pagos</h4>
+                    
+                    <div class="input-group">
+                        <input type="text" id="prov-contacto" placeholder=" ">
+                        <label>Nombre de la Persona de Contacto</label>
+                    </div>
+
+                    <div class="row-grid">
+                        <div class="input-group">
+                            <input type="email" id="prov-email" placeholder=" ">
+                            <label>Correo Pedidos</label>
+                        </div>
+                        <div class="input-group">
+                            <input type="tel" id="prov-telefono" placeholder=" ">
+                            <label>Teléfono / Celular</label>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <input type="text" id="prov-banco" placeholder=" ">
+                        <label>Cuenta Bancaria (Banco - N°)</label>
+                    </div>
+
+                </form>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="cerrarModalProveedor()">Cancelar</button>
+                <button class="btn-primary" onclick="guardarProveedor()">Guardar Proveedor</button>
+            </div>
+        </div>
+    </div>
+</div>

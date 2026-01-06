@@ -1,0 +1,282 @@
+<div class="table-module-container">
+    
+    <div class="module-header">
+        <div class="header-titles">
+            <h2>Control de Inventario y Productos</h2>
+            <p>Gestiona el stock, precios y crea combos para tus eventos.</p>
+        </div>
+        <div class="header-actions">
+            <button class="btn-secondary" onclick="verKardex()">
+                <i class='bx bx-history'></i> Ver Kardex
+            </button>
+            <button class="btn-primary" onclick="abrirModalProducto()">
+                <i class='bx bx-plus-circle'></i> Nuevo Ítem
+            </button>
+        </div>
+    </div>
+
+    <div class="tabs-container">
+        <button class="tab-btn active" onclick="filtrarTab('todos', this)">Todos</button>
+        <button class="tab-btn" onclick="filtrarTab('fisico', this)">Mercadería (Stock)</button>
+        <button class="tab-btn" onclick="filtrarTab('servicio', this)">Servicios</button>
+        <button class="tab-btn" onclick="filtrarTab('combo', this)">Combos</button>
+    </div>
+
+    <div class="table-toolbar">
+        <div class="search-box">
+            <i class='bx bx-search'></i>
+            <input type="text" id="buscador-productos" placeholder="Buscar por nombre, código o categoría...">
+        </div>
+        <div class="filter-actions">
+            <select class="date-filter" id="filtro-categoria" onchange="filtrarPorCategoria()">
+                <option value="">Todas las Categorías</option>
+                <option value="Cafeteria">Cafetería</option>
+                <option value="Taquilla">Taquilla</option>
+                <option value="Merch">Merchandising</option>
+                <option value="Arcade">Arcade</option>
+                <option value="Eventos">Eventos</option>
+            </select>
+            <button class="btn-icon" onclick="exportarInventario()" title="Exportar Excel">
+                <i class='bx bxs-file-export' style="color: #1D6F42;"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="premium-table">
+            <thead>
+                <tr>
+                    <th>Producto</th> <th>Categoría</th>
+                    <th>Tipo</th>
+                    <th>Stock</th>
+                    <th>Precio Venta</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-productos-body">
+                </tbody>
+        </table>
+    </div>
+
+    <div class="pagination">
+        <span class="page-info">Mostrando inventario actualizado</span>
+        <div class="page-controls">
+            <button disabled><i class='bx bx-chevron-left'></i></button>
+            <button class="active">1</button>
+            <button>2</button>
+            <button><i class='bx bx-chevron-right'></i></button>
+        </div>
+    </div>
+
+    <div id="modal-producto" class="modal-overlay">
+        <div class="modal-content slide-in-right">
+            <div class="modal-header">
+                <h3 id="modal-title">Nuevo Ítem</h3>
+                <button class="btn-close" onclick="cerrarModalProducto()"><i class='bx bx-x'></i></button>
+            </div>
+            
+            <div class="modal-body">
+                <form id="form-producto">
+                    <input type="hidden" id="prod-id">
+
+                    <h4 class="form-subtitle">Información Básica</h4>
+                    
+                    <div class="input-group">
+                        <input type="text" id="prod-nombre" required placeholder=" ">
+                        <label>Nombre del Producto / Combo</label>
+                    </div>
+
+                    <div class="row-grid">
+                        <div class="input-group">
+                            <input type="text" id="prod-codigo" required placeholder=" ">
+                            <label>Código Interno (SKU)</label>
+                        </div>
+                        <div class="input-group">
+                            <select id="prod-categoria" required>
+                                <option value="" disabled selected>Seleccionar...</option>
+                                <option value="Cafeteria">Cafetería</option>
+                                <option value="Taquilla">Taquilla</option>
+                                <option value="Merch">Merch / Juguetes</option>
+                                <option value="Arcade">Juegos / Arcade</option>
+                                <option value="Eventos">Eventos</option>
+                            </select>
+                            <label class="static">Categoría</label>
+                        </div>
+                    </div>
+
+                    <div class="row-grid">
+                        <div class="input-group">
+                            <select id="prod-tipo" onchange="toggleTipoProducto()">
+                                <option value="fisico" selected>Producto Físico (Controla Stock)</option>
+                                <option value="servicio">Servicio (Sin Stock)</option>
+                                <option value="combo">Combo (Paquete de Productos)</option>
+                            </select>
+                            <label class="static">Tipo de Ítem</label>
+                        </div>
+                        <div class="input-group" id="group-unidad">
+                            <input type="text" id="prod-unidad" placeholder=" " value="UND">
+                            <label>Unidad Medida</label>
+                        </div>
+                    </div>
+
+                    <h4 class="form-subtitle">Precios</h4>
+                    <div class="row-grid">
+                        <div class="input-group">
+                            <input type="number" id="prod-costo" placeholder=" " step="0.01">
+                            <label>Costo de Compra (Ref.)</label>
+                        </div>
+                        <div class="input-group">
+                            <input type="number" id="prod-precio" required placeholder=" " step="0.01" style="font-weight:bold; color:#28a745;">
+                            <label style="color:#28a745;">Precio Venta (PVP)</label>
+                        </div>
+                    </div>
+
+                    <div id="seccion-stock">
+                        <h4 class="form-subtitle">Inventario</h4>
+                        <div class="row-grid">
+                            <div class="input-group">
+                                <input type="number" id="prod-stock" placeholder=" " value="0">
+                                <label>Stock Inicial</label>
+                            </div>
+                            <div class="input-group">
+                                <input type="number" id="prod-minimo" placeholder=" " value="5">
+                                <label>Stock Mínimo (Alerta)</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="seccion-combo" style="display: none;">
+                        <h4 class="form-subtitle">Contenido del Combo</h4>
+                        <p style="font-size:12px; color:#666; margin-bottom:10px;">Selecciona los productos que incluye este combo.</p>
+                        <div class="combo-products-select">
+                            <select id="combo-productos-select" multiple>
+                                </select>
+                        </div>
+                        <p style="font-size:11px; color:#999; margin-top:5px;">Mantén presionado Ctrl (Windows) o Cmd (Mac) para seleccionar múltiples.</p>
+                    </div>
+
+                </form>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="cerrarModalProducto()">Cancelar</button>
+                <button class="btn-primary" onclick="guardarProducto()">Guardar Ítem</button>
+            </div>
+        </div>
+    </div>
+<div id="modal-kardex" class="modal-overlay">
+        <div class="modal-content center-modal">
+            
+            <div class="modal-header">
+                <h3>Movimientos de Inventario (Kardex)</h3>
+                <button class="btn-close" onclick="cerrarModalKardex()"><i class='bx bx-x'></i></button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="kardex-filters" style="display:flex; gap:10px; margin-bottom:15px;">
+                    <input type="date" class="date-filter">
+                    <select class="date-filter" id="filtro-producto-kardex" style="flex:1" onchange="filtrarTablaKardex()">
+                        <option value="">Todos los Productos</option>
+                    </select>
+                    <button class="btn-secondary" onclick="filtrarTablaKardex()">
+                        <i class='bx bx-filter'></i> Filtrar
+                    </button>
+                    <button class="btn-icon" onclick="exportarKardexExcel()" title="Descargar Historial">
+                        <i class='bx bxs-file-export' style="color: #1D6F42; font-size: 22px;"></i>
+                    </button>
+                </div>
+
+                <div class="table-responsive-kardex">
+                    <table class="kardex-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Producto</th>
+                                <th>Movimiento</th>
+                                <th style="text-align:center">Cant.</th>
+                                <th style="text-align:right">Costo Unit.</th>
+                                <th style="text-align:right">Total Mov.</th>
+                                <th style="text-align:center">Stock Final</th>
+                                <th>Usuario</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-kardex-body">
+                            </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination-container" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+                    <span class="page-info" id="kardex-page-info">Cargando...</span>
+                    
+                    <div class="page-controls" id="kardex-pagination-controls">
+                        </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+<div id="modal-stock" class="modal-overlay">
+        <div class="modal-content center-modal" style="width: 450px;">
+            <div class="modal-header">
+                <h3>📦 Ajuste de Inventario</h3>
+                <button class="btn-close" onclick="cerrarModalStock()"><i class='bx bx-x'></i></button>
+            </div>
+            
+            <div class="modal-body">
+                <form id="form-stock">
+                    <input type="hidden" id="stk-id">
+                    
+                    <div style="background: #f8fafc; padding: 15px; border-radius: 12px; margin-bottom: 20px; display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <span style="font-size:12px; color:#64748b; font-weight:bold;">PRODUCTO</span>
+                            <div id="stk-nombre-display" style="font-weight:700; color:#334155; font-size:16px;">Nombre</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <span style="font-size:12px; color:#64748b;">STOCK ACTUAL</span>
+                            <div id="stk-actual-display" style="font-weight:700; color:#695CFE; font-size:16px;">0</div>
+                        </div>
+                    </div>
+
+                    <div class="stock-tabs" style="display:flex; gap:10px; margin-bottom:20px; background:#f1f5f9; padding:5px; border-radius:12px;">
+                        <button type="button" class="stock-tab active" id="tab-entrada" onclick="setTipoStock('entrada')" 
+                            style="flex:1; border:none; padding:10px; border-radius:8px; font-weight:700; cursor:pointer; background:#fff; color:#16a34a; box-shadow:0 2px 5px rgba(0,0,0,0.05);">
+                            <i class='bx bx-plus-circle'></i> Entrada / Compra
+                        </button>
+                        <button type="button" class="stock-tab" id="tab-salida" onclick="setTipoStock('salida')" 
+                            style="flex:1; border:none; padding:10px; border-radius:8px; font-weight:700; cursor:pointer; background:transparent; color:#64748b;">
+                            <i class='bx bx-minus-circle'></i> Salida / Merma
+                        </button>
+                    </div>
+                    
+                    <input type="hidden" id="stk-tipo" value="entrada">
+
+                    <div class="row-grid">
+                        <div class="input-group">
+                            <input type="number" id="stk-cantidad" required placeholder=" " min="1" style="font-size:18px; font-weight:bold;">
+                            <label>Cantidad</label>
+                        </div>
+                        
+                        <div class="input-group" id="group-costo">
+                            <input type="number" id="stk-costo" placeholder=" " step="0.01">
+                            <label>Costo Unit. (S/)</label>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <select id="stk-motivo">
+                            </select>
+                        <label class="static">Motivo</label>
+                    </div>
+
+                    <div class="modal-footer" style="padding:0; padding-top:20px; border:none; background:transparent;">
+                        <button type="button" class="btn-cancel" onclick="cerrarModalStock()">Cancelar</button>
+                        <button type="submit" id="btn-stock-submit" class="btn-primary" style="background-color: #16a34a;">
+                            Confirmar Ingreso
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+</div>

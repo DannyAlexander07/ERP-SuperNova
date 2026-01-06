@@ -1,0 +1,144 @@
+<div class="analytics-container fade-in">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <div class="module-header">
+        <div class="header-content">
+            <div class="title-wrapper">
+                <span class="icon-header">📊</span>
+                <div class="text-group">
+                    <h2>Tablero Financiero & P&L</h2>
+                    <p>Inteligencia de negocios: Ingresos, Egresos y Rentabilidad Real (Caja).</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="summary-cards-grid">
+        <div class="kpi-card kpi-blue">
+            <div class="kpi-icon"><i class='bx bx-trending-up'></i></div>
+            <div class="kpi-info">
+                <h4>Ingresos Totales</h4>
+                <p class="data-big" id="total-ingresos">S/ 0.00</p>
+            </div>
+        </div>
+        
+        <div class="kpi-card kpi-red">
+            <div class="kpi-icon"><i class='bx bx-trending-down'></i></div>
+            <div class="kpi-info">
+                <h4>Egresos y Mermas</h4>
+                <p class="data-big" id="total-egresos">S/ 0.00</p>
+            </div>
+        </div>
+        
+        <div class="kpi-card kpi-green">
+            <div class="kpi-icon"><i class='bx bx-wallet'></i></div>
+            <div class="kpi-info">
+                <h4>Utilidad Neta</h4>
+                <p class="data-big" id="total-pnl">S/ 0.00</p>
+            </div>
+        </div>
+        
+        <div class="kpi-card kpi-purple">
+            <div class="kpi-icon"><i class='bx bx-target-lock'></i></div>
+            <div class="kpi-info">
+                <h4>Conversión / Ticket</h4>
+                <p class="data-big" id="kpi-conversion">0%</p>
+                <small id="kpi-ticket">Ticket: S/ 0</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-container">
+        <div class="filters-wrapper">
+            <div class="input-group">
+                <label>Desde</label>
+                <input type="date" id="filtro-inicio" class="modern-input">
+            </div>
+
+            <div class="input-group">
+                <label>Hasta</label>
+                <input type="date" id="filtro-fin" class="modern-input">
+            </div>
+
+            <div class="input-group">
+                <label>Sede</label>
+                <select id="filtro-sede-analitica" class="modern-select">
+                    <option value="">Todas las Sedes</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="actions-wrapper">
+            <button class="btn-prime primary" onclick="aplicarFiltrosAnalitica()">
+                <i class='bx bx-filter-alt'></i> Filtrar
+            </button>
+            <button class="btn-prime secondary" onclick="exportarReporteExcel()">
+                <i class='bx bxs-file-export'></i> Exportar
+            </button>
+        </div>
+    </div>
+
+    <div class="charts-grid">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h4>🛒 Mix de Ingresos</h4>
+                <span class="badge badge-gray">Por Sede</span>
+            </div>
+            <div class="chart-body">
+                <canvas id="chart-mix-ventas"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-header">
+                <h4>📉 Gastos y Mermas</h4>
+                <span class="badge badge-red">Crítico</span>
+            </div>
+            <div class="chart-body">
+                <canvas id="chart-gastos-mermas"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-header">
+                <h4>💰 Utilidad Neta</h4>
+                <span class="badge badge-green">Rentabilidad</span>
+            </div>
+            <div class="chart-body">
+                <canvas id="chart-utilidad"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-header">
+                <h4>🌍 Estructura Global</h4>
+                <span class="badge badge-blue">Resumen</span>
+            </div>
+            <div class="chart-body donut-container">
+                <canvas id="chart-global"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-section">
+        <h3 class="section-title">Detalle Operativo (Histórico)</h3>
+        <div class="table-responsive-modern">
+            <table class="premium-table">
+                <thead>
+                    <tr>
+                        <th>Sede</th>
+                        <th>Concepto</th>
+                        <th class="text-right">Ingresos</th>
+                        <th class="text-right">Egresos</th>
+                        <th class="text-right">P&L Neto</th>
+                    </tr>
+                </thead>
+                <tbody id="pyl-detalle-body">
+                    </tbody>
+            </table>
+        </div>
+        <div id="pyl-paginacion" class="pagination-container"></div>
+    </div>
+</div>

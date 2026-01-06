@@ -1,0 +1,573 @@
+/* Ubicacion: SuperNova/frontend/css/dashboard.css */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+:root {
+    --body-color: #f5f6fa;
+    --sidebar-color: #11101d;
+    --primary-color: #695CFE;
+    --primary-dark: #574bce;
+    --toggle-color: #fff;
+    --text-color-sidebar: #ccc;
+    --text-color-main: #333;
+    --sidebar-width: 260px;
+    --sidebar-close-width: 80px;
+    --tran-03: all 0.3s ease;
+    --tran-05: all 0.5s ease;
+}
+
+body {
+    min-height: 100vh;
+    background-color: var(--body-color);
+    transition: var(--tran-05);
+    overflow-x: hidden;
+}
+
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: var(--sidebar-width);
+    background: var(--sidebar-color);
+    padding: 10px 0;
+    transition: var(--tran-05);
+    z-index: 100;
+    box-shadow: 5px 0 15px rgba(0,0,0,0.1);
+    overflow-x: hidden;
+    white-space: nowrap;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar.close {
+    width: var(--sidebar-close-width);
+}
+
+.sidebar.close:hover {
+    width: var(--sidebar-width);
+}
+
+.sidebar.close:hover .text {
+    opacity: 1;
+}
+
+.sidebar.close:hover .toggle {
+    transform: translateY(-50%) rotate(0deg);
+}
+
+.sidebar header {
+    position: relative;
+    padding: 0 14px;
+    margin-bottom: 20px;
+}
+
+.sidebar .image-text {
+    display: flex;
+    align-items: center;
+}
+
+.sidebar .logo-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.image-text .name {
+    margin-top: 2px;
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+}
+
+.image-text .profession {
+    font-size: 13px;
+    margin-top: -2px;
+    color: var(--text-color-sidebar);
+}
+
+.sidebar .image {
+    min-width: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sidebar .image .logo-icon {
+    font-size: 35px;
+    color: var(--primary-color);
+}
+
+.sidebar .toggle {
+    position: absolute;
+    top: 50%;
+    right: -25px;
+    transform: translateY(-50%) rotate(180deg);
+    height: 25px;
+    width: 25px;
+    background-color: var(--primary-color);
+    color: #fff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    cursor: pointer;
+    transition: var(--tran-05);
+}
+
+.sidebar.close .toggle {
+    transform: translateY(-50%) rotate(0deg);
+}
+
+.sidebar .menu-bar {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow-x: hidden;
+}
+
+.sidebar .menu {
+    margin-top: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    max-height: calc(100vh - 150px);
+}
+
+.sidebar .menu::-webkit-scrollbar {
+    display: none;
+}
+
+.sidebar li {
+    height: 50px;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    margin-top: 10px;
+    cursor: pointer;
+}
+
+.sidebar li .icon {
+    min-width: var(--sidebar-close-width);
+    border-radius: 6px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+}
+
+.sidebar li .icon,
+.sidebar li .text {
+    color: var(--text-color-sidebar);
+    transition: var(--tran-03);
+}
+
+.sidebar li a {
+    list-style: none;
+    height: 100%;
+    width: 100%;
+    background-color: transparent;
+    display: flex;
+    align-items: center;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: var(--tran-03);
+}
+
+.sidebar li a:hover {
+    background-color: #fff;
+}
+
+.sidebar li a:hover .icon,
+.sidebar li a:hover .text {
+    color: var(--sidebar-color);
+}
+
+.sidebar.close .text {
+    opacity: 0;
+}
+
+.sidebar .text {
+    font-size: 16px;
+    font-weight: 500;
+    white-space: nowrap;
+    opacity: 1;
+    transition: var(--tran-03);
+}
+
+.bottom-content {
+    border-top: 1px solid rgba(255,255,255,0.1);
+    background: #11101d;
+    padding: 10px 0;
+    margin-top: auto;
+    overflow: hidden;
+}
+
+.profile-card {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 12px 14px;
+    margin: 0 10px 10px 10px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: var(--tran-05);
+    background-color: rgba(255,255,255,0.05);
+    overflow: hidden;
+}
+
+.profile-card:hover {
+    background-color: var(--primary-color);
+}
+
+.profile-img {
+    min-width: 40px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #fff;
+    border: 2px solid #fff;
+    flex-shrink: 0;
+}
+
+.profile-info {
+    display: flex;
+    flex-direction: column;
+    margin-left: 15px;
+    white-space: nowrap;
+    transition: var(--tran-03);
+    opacity: 1;
+    overflow: hidden;
+}
+
+.profile-info .name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+}
+
+.profile-info .role {
+    font-size: 12px;
+    color: #ccc;
+}
+
+.sidebar.close .profile-info {
+    display: none;
+    opacity: 0;
+}
+
+.sidebar.close .profile-card {
+    justify-content: center;
+    padding: 10px 0;
+    margin: 0;
+    width: 100%;
+    background: transparent;
+}
+
+.sidebar.close:hover .profile-card {
+    justify-content: flex-start;
+    padding: 12px 14px;
+    margin: 0 10px 10px 10px;
+    width: auto;
+    background-color: rgba(255,255,255,0.05);
+}
+
+.sidebar.close:hover .profile-info {
+    display: flex;
+    opacity: 1;
+}
+
+.home {
+    position: absolute;
+    top: 0;
+    left: var(--sidebar-width);
+    height: 100vh;
+    width: calc(100% - var(--sidebar-width));
+    background-color: var(--body-color);
+    transition: var(--tran-05);
+    padding: 30px 40px;
+}
+
+.sidebar.close ~ .home {
+    left: var(--sidebar-close-width);
+    width: calc(100% - var(--sidebar-close-width));
+}
+
+.sidebar.close:hover ~ .home {
+    left: var(--sidebar-close-width);
+    width: calc(100% - var(--sidebar-close-width));
+}
+
+.header-text {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.home .text {
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--text-color-main);
+    margin: 0;
+}
+
+.mobile-toggle {
+    display: none;
+    font-size: 30px;
+    color: var(--text-color-main);
+    cursor: pointer;
+    margin-right: 15px;
+}
+
+.logout-box {
+    margin: 5px 10px 10px 10px;
+    border-radius: 12px;
+    transition: var(--tran-05);
+    overflow: hidden;
+}
+
+.logout-box a {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    padding: 10px 5px;
+    border-radius: 12px;
+    transition: 0.3s;
+}
+
+.logout-box:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.logout-box .icon {
+    min-width: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: var(--text-color-sidebar);
+}
+
+.logout-box .text {
+    margin-left: 10px;
+    color: var(--text-color-sidebar);
+    white-space: nowrap;
+    opacity: 1;
+    transition: var(--tran-03);
+}
+
+.logout-box:hover .icon,
+.logout-box:hover .text {
+    color: #fff;
+}
+
+.sidebar.close .logout-box .text {
+    opacity: 0;
+    width: 0;
+    margin: 0;
+}
+
+.sidebar.close .logout-box {
+    display: flex;
+    justify-content: center;
+    margin: 0;
+    width: 100%;
+}
+
+.sidebar.close:hover .logout-box {
+    justify-content: flex-start;
+    margin: 5px 10px 10px 10px;
+    width: auto;
+}
+
+.sidebar.close:hover .logout-box .text {
+    opacity: 1;
+    width: auto;
+    margin-left: 10px;
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: -100% !important;
+        height: 100vh;
+        width: 260px !important;
+        z-index: 99999 !important;
+        background: var(--sidebar-color);
+        transition: all 0.3s ease;
+        box-shadow: none;
+    }
+
+    .sidebar.mobile-active .logout-box,
+    .sidebar.mobile-active.close .logout-box {
+        justify-content: flex-start !important;
+        margin: 5px 10px 10px 10px !important;
+        width: auto !important;
+    }
+
+    .sidebar.mobile-active .logout-box .text,
+    .sidebar.mobile-active.close .logout-box .text {
+        opacity: 1 !important;
+        width: auto !important;
+        display: block !important;
+    }
+
+    nav.sidebar.mobile-active,
+    .sidebar.mobile-active {
+        left: 0 !important;
+        width: 260px !important;
+        box-shadow: 5px 0 15px rgba(0,0,0,0.3);
+    }
+
+    .sidebar.mobile-active.close {
+        width: 260px !important;
+        padding: 10px 0 !important;
+    }
+
+    .sidebar.close:not(.mobile-active) {
+        width: 0 !important;
+        padding: 0 !important;
+        overflow: hidden;
+    }
+
+    .sidebar.mobile-active .text,
+    .sidebar.mobile-active .profile-info {
+        opacity: 1 !important;
+        display: flex !important;
+        visibility: visible !important;
+    }
+
+    .sidebar.mobile-active li .icon {
+        min-width: 0 !important;
+        width: 40px !important;
+        justify-content: center !important;
+    }
+
+    .sidebar.mobile-active li a {
+        justify-content: flex-start !important;
+        padding-left: 20px;
+    }
+
+    .sidebar.mobile-active .image {
+        min-width: 50px;
+    }
+
+    .sidebar .toggle {
+        display: none !important;
+    }
+
+    .home {
+        left: 0 !important;
+        width: 100% !important;
+        padding: 20px;
+        z-index: 1;
+    }
+
+    .sidebar.close ~ .home,
+    .sidebar.close:hover ~ .home,
+    .sidebar.mobile-active ~ .home {
+        left: 0 !important;
+        width: 100% !important;
+    }
+
+    .mobile-toggle {
+        display: block;
+    }
+
+    .menu-links {
+        margin-left: 0 !important;
+        padding-left: 0 !important;
+    }
+
+    .overlay-movil {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.6);
+        z-index: 5000;
+        display: none;
+        backdrop-filter: blur(3px);
+    }
+
+    .overlay-movil.active {
+        display: block;
+    }
+}
+
+/* =================================================================
+   🔥 PARCHE DE FIX VISUAL (PEGAR AL FINAL DE DASHBOARD.CSS)
+   ================================================================= */
+
+/* 1. ARREGLAR LA BARRA LATERAL (SIDEBAR) PARA QUE NO SE CORTE */
+.sidebar .menu-bar {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden; /* Evita doble scroll bar */
+}
+
+.sidebar .menu {
+    /* Hacemos que la lista de módulos ocupe todo el espacio disponible */
+    flex-grow: 1; 
+    height: auto !important;
+    max-height: none !important; /* Quitamos la restricción fija */
+    overflow-y: auto; /* Scroll solo en la lista de iconos */
+    overflow-x: hidden;
+    padding-bottom: 20px; /* Espacio para no chocar con el botón de salir */
+}
+
+/* Estilo para la barra de scroll del menú (para que se vea bonita) */
+.sidebar .menu::-webkit-scrollbar {
+    display: block; /* La mostramos pero finita */
+    width: 5px;
+}
+.sidebar .menu::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2); 
+    border-radius: 10px;
+}
+.sidebar .menu::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* Aseguramos que el botón de Cerrar Sesión nunca se encoja ni desaparezca */
+.bottom-content {
+    flex-shrink: 0; /* 🛑 PROHIBIDO ENCOGERSE */
+    background: var(--sidebar-color); /* Fondo sólido para tapar el scroll */
+    z-index: 10;
+    margin-top: 0; /* Ya no es necesario margin-top auto porque flex-grow lo empuja */
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+/* 2. ARREGLAR EL CONTENIDO PRINCIPAL (PAGINACIÓN INVISIBLE) */
+.home {
+    /* Convertimos el contenedor principal en una caja con scroll propio */
+    height: 100vh; 
+    overflow-y: auto; 
+    overflow-x: hidden;
+    /* 👇 ESTA ES LA CLAVE: Espacio extra abajo para que la paginación flote */
+    padding-bottom: 20px !important; 
+}
+
+/* 3. AJUSTE PARA MÓVIL (Que el menú ocupe toda la pantalla y sea deslizable) */
+@media (max-width: 768px) {
+    .sidebar.mobile-active .menu {
+        /* En móvil, damos más espacio para deslizar con el dedo */
+        padding-bottom: 80px; 
+    }
+    
+    .home {
+        /* En móvil, necesitamos más espacio abajo por si hay barra de navegación del navegador */
+        padding-bottom: 20px !important;
+    }
+}

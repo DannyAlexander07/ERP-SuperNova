@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SuperNova | Portal Corporativo</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    <link rel="stylesheet" href="frontend/css/login.css">
+</head>
+<body>
+
+    <div class="enterprise-layout">
+        
+        <div class="visual-panel">
+            <div class="visual-overlay"></div>
+            <div class="dynamic-bg"></div>
+
+            <div class="brand-container">
+                <div class="brand-logo">
+                    <i class='bx bxs-planet'></i>
+                    <span>SUPERNOVA</span>
+                </div>
+                
+                <div class="brand-message">
+                    <h2>Plataforma de Gestión Integral</h2>
+                    <p>Control unificado de inventarios, tesorería y operaciones comerciales en tiempo real.</p>
+                </div>
+
+                <div class="system-status">
+                    <div class="status-indicator">
+                        <span class="dot online"></span>
+                        <span>Software Operativo</span>
+                    </div>
+                    <div class="server-info">
+                        <p>Software Grupo SP</p>
+                        <p>Optimizacion 100%</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="login-panel">
+            <div class="login-content">
+                <div class="login-header">
+                    <h3>Acceso Autorizado</h3>
+                    <p>Ingrese sus acceso autorizado.</p>
+                </div>
+
+                <form id="loginForm" autocomplete="off">
+                    <div class="form-group">
+                        <label>ID de Usuario / Correo</label>
+                        <div class="input-box">
+                            <i class='bx bx-user'></i>
+                            <input type="email" id="email" placeholder="ej. usuario@gruposp.pe" required autocomplete="off">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Clave de Acceso</label>
+                        <div class="input-box">
+                            <i class='bx bx-key'></i>
+                            <input type="password" id="password" placeholder="••••••••••••" required autocomplete="off">
+                        </div>
+                    </div>
+
+                    <button type="submit" id="btnLogin" class="btn-corporate">
+                        <span>Conectar de forma segura</span>
+                        <i class='bx bx-right-arrow-alt'></i>
+                        <div class="loader"></div>
+                    </button>
+                </form>
+
+                <div class="security-notice">
+                    <i class='bx bx-shield-quarter'></i>
+                    <p>Este sistema es para uso exclusivo de personal autorizado. Cualquier intento de acceso no autorizado será registrado y auditado por el área de Software.</p>
+                </div>
+
+                <div class="login-footer">
+                    <a href="#">Grupo SP</a>
+                    <span>|</span>
+                    <a href="#">Alexander</a>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="frontend/js/login.js"></script>
+</body>
+</html>

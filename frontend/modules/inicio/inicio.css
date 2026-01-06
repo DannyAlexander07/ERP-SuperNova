@@ -1,0 +1,307 @@
+/* Ubicacion: frontend/modules/inicio/inicio.css */
+
+/* --- 1. CONTENEDOR PRINCIPAL & ANIMACIONES --- */
+.dashboard-container {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 15px;
+    animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1); /* Animación suave */
+}
+
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- 2. HEADER DE BIENVENIDA --- */
+.welcome-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 35px;
+    background: #fff;
+    padding: 20px 30px;
+    border-radius: 20px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.03);
+    border: 1px solid #f1f5f9;
+}
+
+.welcome-text h1 {
+    font-size: 1.8rem;
+    color: #1e293b;
+    margin: 0 0 5px 0;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+}
+
+.welcome-text h1 span {
+    color: #695CFE; /* Tu color primario */
+    background: -webkit-linear-gradient(45deg, #695CFE, #8b5cf6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.welcome-text p {
+    color: #64748b;
+    font-size: 0.95rem;
+    margin: 0;
+    font-weight: 500;
+}
+
+.date-widget {
+    background: #f8fafc;
+    padding: 10px 20px;
+    border-radius: 50px;
+    color: #475569;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.9rem;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+}
+
+.date-widget i { font-size: 1.2rem; color: #695CFE; }
+
+/* --- 3. GRID DE KPIs (TARJETAS MODERNAS) --- */
+.kpi-dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 25px;
+    margin-bottom: 40px;
+}
+
+.kpi-card-modern {
+    background: white;
+    border-radius: 24px;
+    padding: 25px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 10px 30px -10px rgba(0,0,0,0.06);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    border: 1px solid #f1f5f9;
+    transition: all 0.3s ease;
+}
+
+.kpi-card-modern:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 20px 40px -10px rgba(0,0,0,0.1);
+    border-color: #e2e8f0;
+}
+
+.kpi-icon-wrapper {
+    width: 65px; height: 65px;
+    border-radius: 20px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 30px;
+    flex-shrink: 0;
+}
+
+/* Variantes de color KPI */
+.kpi-card-modern.sales .kpi-icon-wrapper { background: #ecfdf5; color: #10b981; }
+.kpi-card-modern.events .kpi-icon-wrapper { background: #fdf4ff; color: #d946ef; }
+
+.kpi-content { flex: 1; z-index: 2; }
+.kpi-content span { font-size: 0.8rem; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 5px;}
+.kpi-content h3 { font-size: 1.8rem; margin: 0; color: #0f172a; font-weight: 800; line-height: 1.1; }
+.kpi-content small { font-size: 0.8rem; font-weight: 600; margin-top: 5px; display: block; }
+.kpi-content small.trend { color: #10b981; }
+
+.kpi-bg-icon {
+    position: absolute; right: -15px; bottom: -15px;
+    font-size: 120px; opacity: 0.04; color: #333;
+    pointer-events: none; z-index: 1; transform: rotate(-10deg);
+}
+
+/* --- TARJETAS DE ACCIÓN (BOTONES GRANDES) --- */
+.action-card-modern {
+    background: linear-gradient(135deg, #695CFE 0%, #4c3db2 100%);
+    color: white;
+    border-radius: 24px;
+    padding: 25px;
+    display: flex; justify-content: space-between; align-items: center;
+    cursor: pointer;
+    box-shadow: 0 10px 25px -5px rgba(105, 92, 254, 0.4);
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    position: relative; overflow: hidden;
+}
+
+.action-card-modern::before {
+    content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 60%);
+    opacity: 0; transition: opacity 0.3s;
+}
+
+.action-card-modern:hover { transform: scale(1.03); box-shadow: 0 15px 35px -5px rgba(105, 92, 254, 0.6); }
+.action-card-modern:hover::before { opacity: 1; }
+
+.action-card-modern.secondary {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    box-shadow: 0 10px 25px -5px rgba(30, 41, 59, 0.4);
+}
+
+.action-content h4 { font-size: 1.2rem; margin: 0 0 5px 0; font-weight: 700; }
+.action-content p { font-size: 0.9rem; opacity: 0.8; margin: 0; font-weight: 500; }
+.action-icon { 
+    font-size: 24px; background: rgba(255,255,255,0.2); 
+    width: 45px; height: 45px; border-radius: 50%; 
+    display: flex; align-items: center; justify-content: center; 
+    backdrop-filter: blur(5px);
+}
+
+/* --- 4. GRID PRINCIPAL (2 COLUMNAS) --- */
+.dashboard-main-grid {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr; /* Columna izquierda más ancha */
+    gap: 30px;
+    align-items: start;
+}
+
+.section-label {
+    font-size: 0.85rem; color: #94a3b8; font-weight: 800; letter-spacing: 1.2px; margin-bottom: 20px; text-transform: uppercase;
+}
+
+/* --- ACCESOS DIRECTOS (GRID ICONOS) --- */
+.shortcuts-grid {
+    display: grid; 
+    grid-template-columns: repeat(4, 1fr); 
+    gap: 15px;
+}
+
+.shortcut-item {
+    background: white; border-radius: 20px; padding: 25px 10px;
+    text-align: center; cursor: pointer; transition: all 0.2s;
+    border: 1px solid #f1f5f9; 
+    box-shadow: 0 4px 10px rgba(0,0,0,0.02);
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+
+.shortcut-item:hover { 
+    border-color: #695CFE; 
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(105, 92, 254, 0.1);
+}
+
+.shortcut-item i { 
+    font-size: 32px; 
+    color: #695CFE; 
+    background: #f5f3ff;
+    width: 60px; height: 60px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    transition: 0.3s;
+}
+
+.shortcut-item:hover i { background: #695CFE; color: white; }
+
+.shortcut-item span { font-size: 0.85rem; font-weight: 600; color: #475569; }
+
+
+/* --- 5. WIDGETS (CAJAS BLANCAS) --- */
+.widget-card, .status-widget {
+    background: white; border-radius: 24px; padding: 25px;
+    border: 1px solid #f1f5f9; box-shadow: 0 5px 20px rgba(0,0,0,0.04);
+}
+
+.mt-4 { margin-top: 30px; }
+
+.widget-header { 
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; 
+    border-bottom: 1px solid #f1f5f9; padding-bottom: 15px;
+}
+.widget-header h4 { font-size: 1.1rem; color: #1e293b; margin: 0; font-weight: 700; }
+.widget-header i { font-size: 1.2rem; color: #94a3b8; }
+
+.btn-text { background: none; border: none; color: #695CFE; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
+.btn-text:hover { text-decoration: underline; }
+
+/* --- LISTA DE ESTADO DE SALAS --- */
+.status-list { display: flex; flex-direction: column; gap: 15px; }
+
+.status-item { 
+    display: flex; align-items: center; gap: 15px; 
+    padding: 12px; border-radius: 12px;
+    transition: background 0.2s;
+}
+.status-item:hover { background: #f8fafc; }
+
+.status-dot { 
+    width: 12px; height: 12px; border-radius: 50%; 
+    position: relative;
+}
+/* Efecto de pulso para el estado */
+.status-dot::after {
+    content: ''; position: absolute; top: -4px; left: -4px; right: -4px; bottom: -4px;
+    border-radius: 50%; opacity: 0.4;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse { 0% { transform: scale(1); opacity: 0.4; } 100% { transform: scale(1.5); opacity: 0; } }
+
+.status-dot.online { background: #22c55e; }
+.status-dot.online::after { background: #22c55e; }
+
+.status-dot.busy { background: #ef4444; }
+.status-dot.busy::after { background: #ef4444; }
+
+.status-badge { 
+    margin-left: auto; font-size: 0.75rem; 
+    background: #dcfce7; color: #166534; 
+    padding: 5px 10px; border-radius: 20px; font-weight: 700; 
+}
+.status-badge.busy { background: #fee2e2; color: #991b1b; }
+
+/* --- LISTA DE EVENTOS / EMPTY STATE --- */
+.empty-state-widget { 
+    text-align: center; padding: 40px 0; 
+    display: flex; flex-direction: column; align-items: center; gap: 15px;
+}
+.empty-state-widget img { opacity: 0.6; }
+.empty-state-widget p { color: #94a3b8; font-size: 0.95rem; margin: 0; }
+
+.btn-small { 
+    background: #f1f5f9; color: #334155; border: none; 
+    padding: 10px 20px; border-radius: 10px; 
+    cursor: pointer; font-size: 0.85rem; font-weight: 600; 
+    transition: 0.2s;
+}
+.btn-small:hover { background: #e2e8f0; color: #0f172a; }
+
+/* =========================================
+   MEDIA QUERIES (RESPONSIVO TOTAL)
+========================================= */
+
+/* Tablet (hasta 1024px) */
+@media (max-width: 1024px) {
+    .dashboard-main-grid {
+        grid-template-columns: 1fr; /* Colapsar a 1 sola columna grande */
+    }
+    .shortcuts-grid {
+        grid-template-columns: repeat(4, 1fr); /* Mantener iconos en fila */
+    }
+}
+
+/* Móvil (hasta 768px) */
+@media (max-width: 768px) {
+    .welcome-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+        padding: 20px;
+    }
+
+    .kpi-dashboard-grid {
+        grid-template-columns: 1fr; /* Tarjetas una debajo de otra */
+    }
+
+    .shortcuts-grid {
+        grid-template-columns: repeat(2, 1fr); /* 2 columnas de iconos */
+    }
+
+    .action-card-modern {
+        padding: 20px;
+    }
+}
