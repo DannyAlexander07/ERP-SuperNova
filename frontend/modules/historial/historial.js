@@ -8,7 +8,7 @@
 
     let historialGlobal = []; 
     let currentPage = 1;      
-    const ITEMS_PER_PAGE = 15; 
+    const ITEMS_PER_PAGE = 8; 
     
     // --- 1. INICIALIZAR Y OBTENER DATOS ---
     async function initHistorial() {
@@ -37,24 +37,26 @@
         }
     }
 
-    // --- 2. RENDERIZAR TABLA ---
+    // --- 2. RENDERIZAR TABLA (CORREGIDA) ---
     function renderizarTablaHistorial(datos) {
         const tbody = document.getElementById('tabla-historial-body');
         if (!tbody) return;
         tbody.innerHTML = '';
         
-        if (datos.length === 0) {
+        // Si no hay datos, limpiamos la paginación y mostramos mensaje
+        if (!datos || datos.length === 0) {
             tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px;">No se encontraron resultados.</td></tr>';
+            const paginacionDiv = document.getElementById('historial-paginacion');
+            if(paginacionDiv) paginacionDiv.innerHTML = '';
             return;
         }
 
-        // Detectar Admin para mostrar botón de eliminar
+        // Detectar Admin
         const currentUser = JSON.parse(localStorage.getItem('usuario') || localStorage.getItem('user')) || {};
-        // Aceptamos 'admin' o 'administrador' (case insensitive)
         const rol = (currentUser.rol || '').toLowerCase();
         const isAdmin = rol === 'admin' || rol === 'administrador';
         
-        // Paginación
+        // Lógica de Paginación (Slice)
         const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
         const endIndex = startIndex + ITEMS_PER_PAGE;
         const dataToRender = datos.slice(startIndex, endIndex);
@@ -90,8 +92,8 @@
             tbody.appendChild(tr);
         });
         
-        // Aquí podrías llamar a una función para dibujar los botones de paginación si tienes el HTML
-        // renderizarPaginacion(datos.length);
+        // 🔥 LLAMADA OBLIGATORIA A LA PAGINACIÓN 🔥
+        renderizarPaginacion(datos.length, datos);
     }
 
     // --- 3. VER DETALLE (MODAL) ---
@@ -141,7 +143,7 @@
     }
 
     // --- 4. FILTROS ---
-    window.filtrarHistorial = function() { // Función unificada para llamar desde el HTML
+    window.filtrarHistorial = function() {
         aplicarFiltrosYPaginacion();
     }
 
@@ -163,14 +165,13 @@
             filtrados = filtrados.filter(v => v.fecha_venta.startsWith(fecha));
         }
 
-        currentPage = 1; // Resetear al filtrar
+        currentPage = 1; // IMPORTANTE: Resetear a página 1 al filtrar
         renderizarTablaHistorial(filtrados);
     }
 
     // --- 5. EXPORTAR EXCEL ---
     window.exportarHistorialVentas = function() {
         if (!historialGlobal || historialGlobal.length === 0) {
-            // Usamos alert si no tienes showToast global
             return alert("No hay datos para exportar.");
         }
 
@@ -211,13 +212,46 @@
 
             if (res.ok) {
                 alert("✅ " + data.msg);
-                initHistorial(); // Recarga la tabla
+                initHistorial(); 
             } else {
                 alert("❌ " + (data.msg || "Fallo al eliminar venta."));
             }
         } catch (e) {
             alert("Error de conexión al eliminar.");
         }
+    }
+
+    // --- 7. PAGINACIÓN (NUEVA FUNCIÓN) ---
+    function renderizarPaginacion(totalItems, datosFiltrados) {
+        const contenedor = document.getElementById('historial-paginacion');
+        if (!contenedor) return;
+
+        const totalPaginas = Math.ceil(totalItems / ITEMS_PER_PAGE);
+
+        if (totalPaginas <= 1) {
+            contenedor.innerHTML = '';
+            return;
+        }
+
+        // Renderizado simple y limpio de botones
+        contenedor.innerHTML = `
+            <div class="pagination-wrapper" style="background:#fff; border:1px solid #ddd; border-radius:50px; padding:5px 15px; display:flex; align-items:center; gap:10px;">
+                <span style="font-size:12px; color:#666;">Pág <strong>${currentPage}</strong> de <strong>${totalPaginas}</strong></span>
+                <div style="display:flex; gap:5px;">
+                    <button onclick="cambiarPaginaHistorial(-1)" ${currentPage === 1 ? 'disabled' : ''} style="border:none; background:transparent; cursor:pointer; font-size:18px;">
+                        <i class='bx bx-chevron-left'></i>
+                    </button>
+                    <button onclick="cambiarPaginaHistorial(1)" ${currentPage >= totalPaginas ? 'disabled' : ''} style="border:none; background:transparent; cursor:pointer; font-size:18px;">
+                        <i class='bx bx-chevron-right'></i>
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        window.cambiarPaginaHistorial = function(delta) {
+            currentPage += delta;
+            renderizarTablaHistorial(datosFiltrados); // Re-renderizar con los mismos datos
+        };
     }
 
     // INICIAR

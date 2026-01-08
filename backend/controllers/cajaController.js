@@ -1,18 +1,21 @@
 // Ubicacion: SuperNova/backend/controllers/cajaController.js
 const pool = require('../db');
 
-// 1. OBTENER MOVIMIENTOS (HISTORIAL)
+// 1. OBTENER MOVIMIENTOS (HISTORIAL CON FILTRO)
 exports.obtenerMovimientos = async (req, res) => {
     try {
         if (!req.usuario) return res.status(401).json({ msg: "No autorizado" });
 
         // A. DETECTAR ROL Y SEDE
         const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
-        // Aceptamos 'admin' o 'administrador'
         const esAdmin = rol === 'admin' || rol === 'administrador';
-        const sedeId = req.usuario.sede_id;
+        const usuarioSedeId = req.usuario.sede_id;
 
-        // B. QUERY BASE (Trae nombre de sede para saber de dónde es la plata)
+        // B. CAPTURAR FILTRO DE SEDE (OPCIONAL) DESDE EL FRONTEND
+        // Si el usuario manda "?sede=2", capturamos ese 2.
+        const filtroSedeId = req.query.sede; 
+
+        // C. CONSTRUCCIÓN DE LA CONSULTA
         let query = `
             SELECT 
                 mc.id, 
@@ -27,19 +30,29 @@ exports.obtenerMovimientos = async (req, res) => {
             FROM movimientos_caja mc
             JOIN usuarios u ON mc.usuario_id = u.id
             JOIN sedes s ON mc.sede_id = s.id
+            WHERE 1=1
         `;
 
         const params = [];
+        let paramIndex = 1;
 
-        // C. FILTRO INTELIGENTE
-        // Si NO es Admin -> Solo ve su sede.
-        // Si ES Admin -> Ve todo (No agregamos WHERE sede_id).
-        if (!esAdmin) {
-            query += ` WHERE mc.sede_id = $1`;
-            params.push(sedeId);
+        // D. LÓGICA DE SEGURIDAD (EL CANDADO)
+        if (esAdmin) {
+            // Si es Admin Y seleccionó una sede específica en el filtro
+            if (filtroSedeId) {
+                query += ` AND mc.sede_id = $${paramIndex}`;
+                params.push(filtroSedeId);
+                paramIndex++;
+            }
+            // Si es Admin y NO seleccionó nada, no agregamos filtro (ve todo).
+        } else {
+            // Si NO es Admin, FORZAMOS que solo vea su sede asignada
+            query += ` AND mc.sede_id = $${paramIndex}`;
+            params.push(usuarioSedeId);
+            paramIndex++;
         }
 
-        query += ` ORDER BY mc.fecha_registro DESC LIMIT 50`;
+        query += ` ORDER BY mc.fecha_registro DESC LIMIT 200`; // Límite de seguridad
 
         const result = await pool.query(query, params);
         res.json(result.rows);
@@ -61,7 +74,6 @@ exports.registrarMovimiento = async (req, res) => {
     try {
         if (!monto || monto <= 0) return res.status(400).json({ msg: "Monto inválido" });
 
-        // Insertar siempre en la sede del usuario logueado
         const query = `
             INSERT INTO movimientos_caja (
                 sede_id, usuario_id, tipo_movimiento, categoria, 
@@ -82,44 +94,58 @@ exports.registrarMovimiento = async (req, res) => {
     }
 };
 
-// 3. OBTENER RESUMEN (KPIs: Suma Total vs Suma Local)
+// 3. OBTENER RESUMEN (KPIs: SALDO, INGRESOS, EGRESOS)
 exports.obtenerResumenCaja = async (req, res) => {
     try {
         if (!req.usuario) return res.status(401).json({msg: "Sin sesión"});
         
         const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
         const esAdmin = rol === 'admin' || rol === 'administrador';
-        const sedeId = req.usuario.sede_id;
-        const params = [];
-
-        // Construcción Dinámica del Filtro
-        let filtroSede = "";
+        const usuarioSedeId = req.usuario.sede_id;
         
-        if (!esAdmin) {
-            filtroSede = "AND sede_id = $1"; // Colaborador: Solo su sede
-            params.push(sedeId);
-        } 
-        // Si es Admin, el filtro queda vacío = SUMA TODAS LAS SEDES
+        // Capturamos el filtro que viene del frontend (ej: "?sede=2")
+        const filtroSedeId = req.query.sede;
 
-        // A. CÁLCULO DE "HOY"
+        const params = [];
+        let paramIndex = 1;
+        let filtroSQL = "";
+
+        // --- LÓGICA DE SEGURIDAD (EL CANDADO) ---
+        if (esAdmin) {
+            // Si es Admin Y seleccionó una sede específica (que no esté vacía)
+            if (filtroSedeId && filtroSedeId !== "") {
+                filtroSQL = `AND sede_id = $${paramIndex}`;
+                params.push(filtroSedeId);
+                paramIndex++;
+            }
+            // Si es Admin y NO filtra (filtroSedeId está vacío), filtroSQL queda vacío
+            // Resultado: Se suman TODAS las sedes (Visión Global de Gerencia)
+        } else {
+            // Si NO es Admin, el sistema IGNORA cualquier filtro y fuerza SU sede
+            filtroSQL = `AND sede_id = $${paramIndex}`;
+            params.push(usuarioSedeId);
+            paramIndex++;
+        }
+
+        // A. CÁLCULO DE "HOY" (Ingresos y Egresos del día actual)
         const queryHoy = `
             SELECT 
                 COALESCE(SUM(CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE 0 END), 0) AS ingresos_hoy,
                 COALESCE(SUM(CASE WHEN tipo_movimiento = 'EGRESO' THEN monto ELSE 0 END), 0) AS egresos_hoy
             FROM movimientos_caja
             WHERE fecha_registro::date = CURRENT_DATE
-            ${filtroSede}
+            ${filtroSQL}
         `;
         const resHoy = await pool.query(queryHoy, params);
 
-        // B. CÁLCULO DE "SALDO TOTAL" (Histórico acumulado)
+        // B. CÁLCULO DE "SALDO TOTAL" (Histórico acumulado: Ingresos Totales - Egresos Totales)
         const queryHistorico = `
             SELECT 
                 COALESCE(SUM(CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE 0 END), 0) -
                 COALESCE(SUM(CASE WHEN tipo_movimiento = 'EGRESO' THEN monto ELSE 0 END), 0) AS saldo_total
             FROM movimientos_caja
             WHERE 1=1 
-            ${filtroSede}
+            ${filtroSQL}
         `;
         const resHist = await pool.query(queryHistorico, params);
 

@@ -5,9 +5,17 @@
             <h2>Flujo de Caja y Tesorería</h2>
             <p>Control de ingresos y egresos de dinero en efectivo/bancos.</p>
         </div>
-        <button class="btn-primary" onclick="abrirModalMovimiento()">
-            <i class='bx bx-transfer-alt'></i> Registrar Movimiento
-        </button>
+        
+        <div class="header-actions" style="display: flex; gap: 10px; align-items: center;">
+            
+            <select id="filtro-sede-caja" class="select-sede-admin" style="display:none;" onchange="filtrarCajaPorSede()">
+                <option value="">🏢 Todas las Sedes</option>
+            </select>
+
+            <button class="btn-primary" onclick="abrirModalMovimiento()">
+                <i class='bx bx-transfer-alt'></i> Registrar Movimiento
+            </button>
+        </div>
     </div>
 
     <div class="kpi-grid">
@@ -52,20 +60,21 @@
                 <tbody id="tabla-caja-body"></tbody>
             </table>
         </div>
+        <div id="caja-paginacion" class="pagination-container" style="margin-top: 15px; display:flex; justify-content:flex-end;"></div>
     </div>
 
     <div id="modal-caja" class="modal-overlay">
-        <div class="modal-content center-modal" style="width: 400px;">
-            <div class="modal-header">
+        <div class="modal-content center-modal" style="width: 500px;"> <div class="modal-header">
                 <h3>Registrar Movimiento</h3>
                 <button class="btn-close" onclick="cerrarModalCaja()"><i class='bx bx-x'></i></button>
             </div>
+
             <div class="modal-body">
                 <form id="form-caja">
                     
                     <div class="input-group">
                         <label class="static">Tipo de Movimiento</label>
-                        <select id="mov-tipo" onchange="toggleTipoMovimiento()" required>
+                        <select id="mov-tipo" required>
                             <option value="INGRESO">🟢 Ingreso de Dinero</option>
                             <option value="EGRESO">🔴 Salida de Dinero</option>
                         </select>
@@ -80,24 +89,26 @@
                         </select>
                     </div>
 
-                    <div class="input-group">
-                        <label>Monto (S/)</label>
-                        <input type="number" id="mov-monto" required placeholder=" " step="0.01">
+                    <div class="form-row">
+                        <div class="input-group">
+                            <label>Monto (S/)</label>
+                            <input type="number" id="mov-monto" required placeholder="0.00" step="0.01">
+                        </div>
+
+                        <div class="input-group">
+                            <label class="static">Método de Pago</label>
+                            <select id="mov-metodo">
+                                <option value="EFECTIVO">Efectivo</option>
+                                <option value="YAPE">Yape / Plin</option>
+                                <option value="TRANSFERENCIA">Transferencia</option>
+                                <option value="TARJETA">Tarjeta</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div class="input-group">
-                        <label class="static">Método de Pago</label>
-                        <select id="mov-metodo">
-                            <option value="EFECTIVO">Efectivo</option>
-                            <option value="YAPE">Yape / Plin</option>
-                            <option value="TRANSFERENCIA">Transferencia</option>
-                            <option value="TARJETA">Tarjeta</option>
-                        </select>
-                    </div>
-
-                    <div class="input-group">
-                        <label>Descripción (Ej: Taxi, Almuerzo)</label>
-                        <input type="text" id="mov-desc" placeholder=" " required>
+                        <label>Descripción</label>
+                        <input type="text" id="mov-desc" placeholder="Ej: Taxi, Almuerzo..." required>
                     </div>
 
                     <div class="modal-footer">

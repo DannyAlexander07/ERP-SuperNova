@@ -1,6 +1,6 @@
 /* Ubicacion: SUPERNOVA/frontend/modules/caja/caja.css */
 
-/* --- Header del Módulo --- */
+/* --- 1. HEADER DEL MÓDULO --- */
 .module-header {
     display: flex;
     justify-content: space-between;
@@ -20,7 +20,7 @@
     font-size: 15px;
 }
 
-/* --- Grid de KPIs (Tarjetas Superiores) --- */
+/* --- 2. GRID DE KPIs --- */
 .kpi-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -46,38 +46,28 @@
 }
 
 .kpi-icon {
-    width: 60px;
-    height: 60px;
+    width: 60px; height: 60px;
     border-radius: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 28px;
-    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; flex-shrink: 0;
 }
 
 .kpi-data h3 {
     margin: 5px 0 0 0;
-    font-size: 26px;
-    font-weight: 800;
-    color: var(--dark-color);
-    letter-spacing: -0.5px;
+    font-size: 26px; font-weight: 800;
+    color: var(--dark-color); letter-spacing: -0.5px;
 }
 
 .kpi-label {
-    font-size: 13px;
-    color: #94a3b8;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    font-weight: 700;
+    font-size: 13px; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700;
 }
 
-/* Colores Específicos de KPI */
 .kpi-card.ingreso .kpi-icon { background: #dcfce7; color: #16a34a; }
 .kpi-card.egreso .kpi-icon { background: #fee2e2; color: #ef4444; }
 .kpi-card.saldo .kpi-icon { background: #dbeafe; color: #2563eb; }
 
-/* --- Tabla Premium --- */
+/* --- 3. TABLA PREMIUM --- */
 .table-module-container {
     background: white;
     padding: 25px;
@@ -86,167 +76,100 @@
     border: 1px solid #f1f5f9;
 }
 
-.table-responsive {
-    overflow-x: auto;
-}
+.table-responsive { overflow-x: auto; }
 
 .premium-table {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-    white-space: nowrap;
+    width: 100%; border-collapse: separate;
+    border-spacing: 0; white-space: nowrap;
 }
 
 .premium-table th {
-    text-align: left;
-    padding: 18px 15px;
-    color: #64748b;
-    font-size: 13px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border-bottom: 2px solid #f1f5f9;
-    background: #f8fafc;
+    text-align: left; padding: 18px 15px;
+    color: #64748b; font-size: 13px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 2px solid #f1f5f9; background: #f8fafc;
 }
 
 .premium-table td {
-    padding: 18px 15px;
-    vertical-align: middle;
+    padding: 18px 15px; vertical-align: middle;
     border-bottom: 1px solid #f1f5f9;
-    color: var(--dark-color);
-    font-size: 15px;
+    color: var(--dark-color); font-size: 15px;
 }
 
-.premium-table tr:last-child td {
-    border-bottom: none;
-}
+.premium-table tr:last-child td { border-bottom: none; }
 
-/* Badges y Colores en Tabla */
-.badge-ingreso {
-    background: #dcfce7; color: #16a34a;
-    padding: 6px 12px; border-radius: 8px; font-weight: 700; font-size: 12px;
-    display: inline-block;
-}
-.badge-egreso {
-    background: #fee2e2; color: #ef4444;
-    padding: 6px 12px; border-radius: 8px; font-weight: 700; font-size: 12px;
-    display: inline-block;
-}
+/* Badges */
+.badge-ingreso { background: #dcfce7; color: #16a34a; padding: 6px 12px; border-radius: 8px; font-weight: 700; font-size: 12px; display: inline-block; }
+.badge-egreso { background: #fee2e2; color: #ef4444; padding: 6px 12px; border-radius: 8px; font-weight: 700; font-size: 12px; display: inline-block; }
 
-/* --- ESTILOS DEL MODAL (Overlay y Caja) --- */
+/* --- 4. MODAL (OVERLAY Y CONTENIDO) --- */
 .modal-overlay {
-    position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(15, 23, 42, 0.6);
-    backdrop-filter: blur(8px);
-    z-index: 1100;
-    display: none;
-    justify-content: center;
-    align-items: center;
-    padding: 20px;
-    opacity: 0;
-    transition: opacity 0.3s ease;
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px);
+    z-index: 1100; display: none;
+    justify-content: center; align-items: center;
+    padding: 20px; opacity: 0; transition: opacity 0.3s ease;
 }
 
-.modal-overlay.active {
-    display: flex;
-    opacity: 1;
-}
+.modal-overlay.active { display: flex; opacity: 1; }
 
 .modal-content.center-modal {
-    background: white;
-    border-radius: 24px;
-    width: 100%;
-    min-width: 550px;
-    max-width: 650px;
+    background: white; border-radius: 24px;
+    width: 100%; min-width: 400px; max-width: 550px;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-    transform: scale(0.95);
-    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    display: flex;
-    flex-direction: column;
-    max-height: 90vh;
+    transform: scale(0.95); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex; flex-direction: column; max-height: 90vh;
 }
 
-.modal-overlay.active .modal-content.center-modal {
-    transform: scale(1);
-}
+.modal-overlay.active .modal-content.center-modal { transform: scale(1); }
 
 .modal-header {
-    padding: 25px 30px;
-    border-bottom: 1px solid #f1f5f9;
+    padding: 20px 30px; border-bottom: 1px solid #f1f5f9;
     display: flex; justify-content: space-between; align-items: center;
 }
 
-.modal-header h3 {
-    margin: 0; font-size: 22px; font-weight: 800; color: var(--dark-color);
-}
+.modal-header h3 { margin: 0; font-size: 20px; font-weight: 800; color: var(--dark-color); }
 
 .btn-close {
-    background: #f1f5f9; border: none; width: 36px; height: 36px; border-radius: 50%;
-    font-size: 20px; color: #64748b; cursor: pointer; transition: all 0.2s;
+    background: #f1f5f9; border: none; width: 32px; height: 32px; border-radius: 50%;
+    font-size: 18px; color: #64748b; cursor: pointer; transition: all 0.2s;
     display: flex; align-items: center; justify-content: center;
 }
-.btn-close:hover { background: #e2e8f0; color: var(--danger-color); }
+.btn-close:hover { background: #e2e8f0; color: #ef4444; }
 
 .modal-body {
-    padding: 30px;
-    overflow-y: auto;
+    padding: 25px 30px; overflow-y: auto;
 }
+
+/* Scrollbar elegante */
+.modal-body::-webkit-scrollbar { width: 6px; }
+.modal-body::-webkit-scrollbar-track { background: #f1f5f9; }
+.modal-body::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
 
 .modal-footer {
-    padding: 20px 30px;
-    border-top: 1px solid #f1f5f9;
+    padding: 20px 30px; border-top: 1px solid #f1f5f9;
     display: flex; justify-content: flex-end; gap: 15px;
-    background: #f8fafc;
-    border-radius: 0 0 24px 24px;
+    background: #f8fafc; border-radius: 0 0 24px 24px;
 }
 
-/* =======================================================
-   🚨 FIX VISUAL DE INPUTS (ETIQUETAS FIJAS)
-   ======================================================= */
+/* --- 5. FORMULARIOS E INPUTS --- */
 .input-group {
-    margin-bottom: 20px;
-    display: flex;
-    flex-direction: column; /* Apila Label sobre Input */
+    margin-bottom: 15px;
+    display: flex; flex-direction: column;
 }
 
-/* Forzamos que TODOS los labels se comporten como estáticos (arriba) */
 .input-group label {
-    display: block;
-    margin-bottom: 8px;
-    font-size: 13px;
-    font-weight: 700;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    position: static !important; /* Anula posición absoluta */
-    transform: none !important;
-    background: transparent !important;
-    padding: 0 !important;
+    display: block; margin-bottom: 6px;
+    font-size: 12px; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.5px;
 }
 
-.input-group input,
-.input-group select,
-.input-group textarea {
-    width: 100%;
-    padding: 12px 18px; /* Padding normal */
-    border: 2px solid #e2e8f0;
-    border-radius: 12px;
-    font-size: 15px;
-    color: var(--dark-color);
-    transition: all 0.3s ease;
-    background: white;
-    outline: none;
-    height: auto;
-}
-
-/* Estilo para Select */
+.input-group input, 
 .input-group select {
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24'%3E%3Cpath fill='none' d='M0 0h24v24H0z'/%3E%3Cpath d='M12 13.172l4.95-4.95 1.414 1.414L12 16 5.636 9.636 7.05 11.05z' fill='%2394a3b8'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 15px center;
-    padding-right: 45px;
+    width: 100%; padding: 10px 15px;
+    border: 2px solid #e2e8f0; border-radius: 12px;
+    font-size: 14px; color: var(--dark-color);
+    transition: all 0.3s ease; background: white; outline: none;
 }
 
 .input-group input:focus, .input-group select:focus {
@@ -254,29 +177,39 @@
     box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
 }
 
-/* --- Botones --- */
-.btn-primary, .btn-cancel {
-    padding: 12px 24px;
-    border-radius: 12px;
-    font-size: 15px; font-weight: 700;
-    cursor: pointer; transition: all 0.3s ease;
-    border: none; display: flex; align-items: center; gap: 10px;
+/* Doble Columna (Monto y Método) */
+.form-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 15px;
 }
 
-.btn-primary {
-    background: var(--primary-color); color: white;
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+/* --- 6. BOTONES --- */
+.btn-primary, .btn-cancel {
+    padding: 10px 20px; border-radius: 10px;
+    font-size: 14px; font-weight: 700; cursor: pointer;
+    transition: all 0.2s ease; border: none; display: flex; align-items: center; gap: 8px;
 }
+
+.btn-primary { background: var(--primary-color); color: white; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2); }
 .btn-primary:hover { background: var(--primary-dark); transform: translateY(-2px); }
 
 .btn-cancel { background: #f1f5f9; color: #64748b; }
 .btn-cancel:hover { background: #e2e8f0; color: var(--dark-color); }
 
+/* --- 7. SELECTOR ADMIN --- */
+.select-sede-admin {
+    padding: 10px 15px; border-radius: 12px; border: 1px solid #cbd5e1;
+    background-color: white; color: #334155; font-weight: 600; font-size: 14px;
+    cursor: pointer; outline: none; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    transition: all 0.2s; min-width: 180px;
+}
+.select-sede-admin:hover { border-color: #94a3b8; background-color: #f8fafc; }
+
 /* Responsive */
 @media (max-width: 768px) {
     .module-header { flex-direction: column; align-items: flex-start; gap: 20px; }
-    .module-header .btn-primary { width: 100%; justify-content: center; }
-    .kpi-grid { grid-template-columns: 1fr; gap: 20px; }
-    .kpi-card { padding: 20px; }
-    .modal-content.center-modal { width: 95%; max-height: 95vh; min-width: auto; }
+    .header-actions { width: 100%; flex-direction: column; align-items: stretch; }
+    .select-sede-admin, .btn-primary { width: 100%; justify-content: center; }
+    .kpi-grid { grid-template-columns: 1fr; gap: 15px; }
+    .modal-content.center-modal { width: 95%; max-height: 95vh; }
+    .form-row { grid-template-columns: 1fr; gap: 0; } /* En móvil, uno abajo del otro */
 }

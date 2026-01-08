@@ -75,13 +75,27 @@
         
         const totalPaginas = Math.ceil(datosGlobalesPyL.length / FILAS_POR_PAGINA);
         
-        if (totalPaginas <= 1) { contenedor.innerHTML = ''; return; }
+        // Si no hay datos o solo hay 1 página, limpiamos y salimos
+        if (totalPaginas <= 1) { 
+            contenedor.innerHTML = ''; 
+            return; 
+        }
 
+        // Renderizamos la "Cápsula" de navegación
         contenedor.innerHTML = `
-            <div style="display:flex; justify-content:flex-end; gap:10px;">
-                <span style="align-self:center; font-size:12px; color:#666;">Pág ${paginaActual} / ${totalPaginas}</span>
-                <button class="btn-secondary" onclick="cambiarPaginaAnalitica(-1)" ${paginaActual===1?'disabled':''}><i class='bx bx-chevron-left'></i></button>
-                <button class="btn-secondary" onclick="cambiarPaginaAnalitica(1)" ${paginaActual>=totalPaginas?'disabled':''}><i class='bx bx-chevron-right'></i></button>
+            <div class="pagination-wrapper">
+                <span class="page-info">
+                    Página <strong>${paginaActual}</strong> de <strong>${totalPaginas}</strong>
+                </span>
+                <div class="pagination-actions">
+                    <button class="pagi-btn" onclick="cambiarPaginaAnalitica(-1)" ${paginaActual === 1 ? 'disabled' : ''} title="Anterior">
+                        <i class='bx bx-chevron-left'></i>
+                    </button>
+                    <div class="pagi-divider"></div>
+                    <button class="pagi-btn" onclick="cambiarPaginaAnalitica(1)" ${paginaActual >= totalPaginas ? 'disabled' : ''} title="Siguiente">
+                        <i class='bx bx-chevron-right'></i>
+                    </button>
+                </div>
             </div>
         `;
     }
