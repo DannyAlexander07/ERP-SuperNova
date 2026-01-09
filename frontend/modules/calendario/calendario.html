@@ -3,51 +3,30 @@
     <div class="module-header">
         <div class="header-titles">
             <h2>Cronograma de Eventos</h2>
-            <p>Visualiza la ocupación de salas y gestiona reservas.</p>
+            <p>Visualiza la ocupación de salas y eventos programados.</p>
         </div>
-        <button class="btn-primary" onclick="abrirModalReserva()">
-            <i class='bx bx-plus'></i> Nueva Reserva
-        </button>
-    </div>
+        </div>
 
     <div class="calendar-wrapper">
         
         <div class="calendar-sidebar">
+            
+            <div class="mini-calendar-title">Sede</div>
+            <select id="filtro-sede-calendario" class="select-sede-full" onchange="cambiarSedeCalendario()">
+                <option value="">🏢 Todas las Sedes</option>
+                </select>
+
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;">
+
             <div class="mini-calendar-title">Filtros de Sala</div>
             
-            <div class="filter-group">
-                <label class="custom-checkbox">
-                    <input type="checkbox" checked value="Sala 1" onchange="filtrarCalendario()">
-                    <span class="checkmark" style="--check-color: #695CFE;"></span>
-                    <span class="label-text">Sala 1 (Todas las sedes)</span>
-                </label>
-                
-                <label class="custom-checkbox">
-                    <input type="checkbox" checked value="Sala 2" onchange="filtrarCalendario()">
-                    <span class="checkmark" style="--check-color: #E91E63;"></span>
-                    <span class="label-text">Sala 2 (Todas las sedes)</span>
-                </label>
-                
-                <label class="custom-checkbox">
-                    <input type="checkbox" checked value="Sala 3" onchange="filtrarCalendario()">
-                    <span class="checkmark" style="--check-color: #00BCD4;"></span>
-                    <span class="label-text">Sala 3 (Todas las sedes)</span>
-                </label>
-
-                <label class="custom-checkbox">
-                    <input type="checkbox" checked value="Arcade" onchange="filtrarCalendario()">
-                    <span class="checkmark" style="--check-color: #FF9800;"></span>
-                    <span class="label-text">Zona Arcade</span>
-                </label>
+            <div class="filter-group" id="contenedor-filtros-salas">
+                <p style="font-size:12px; color:#999; text-align:center; padding:10px;">
+                    <i class='bx bx-loader-alt bx-spin'></i> Cargando...
+                </p>
             </div>
 
-            <div class="mini-calendar-title" style="margin-top: 20px;">Estado de Pago</div>
-            <div class="status-legend">
-                <div class="legend-item"><span class="badge-status reservado">Reservado (50%)</span></div>
-                <div class="legend-item"><span class="badge-status confirmado">Confirmado (Pagado)</span></div>
-                <div class="legend-item"><span class="badge-status bloqueado">Bloqueado</span></div>
             </div>
-        </div>
 
         <div class="calendar-main-area">
             <div id="calendar-main"></div>
@@ -69,7 +48,7 @@
                     <div class="input-group">
                         <select id="evt-cliente" required>
                             <option value="" disabled selected>Seleccionar Cliente...</option>
-                            </select>
+                        </select>
                         <label class="static">Titular</label>
                     </div>
                     <div class="input-group">
@@ -81,9 +60,7 @@
                     <div class="row-grid">
                         <div class="input-group">
                             <select id="evt-salon">
-                                <option value="Salon 1">Salón 1</option>
-                                <option value="Salon 2">Salón 2</option>
-                                <option value="Zona Arcade">Zona Arcade</option>
+                                <option value="" disabled selected>Selecciona Sede primero...</option>
                             </select>
                             <label class="static">Ubicación</label>
                         </div>
@@ -120,7 +97,7 @@
                         <div class="input-group">
                             <select id="evt-estado" onchange="checkEstadoPago()">
                                 <option value="reservado">Reservado (50%)</option>
-                                <option value="manual">Pago a Cuenta (Monto Manual)</option>
+                                <option value="manual">Pago a Cuenta</option>
                                 <option value="confirmado">Confirmado (Pagado)</option>
                                 <option value="bloqueado">Bloqueo Mantenimiento</option>
                             </select>

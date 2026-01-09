@@ -2,9 +2,14 @@
     <div class="module-header">
         <div class="header-titles">
             <h2>📜 Historial de Ventas POS</h2>
-            <p>Registro detallado de todas las transacciones generadas en caja.</p>
+            <p>Registro detallado de todas las transacciones generadas.</p>
         </div>
-        <div class="header-actions">
+        
+        <div class="header-actions" style="display: flex; gap: 10px; align-items: center;">
+            <select id="filtro-sede-historial" class="select-sede-admin" style="display:none;" onchange="filtrarHistorialPorSede()">
+                <option value="">🏢 Todas las Sedes (Global)</option>
+            </select>
+
             <button class="btn-secondary" onclick="exportarHistorialVentas()">
                 <i class='bx bxs-file-export'></i> Exportar Excel
             </button>
@@ -14,10 +19,12 @@
     <div class="table-toolbar">
         <div class="search-box">
             <i class='bx bx-search'></i>
-            <input type="text" id="historial-search" placeholder="Buscar por cliente, ticket o DNI..." onkeyup="filtrarHistorial()">
+            <input type="text" id="historial-search" placeholder="Buscar por cliente, ticket o DNI..." onkeyup="filtrarTablaLocal()">
         </div>
         <div class="filter-actions">
-            <input type="date" id="filtro-fecha-historial" class="date-filter" onchange="filtrarHistorial()">
+            <button class="btn-icon" onclick="cargarHistorial()" title="Actualizar Datos">
+                <i class='bx bx-refresh'></i>
+            </button>
         </div>
     </div>
 
@@ -25,29 +32,30 @@
         <table class="premium-table">
             <thead>
                 <tr>
-                    <th>Ticket N°</th>
-                    <th>Emisión</th>
-                    <th>Cliente / Doc</th>
-                    <th>Sede / Usuario</th>
-                    <th>Monto Total</th>
+                    <th>Fecha / Hora</th>
+                    <th>Sede</th> <th>Ticket N°</th>
+                    <th>Cliente</th>
                     <th>Método</th>
-                    <th>Detalles</th>
-                </tr>
+                    <th>Total</th>
+                    <th>Usuario</th>
+                    <th>Acciones</th> </tr>
             </thead>
             <tbody id="tabla-historial-body">
-                <tr><td colspan="7" style="text-align:center">Cargando historial de ventas...</td></tr>
+                <tr><td colspan="8" style="text-align:center">Cargando historial...</td></tr>
             </tbody>
         </table>
     </div>
+    
+    <div id="historial-paginacion" class="pagination-container" style="margin-top: 15px; display:flex; justify-content:flex-end;"></div>
 </div>
-<div id="historial-paginacion" class="pagination-container" style="margin-top: 15px; display:flex; justify-content:flex-end;"></div>
+
 <div id="modal-detalle-venta" class="modal-overlay">
     <div class="modal-content slide-in-right" style="max-width: 500px;">
         <div class="modal-header">
-            <h3>Detalle Ticket N° <span id="detalle-ticket-id"></span></h3>
+            <h3>Detalle Ticket <span id="detalle-ticket-id" style="color:#6366f1"></span></h3>
             <button class="btn-close" onclick="cerrarModalDetalle()"><i class='bx bx-x'></i></button>
         </div>
         <div class="modal-body" id="detalle-venta-body">
-        </div>
+            </div>
     </div>
 </div>

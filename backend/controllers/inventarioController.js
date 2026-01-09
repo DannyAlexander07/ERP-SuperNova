@@ -2,12 +2,14 @@
 const pool = require('../db');
 
 // 1. OBTENER PRODUCTOS (CON STOCK DE MI SEDE ACTUAL)
+// 1. OBTENER PRODUCTOS (FILTRADO POR SEDE)
 exports.obtenerProductos = async (req, res) => {
     try {
-        const sedeId = req.usuario.sede_id; // Viene del token
-
-        // JOIN CLAVE: Unimos productos con el inventario de ESTA sede específica
-        // Usamos LEFT JOIN para ver el producto aunque el stock sea 0
+        const sedeId = req.usuario.sede_id; 
+        
+        // Verificamos si es Admin para darle opción de ver todo (opcional)
+        // Por ahora, aplicamos la regla estricta: "Solo lo que hay en mi sede"
+        
         const query = `
             SELECT 
                 p.id, 
@@ -22,9 +24,9 @@ exports.obtenerProductos = async (req, res) => {
                 COALESCE(i.cantidad, 0) as stock_actual,
                 COALESCE(i.stock_minimo_local, 5) as stock_minimo
             FROM productos p
-            LEFT JOIN inventario_sedes i 
+            INNER JOIN inventario_sedes i 
                 ON p.id = i.producto_id AND i.sede_id = $1
-            ORDER BY p.id DESC
+            ORDER BY p.nombre ASC
         `;
 
         const result = await pool.query(query, [sedeId]);
@@ -118,32 +120,60 @@ exports.crearProducto = async (req, res) => {
     }
 };
 
-// 3. OBTENER KARDEX (CON COSTOS Y VALORIZACIÓN)
+// 3. OBTENER KARDEX (SEGURIDAD JERÁRQUICA)
 exports.obtenerKardex = async (req, res) => {
     try {
-        const sedeId = req.usuario.sede_id;
+        const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
+        const usuarioSedeId = req.usuario.sede_id;
+
+        // 🧠 DEFINICIÓN DE ROLES:
+        // 'superadmin' o 'gerente' -> Ve TODO y puede filtrar.
+        // 'admin', 'administrador', 'cajero', etc. -> Solo ven SU sede.
+        const esSuperAdmin = rol === 'superadmin' || rol === 'gerente';
         
-        const query = `
+        const filtroSedeId = req.query.sede;
+        
+        let query = `
             SELECT 
                 m.id,
                 m.fecha,
                 p.nombre as producto,
                 u.nombres as usuario,
+                s.nombre as nombre_sede,
                 m.tipo_movimiento,
                 m.cantidad,
                 m.stock_resultante,
                 m.motivo,
-                /* TRAEMOS EL COSTO HISTÓRICO */
                 COALESCE(m.costo_unitario_movimiento, 0) as costo_unitario
             FROM movimientos_inventario m
             JOIN productos p ON m.producto_id = p.id
             JOIN usuarios u ON m.usuario_id = u.id
-            WHERE m.sede_id = $1
-            ORDER BY m.fecha DESC
-            LIMIT 100
+            JOIN sedes s ON m.sede_id = s.id
+            WHERE 1=1
         `;
         
-        const result = await pool.query(query, [sedeId]);
+        const params = [];
+        let paramIndex = 1;
+
+        // --- LÓGICA DE SEGURIDAD ACTUALIZADA ---
+        if (esSuperAdmin) {
+            // EL JEFE SUPREMO: Puede filtrar o ver todo
+            if (filtroSedeId) {
+                query += ` AND m.sede_id = $${paramIndex}`;
+                params.push(filtroSedeId);
+                paramIndex++;
+            }
+        } else {
+            // ADMINISTRADORES DE SEDE Y PERSONAL:
+            // Se les fuerza a ver ÚNICAMENTE su sede asignada.
+            query += ` AND m.sede_id = $${paramIndex}`;
+            params.push(usuarioSedeId);
+            paramIndex++;
+        }
+
+        query += ` ORDER BY m.fecha DESC LIMIT 100`;
+
+        const result = await pool.query(query, params);
         res.json(result.rows);
 
     } catch (err) {
@@ -151,6 +181,7 @@ exports.obtenerKardex = async (req, res) => {
         res.status(500).send('Error al obtener kardex');
     }
 };
+
 exports.eliminarProducto = async (req, res) => {
     const { id } = req.params;
     const client = await pool.connect();

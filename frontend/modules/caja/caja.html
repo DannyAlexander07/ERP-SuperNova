@@ -2,18 +2,21 @@
     
     <div class="module-header">
         <div class="header-titles">
-            <h2>Flujo de Caja y Tesorería</h2>
-            <p>Control de ingresos y egresos de dinero en efectivo/bancos.</p>
+            <h2>💰 Flujo de Caja</h2>
+            <p>Control de ingresos y egresos en tiempo real.</p>
         </div>
         
-        <div class="header-actions" style="display: flex; gap: 10px; align-items: center;">
-            
+        <div class="header-actions" style="display:flex; gap:10px; align-items:center;">
             <select id="filtro-sede-caja" class="select-sede-admin" style="display:none;" onchange="filtrarCajaPorSede()">
-                <option value="">🏢 Todas las Sedes</option>
+                <option value="">🏢 Todas las Sedes (Global)</option>
             </select>
 
             <button class="btn-primary" onclick="abrirModalMovimiento()">
-                <i class='bx bx-transfer-alt'></i> Registrar Movimiento
+                <i class='bx bx-plus-circle'></i> Registrar Movimiento
+            </button>
+
+            <button onclick="exportarTablaCaja()" class="btn-success" style="background: #10b981; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                <i class='bx bxs-file-export'></i> Exportar Excel
             </button>
         </div>
     </div>

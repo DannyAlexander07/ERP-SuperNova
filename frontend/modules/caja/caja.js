@@ -4,6 +4,7 @@
     console.log("Modulo Caja Financiera Activo 💵");
 
     let cajaGlobal = [];
+    let listaParaExcel = [];
     let currentPage = 1;
     const ITEMS_PER_PAGE = 10;
     
@@ -25,13 +26,14 @@
 
         const usuario = JSON.parse(usuarioStr);
         const rol = (usuario.rol || '').toLowerCase();
-        // Aceptamos variantes de admin
-        const esAdmin = rol === 'admin' || rol === 'administrador';
         
-        console.log("Rol detectado:", rol, "| Es Admin:", esAdmin); // Debug
+        // 🔥 CORRECCIÓN: Agregamos 'superadmin' y 'gerente' a la lista VIP
+        const esAdmin = rol === 'superadmin' || rol === 'admin' || rol === 'administrador' || rol === 'gerente';
+        
+        console.log("Rol detectado:", rol, "| Permiso Admin:", esAdmin);
 
         const select = document.getElementById('filtro-sede-caja');
-        if (!select) return console.error("No se encontró el select #filtro-sede-caja en el HTML");
+        if (!select) return; // Si no existe el HTML, salimos sin error
 
         if (esAdmin) {
             // MOSTRAR SELECTOR
@@ -39,7 +41,7 @@
             
             try {
                 const token = localStorage.getItem('token');
-                // Llamamos a la API de sedes (según tu estructura tienes sedesController)
+                // Cargamos las sedes desde la API
                 const res = await fetch('/api/sedes', { headers: { 'x-auth-token': token } });
                 
                 if (res.ok) {
@@ -54,12 +56,10 @@
                         opt.innerText = `📍 ${s.nombre}`;
                         select.appendChild(opt);
                     });
-                } else {
-                    console.error("Error al cargar sedes:", await res.text());
                 }
             } catch (e) { console.error("Error de red cargando sedes", e); }
         } else {
-            // Si NO es admin, ocultamos y forzamos filtro vacío (el backend usará su sede_id)
+            // Si NO es admin, ocultamos
             select.style.display = 'none';
         }
     }
@@ -108,20 +108,23 @@
     async function cargarMovimientos() {
         try {
             const token = localStorage.getItem('token');
-            const url = `/api/caja?sede=${filtroSedeActual}`;
+            const url = `/api/caja?sede=${filtroSedeActual}`; // El backend ya filtra por sede aquí
 
             const res = await fetch(url, { headers: { 'x-auth-token': token } });
             
             if(res.ok) {
                 const data = await res.json();
+                // Guardamos TODO lo que trajo el servidor en cajaGlobal
                 cajaGlobal = Array.isArray(data) ? data : []; 
+                
+                // Reiniciamos a página 1 al cargar nuevos datos
+                currentPage = 1; 
                 renderizarTablaCaja();
             } else {
                 console.error("Error al cargar movimientos");
             }
         } catch (e) { console.error(e); }
     }
-
     function renderizarTablaCaja() {
         const tbody = document.getElementById('tabla-caja-body');
         if(!tbody) return;
@@ -252,6 +255,87 @@
         if(modal) modal.classList.remove('active');
     }
 
+    // --- FUNCIÓN EXPORTAR A EXCEL (DATA COMPLETA Y FILTRADA) ---
+    window.exportarTablaCaja = function() {
+        // 1. Usamos cajaGlobal que contiene TODOS los datos traídos del servidor
+        let dataParaExportar = cajaGlobal; 
+
+        // 2. Validar si hay datos
+        if (!dataParaExportar || dataParaExportar.length === 0) {
+            return alert("No hay datos cargados en la pantalla para exportar.");
+        }
+
+        // --- APLICAR FILTRO DE TEXTO (BUSCADOR) ---
+        // (El filtro de Sede NO es necesario hacerlo aquí porque el Backend YA nos mandó la lista filtrada)
+        
+        const inputBuscador = document.getElementById('search-caja'); // O el ID que tenga tu buscador
+        if (inputBuscador && inputBuscador.value.trim() !== "") {
+            const texto = inputBuscador.value.toLowerCase();
+            
+            dataParaExportar = dataParaExportar.filter(mov => {
+                const descripcion = (mov.descripcion || "").toLowerCase();
+                const usuario = (mov.usuario || mov.usuario_nombre || "").toLowerCase();
+                const metodo = (mov.metodo_pago || "").toLowerCase();
+                const origen = (mov.origen || "").toLowerCase();
+                
+                return descripcion.includes(texto) || 
+                       usuario.includes(texto) || 
+                       metodo.includes(texto) ||
+                       origen.includes(texto);
+            });
+        }
+
+        // 3. Generar CSV
+        let csvContent = [];
+        csvContent.push("sep=;"); // Truco para Excel
+        
+        // Encabezados
+        csvContent.push("FECHA;HORA;TIPO;ORIGEN;DESCRIPCION;METODO;MONTO;USUARIO;SEDE");
+
+        dataParaExportar.forEach(mov => {
+            // A. Formatear Fecha y Hora
+            const fechaObj = new Date(mov.fecha_registro);
+            const fecha = fechaObj.toLocaleDateString('es-PE');
+            const hora = fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            // B. Limpiar Textos
+            let desc = (mov.descripcion || "").replace(/(\r\n|\n|\r)/gm, " ").replace(/;/g, ",").replace(/"/g, '""');
+            let origen = (mov.origen || "General").replace(/;/g, ",");
+
+            // C. Formatear Monto
+            let monto = parseFloat(mov.monto).toFixed(2);
+            // Opcional: Si es egreso ponerle negativo visualmente
+            if(mov.tipo_movimiento === 'EGRESO') monto = `-${monto}`;
+
+            // D. Nombres
+            let nombreUsuario = mov.usuario || mov.usuario_nombre || "-";
+            let nombreSede = mov.nombre_sede || mov.sede_id || "-";
+
+            let row = [
+                `"${fecha}"`,
+                `"${hora}"`,
+                `"${mov.tipo_movimiento}"`,
+                `"${origen}"`,
+                `"${desc}"`,
+                `"${mov.metodo_pago}"`,
+                monto,
+                `"${nombreUsuario}"`,
+                `"${nombreSede}"`
+            ];
+
+            csvContent.push(row.join(";"));
+        });
+
+        // 4. Descargar
+        let csvString = "\uFEFF" + csvContent.join("\n");
+        let blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+        let link = document.createElement("a");
+        link.setAttribute("href", URL.createObjectURL(blob));
+        link.setAttribute("download", `Caja_Reporte_${new Date().toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
     // INICIO
     initCaja();
 

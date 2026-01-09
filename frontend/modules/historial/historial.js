@@ -1,22 +1,80 @@
-// Ubicacion: SuperNova/frontend/modules/historial/historial.js
+// Ubicación: SuperNova/frontend/modules/historial/historial.js
 
 (function() {
     console.log("Modulo Historial de Ventas Conectado 📜");
 
-    // URL Relativa (Mejor práctica para producción)
+    // URL Relativa
     const API_BASE = '/api'; 
 
     let historialGlobal = []; 
     let currentPage = 1;      
     const ITEMS_PER_PAGE = 8; 
     
+    // Variable para el filtro de Superadmin
+    let filtroSedeActual = ""; 
+
     // --- 1. INICIALIZAR Y OBTENER DATOS ---
-    async function initHistorial() {
+    window.initHistorial = async function() {
+        await configurarFiltroAdmin(); // 1. Configurar permisos
+        await cargarHistorial();       // 2. Cargar datos
+    }
+
+    // --- 1.1 LÓGICA SUPERADMIN (FILTRO SEDES) ---
+    async function configurarFiltroAdmin() {
+        const usuarioStr = localStorage.getItem('usuario') || localStorage.getItem('user');
+        if (!usuarioStr) return;
+
+        const usuario = JSON.parse(usuarioStr);
+        const rol = (usuario.rol || '').toLowerCase();
+        
+        // Solo Superadmin o Gerente ven el filtro
+        const esSuperAdmin = rol === 'superadmin' || rol === 'gerente';
+        
+        const select = document.getElementById('filtro-sede-historial');
+        if (!select) return;
+
+        if (esSuperAdmin) {
+            select.style.display = 'block'; // Mostrar selector
+            
+            try {
+                // Cargar lista de sedes
+                const token = localStorage.getItem('token');
+                const res = await fetch(`${API_BASE}/sedes`, { headers: { 'x-auth-token': token } });
+                if (res.ok) {
+                    const sedes = await res.json();
+                    select.innerHTML = '<option value="">🏢 Todas las Sedes (Global)</option>';
+                    sedes.forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s.id;
+                        opt.innerText = `📍 ${s.nombre}`;
+                        select.appendChild(opt);
+                    });
+                }
+            } catch (e) { console.error("Error cargando sedes", e); }
+        } else {
+            select.style.display = 'none'; // Ocultar para admins locales
+        }
+    }
+
+    // Evento del Select (HTML onchange)
+    window.filtrarHistorialPorSede = function() {
+        const select = document.getElementById('filtro-sede-historial');
+        filtroSedeActual = select.value;
+        currentPage = 1;
+        cargarHistorial(); // Recargar desde Backend
+    }
+
+    // --- 1.2 CARGAR DATOS DEL BACKEND ---
+    window.cargarHistorial = async function() {
+        const tbody = document.getElementById('tabla-historial-body');
+        if(tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center">Cargando ventas...</td></tr>';
+
         try {
             const token = localStorage.getItem('token');
             if (!token) return console.error("No hay token");
 
-            const res = await fetch(`${API_BASE}/ventas/historial`, {
+            // 🔥 AQUÍ ENVIAMOS EL FILTRO
+            const res = await fetch(`${API_BASE}/ventas/historial?sede=${filtroSedeActual}`, {
                 headers: { 'x-auth-token': token }
             });
             
@@ -26,37 +84,29 @@
                 historialGlobal = data;
                 aplicarFiltrosYPaginacion(); 
             } else {
-                document.getElementById('tabla-historial-body').innerHTML = 
-                    `<tr><td colspan="7" style="text-align:center; color:red;">${data.msg || 'Error al cargar los datos.'}</td></tr>`;
+                if(tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:red;">${data.msg || 'Error al cargar los datos.'}</td></tr>`;
             }
 
         } catch (error) {
             console.error("Error historial:", error);
-            document.getElementById('tabla-historial-body').innerHTML = 
-                '<tr><td colspan="7" style="text-align:center; color:red;">Error de conexión.</td></tr>';
+            if(tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:red;">Error de conexión.</td></tr>';
         }
     }
 
-    // --- 2. RENDERIZAR TABLA (CORREGIDA) ---
+    // --- 2. RENDERIZAR TABLA (ACTUALIZADA CON SEDE) ---
     function renderizarTablaHistorial(datos) {
         const tbody = document.getElementById('tabla-historial-body');
         if (!tbody) return;
         tbody.innerHTML = '';
         
-        // Si no hay datos, limpiamos la paginación y mostramos mensaje
         if (!datos || datos.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px;">No se encontraron resultados.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px;">No se encontraron resultados.</td></tr>';
             const paginacionDiv = document.getElementById('historial-paginacion');
             if(paginacionDiv) paginacionDiv.innerHTML = '';
             return;
         }
 
-        // Detectar Admin
-        const currentUser = JSON.parse(localStorage.getItem('usuario') || localStorage.getItem('user')) || {};
-        const rol = (currentUser.rol || '').toLowerCase();
-        const isAdmin = rol === 'admin' || rol === 'administrador';
-        
-        // Lógica de Paginación (Slice)
+        // Lógica de Paginación
         const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
         const endIndex = startIndex + ITEMS_PER_PAGE;
         const dataToRender = datos.slice(startIndex, endIndex);
@@ -67,24 +117,33 @@
             const nombreCompleto = `${v.nombre_usuario} ${v.apellido_usuario || ''}`.trim();
             const clienteInfo = v.nombre_cliente_temporal || v.doc_cliente_temporal || 'Consumidor Final';
 
-            let btnDeleteHtml = ''; 
-            if (isAdmin) {
-                 btnDeleteHtml = `<button class="btn-action delete" title="Eliminar Venta" onclick="eliminarVenta(${v.id})"><i class='bx bx-trash'></i></button>`;
-            }
+            // Botón Anular
+            const btnDeleteHtml = `<button class="btn-icon delete" title="Anular Venta" onclick="eliminarVenta(${v.id})" style="color:#ef4444;"><i class='bx bx-block'></i></button>`;
             
+            // Dentro de renderizarTablaHistorial:
             tr.innerHTML = `
-                <td><strong>#${v.id}</strong></td>
-                <td>${v.fecha_venta ? new Date(v.fecha_venta).toLocaleString() : '-'}</td>
-                <td>${clienteInfo}</td>
                 <td>
-                    <small>${v.nombre_sede}</small><br>
-                    <small style="color:#666">${nombreCompleto}</small>
+                    <div style="font-weight:600">${v.fecha_venta ? new Date(v.fecha_venta).toLocaleDateString() : '-'}</div>
+                    <div style="font-size:11px; color:#666">${v.fecha_venta ? new Date(v.fecha_venta).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</div>
                 </td>
-                <td style="font-weight: 700; color:#333; text-align:right;">S/ ${parseFloat(v.total_venta).toFixed(2)}</td>
-                <td>${v.metodo_pago || '-'}</td>
+                
                 <td>
-                    <button class="btn-action btn-view" title="Ver Detalle" onclick="verDetallesVenta(${v.id})">
-                        <i class='bx bx-search-alt'></i>
+                    <span style="background:#e0e7ff; color:#3730a3; padding:3px 8px; border-radius:4px; font-weight:700; font-size:11px;">
+                        ${v.nombre_sede || 'Local'}
+                    </span>
+                </td>
+
+                <td style="font-weight:bold; font-size:15px; color:#333;">
+                    ${v.codigo_visual || '#' + v.id}
+                </td>
+
+                <td>${clienteInfo}</td>
+                <td>${v.metodo_pago || '-'}</td>
+                <td style="font-weight: 700; color:#16a34a; font-size:15px;">S/ ${parseFloat(v.total_venta).toFixed(2)}</td>
+                <td style="font-size:12px;">${v.nombre_usuario}</td>
+                <td>
+                    <button class="btn-icon" title="Ver Detalle" onclick="verDetallesVenta(${v.id})" style="color:#4f46e5; margin-right:5px;">
+                        <i class='bx bx-show'></i>
                     </button>
                     ${btnDeleteHtml}
                 </td>
@@ -92,7 +151,6 @@
             tbody.appendChild(tr);
         });
         
-        // 🔥 LLAMADA OBLIGATORIA A LA PAGINACIÓN 🔥
         renderizarPaginacion(datos.length, datos);
     }
 
@@ -102,34 +160,45 @@
         const body = document.getElementById('detalle-venta-body');
         
         modal.classList.add('active');
-        document.getElementById('detalle-ticket-id').innerText = ventaId;
+        document.getElementById('detalle-ticket-id').innerText = "#" + ventaId;
         body.innerHTML = '<div style="text-align:center; padding:20px"><i class="bx bx-loader-alt bx-spin"></i> Cargando...</div>';
 
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`${API_BASE}/ventas/detalle/${ventaId}`, {
+            const res = await fetch(`${API_BASE}/ventas/detalle/${ventaId}`, { // Asegúrate que esta ruta exista en tu backend (la creamos antes)
                 headers: { 'x-auth-token': token }
             });
             
-            const data = await res.json();
+            // Si el backend no tiene la ruta /detalle/:id, usar la ruta vieja
+            // Pero en el paso anterior creamos exports.obtenerDetalleVenta
             
-            if (res.ok && Array.isArray(data)) {
-                let html = '<ul style="list-style:none; padding:0;">';
+            if (res.ok) {
+                const data = await res.json();
+                let html = `
+                    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                        <thead style="background:#f8fafc; color:#64748b;">
+                            <tr>
+                                <th style="padding:8px; text-align:left;">Producto</th>
+                                <th style="padding:8px; text-align:center;">Cant.</th>
+                                <th style="padding:8px; text-align:right;">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
                 data.forEach(item => {
                     html += `
-                        <li style="padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between;">
-                            <div>
-                                <strong>${item.cantidad} x ${item.nombre_producto_historico}</strong>
-                                <br><small style="color:#666">Unit: S/ ${parseFloat(item.precio_unitario).toFixed(2)}</small>
-                            </div>
-                            <div style="font-weight:bold;">S/ ${parseFloat(item.subtotal).toFixed(2)}</div>
-                        </li>
+                        <tr style="border-bottom:1px solid #eee;">
+                            <td style="padding:8px;">${item.nombre_producto_historico}</td>
+                            <td style="padding:8px; text-align:center;">${item.cantidad}</td>
+                            <td style="padding:8px; text-align:right;">S/ ${parseFloat(item.subtotal).toFixed(2)}</td>
+                        </tr>
                     `;
                 });
-                html += '</ul>';
+                html += `</tbody></table>`;
                 body.innerHTML = html;
             } else {
-                body.innerHTML = `<p style="color:red;">Error: ${data.msg || 'Fallo al cargar el detalle.'}</p>`;
+                body.innerHTML = `<p style="color:red;">Error al cargar detalle.</p>`;
             }
             
         } catch(e) {
@@ -142,14 +211,21 @@
         document.getElementById('modal-detalle-venta').classList.remove('active');
     }
 
-    // --- 4. FILTROS ---
-    window.filtrarHistorial = function() {
+    // --- 4. FILTROS LOCALES ---
+    window.filtrarTablaLocal = function() { // Renombrado para coincidir con HTML nuevo
         aplicarFiltrosYPaginacion();
+    }
+    
+    // Mantenemos compatibilidad con tu HTML viejo si usas 'filtrarHistorial'
+    window.filtrarHistorial = function() { 
+        aplicarFiltrosYPaginacion(); 
     }
 
     window.aplicarFiltrosYPaginacion = function() {
-        const termino = document.getElementById('historial-search').value.toLowerCase();
-        const fecha = document.getElementById('filtro-fecha-historial').value;
+        const termino = document.getElementById('historial-search') ? document.getElementById('historial-search').value.toLowerCase() : "";
+        // Si usas filtro de fecha
+        const filtroFecha = document.getElementById('filtro-fecha-historial');
+        const fecha = filtroFecha ? filtroFecha.value : "";
         
         let filtrados = historialGlobal;
 
@@ -157,6 +233,7 @@
             filtrados = filtrados.filter(v => 
                 (v.nombre_usuario && v.nombre_usuario.toLowerCase().includes(termino)) ||
                 (v.doc_cliente_temporal && v.doc_cliente_temporal.includes(termino)) ||
+                (v.nombre_cliente_temporal && v.nombre_cliente_temporal.toLowerCase().includes(termino)) ||
                 String(v.id).includes(termino)
             );
         }
@@ -165,41 +242,36 @@
             filtrados = filtrados.filter(v => v.fecha_venta.startsWith(fecha));
         }
 
-        currentPage = 1; // IMPORTANTE: Resetear a página 1 al filtrar
+        currentPage = 1; 
         renderizarTablaHistorial(filtrados);
     }
 
     // --- 5. EXPORTAR EXCEL ---
     window.exportarHistorialVentas = function() {
-        if (!historialGlobal || historialGlobal.length === 0) {
-            return alert("No hay datos para exportar.");
-        }
-
-        if (typeof XLSX === 'undefined') return alert("Error: Librería Excel no cargada.");
+        if (!historialGlobal || historialGlobal.length === 0) return alert("No hay datos.");
+        if (typeof XLSX === 'undefined') return alert("Librería Excel no cargada.");
 
         const datosFormateados = historialGlobal.map(v => ({
             "TICKET": v.id,
             "FECHA": v.fecha_venta ? v.fecha_venta.slice(0, 10) : '-',
-            "CLIENTE": v.nombre_cliente_temporal || v.doc_cliente_temporal || 'Consumidor Final',
+            "HORA": v.fecha_venta ? new Date(v.fecha_venta).toLocaleTimeString() : '-',
             "SEDE": v.nombre_sede,
+            "CLIENTE": v.nombre_cliente_temporal || 'Consumidor Final',
+            "DNI": v.doc_cliente_temporal || '-',
             "USUARIO": v.nombre_usuario,
-            "TOTAL": parseFloat(v.total_venta).toFixed(2),
+            "TOTAL (S/)": parseFloat(v.total_venta).toFixed(2),
             "MÉTODO": v.metodo_pago
         }));
 
         const ws = XLSX.utils.json_to_sheet(datosFormateados);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Ventas");
-
-        const fechaHoy = new Date().toISOString().slice(0, 10);
-        XLSX.writeFile(wb, `Ventas_SuperNova_${fechaHoy}.xlsx`);
+        XLSX.writeFile(wb, `Ventas_${new Date().toISOString().slice(0, 10)}.xlsx`);
     }
 
-    // --- 6. ELIMINAR VENTA ---
+    // --- 6. ELIMINAR VENTA (ANULAR) ---
     window.eliminarVenta = async function(id) {
-        if (!confirm(`¿Eliminar la Venta N° ${id} permanentemente?\nEsto borrará el dinero de la caja, pero NO devolverá el stock.`)) {
-            return;
-        }
+        if (!confirm(`⚠️ ¿ANULAR Venta #${id}?\n\n- Se devolverá el stock.\n- Se restará el dinero de caja.\n- Acción irreversible.`)) return;
         
         try {
             const token = localStorage.getItem('token');
@@ -212,16 +284,16 @@
 
             if (res.ok) {
                 alert("✅ " + data.msg);
-                initHistorial(); 
+                cargarHistorial(); // Recargar tabla
             } else {
-                alert("❌ " + (data.msg || "Fallo al eliminar venta."));
+                alert("❌ " + (data.msg || "Error al anular."));
             }
         } catch (e) {
-            alert("Error de conexión al eliminar.");
+            alert("Error de conexión.");
         }
     }
 
-    // --- 7. PAGINACIÓN (NUEVA FUNCIÓN) ---
+    // --- 7. PAGINACIÓN ---
     function renderizarPaginacion(totalItems, datosFiltrados) {
         const contenedor = document.getElementById('historial-paginacion');
         if (!contenedor) return;
@@ -233,7 +305,6 @@
             return;
         }
 
-        // Renderizado simple y limpio de botones
         contenedor.innerHTML = `
             <div class="pagination-wrapper" style="background:#fff; border:1px solid #ddd; border-radius:50px; padding:5px 15px; display:flex; align-items:center; gap:10px;">
                 <span style="font-size:12px; color:#666;">Pág <strong>${currentPage}</strong> de <strong>${totalPaginas}</strong></span>
@@ -250,7 +321,7 @@
         
         window.cambiarPaginaHistorial = function(delta) {
             currentPage += delta;
-            renderizarTablaHistorial(datosFiltrados); // Re-renderizar con los mismos datos
+            renderizarTablaHistorial(datosFiltrados); 
         };
     }
 

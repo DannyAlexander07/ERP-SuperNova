@@ -175,11 +175,13 @@ exports.crearLead = async (req, res) => {
     }
 };
 
-// Actualizar lead + sincronizar evento si es 'ganado'
 exports.actualizarLead = async (req, res) => {
     const { id } = req.params;
-    // 1. AÑADIDO: Recibimos salon_id
-    const { nombre_apoderado, telefono, email, canal_origen, nombre_hijo, fecha_tentativa, sede_interes, notas, salon_id } = req.body;
+    const { 
+        nombre_apoderado, telefono, email, canal_origen, nombre_hijo, 
+        fecha_tentativa, sede_interes, notas, salon_id,
+        paquete_interes, valor_estimado, hora_inicio, hora_fin 
+    } = req.body;
     
     const usuarioId = req.usuario ? req.usuario.id : null; 
     const client = await pool.connect();
@@ -187,94 +189,100 @@ exports.actualizarLead = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // 2. NUEVO: Obtener nombre del salón si viene el ID, para mantener sincronizado el texto
+        // 1. Obtener nombre salón
         let nombreSalon = null;
         if (salon_id) {
             const salonRes = await client.query('SELECT nombre FROM salones WHERE id = $1', [salon_id]);
-            if (salonRes.rows.length > 0) {
-                nombreSalon = salonRes.rows[0].nombre;
-            }
+            if (salonRes.rows.length > 0) nombreSalon = salonRes.rows[0].nombre;
         }
 
-        // 3. CORREGIDO: Añadido salon_id y sala_interes al UPDATE
+        // 2. ACTUALIZAR LEAD
         await client.query(
             `UPDATE leads SET 
                 nombre_apoderado=$1, telefono=$2, email=$3, canal_origen=$4, 
                 nombre_hijo=$5, fecha_tentativa=$6, sede_interes=$7, notas=$8,
                 salon_id=$9, sala_interes=$10, 
+                paquete_interes=$11, valor_estimado=$12, hora_inicio=$13, hora_fin=$14,
                 ultima_actualizacion=CURRENT_TIMESTAMP 
-             WHERE id=$11`,
+             WHERE id=$15`,
             [
-                nombre_apoderado, 
-                telefono, 
-                email, 
-                canal_origen, 
-                nombre_hijo || null, 
-                fecha_tentativa || null, 
-                sede_interes || null, 
-                notas || null, 
-                salon_id || null,  // Nuevo campo
-                nombreSalon,       // Nuevo campo (texto)
-                id
+                nombre_apoderado, telefono, email, canal_origen, 
+                nombre_hijo || null, fecha_tentativa || null, sede_interes || null, notas || null, 
+                salon_id || null, nombreSalon, paquete_interes, valor_estimado, 
+                hora_inicio, hora_fin, id
             ]
         );
 
-        if (usuarioId) {
-             await client.query(
-                `INSERT INTO auditoria (usuario_id, accion, modulo, registro_id, detalle) VALUES ($1, 'EDITAR', 'CRM', $2, $3)`,
-                [usuarioId, id, `Editó datos del lead ${nombre_apoderado}`]
-            );
-        }
-
-        // --- LÓGICA DE SINCRONIZACIÓN CON EVENTOS (SI YA ES GANADO) ---
-        const checkLead = await client.query('SELECT estado, telefono, fecha_tentativa, hora_inicio, hora_fin FROM leads WHERE id = $1', [id]);
-        const lead = checkLead.rows[0];
-
-        if (lead.estado === 'ganado' && lead.fecha_tentativa) {
-            const clienteRes = await client.query('SELECT id FROM clientes WHERE telefono = $1', [lead.telefono]);
+        // 3. SINCRONIZACIÓN Y RECALCULO FINANCIERO 🔥
+        const leadCheck = await client.query('SELECT cliente_asociado_id FROM leads WHERE id = $1', [id]);
+        
+        if (leadCheck.rows.length > 0 && leadCheck.rows[0].cliente_asociado_id) {
+            const clienteId = leadCheck.rows[0].cliente_asociado_id;
             
-            if (clienteRes.rows.length > 0) {
-                const clienteId = clienteRes.rows[0].id;
-                
-                // Reconstruir fechas completas
-                const fechaBase = new Date(lead.fecha_tentativa).toISOString().split('T')[0];
-                // Usar horas guardadas o default
-                const inicioTime = lead.hora_inicio ? lead.hora_inicio : '16:00:00'; 
-                // Ojo: Postgres a veces devuelve Time como string '16:00:00'
-                
-                // Calculo simple para el ejemplo (idealmente usar moment o las horas reales de la DB)
-                const nuevaInicio = `${fechaBase} ${inicioTime}`; 
-                
-                // Esto es una simplificación, idealmente deberías actualizar también hora_inicio/fin en el UPDATE de arriba
-                // Para no romper tu lógica actual, mantenemos la actualización básica del evento
+            // A. Calcular Historial de Pagos Real
+            // Sumamos todo lo que ha entrado en CAJA para este cliente
+            const pagosRes = await client.query(
+                `SELECT COALESCE(SUM(monto), 0) as total_pagado 
+                 FROM transacciones 
+                 WHERE cliente_id = $1 AND tipo = 'INGRESO' AND estado != 'anulado'`,
+                [clienteId]
+            );
+            
+            const pagadoHastaHoy = parseFloat(pagosRes.rows[0].total_pagado);
+            const nuevoCostoTotal = parseFloat(valor_estimado || 0);
+            
+            // B. Calcular Nuevo Saldo (Matemática Pura)
+            // Si costaba 58 y pagó 29, saldo era 29.
+            // Si ahora cuesta 580 y pagó 29, saldo será 551.
+            let nuevoSaldo = nuevoCostoTotal - pagadoHastaHoy;
+            if(nuevoSaldo < 0) nuevoSaldo = 0; // Por seguridad
+
+            // C. Actualizar Evento (Fechas y Dinero)
+            if (fecha_tentativa && hora_inicio && hora_fin) {
+                const horaInicioClean = hora_inicio.substring(0, 5);
+                const horaFinClean = hora_fin.substring(0, 5);
+                const fechaInicioStr = `${fecha_tentativa} ${horaInicioClean}:00`;
+                const fechaFinStr = `${fecha_tentativa} ${horaFinClean}:00`;
                 
                 await client.query(
                     `UPDATE eventos SET 
-                        titulo = $1,
-                        salon_id = $2,   -- Actualizamos también el salón en el evento
-                        salon = $3
-                      WHERE cliente_id = $4 AND estado != 'cancelado'`,
+                        fecha_inicio = $1, fecha_fin = $2,
+                        salon_id = $3, salon = $4, sede_id = $5,
+                        titulo = $6,
+                        costo_total = $7,
+                        saldo = $8  -- << AQUÍ GUARDAMOS EL SALDO RECALCULADO
+                     WHERE cliente_id = $9 AND estado != 'cancelado'`,
                     [
-                        `Cumpleaños: ${nombre_hijo || 'Niño'} (${nombre_apoderado})`,
-                        salon_id || null,
-                        nombreSalon,
+                        fechaInicioStr, fechaFinStr,
+                        salon_id || null, nombreSalon, sede_interes,
+                        `Cumpleaños: ${nombre_hijo} (${nombre_apoderado})`,
+                        nuevoCostoTotal,
+                        nuevoSaldo,
                         clienteId
                     ]
                 );
             }
         }
 
+        if (usuarioId) {
+             await client.query(
+                `INSERT INTO auditoria (usuario_id, accion, modulo, registro_id, detalle) VALUES ($1, 'EDITAR', 'CRM', $2, $3)`,
+                [usuarioId, id, `Editó Lead ${nombre_apoderado} y recalculó saldo`]
+            );
+        }
+
         await client.query('COMMIT');
-        res.json({ msg: 'Lead actualizado y sincronizado' });
+        res.json({ msg: 'Lead actualizado y saldo recalibrado.' });
 
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error(err.message);
-        res.status(500).send('Error al actualizar');
+        console.error(err);
+        res.status(500).send('Error del servidor');
     } finally {
         client.release();
     }
 };
+
 
 exports.actualizarEstado = async (req, res) => {
     const { id } = req.params;
@@ -404,26 +412,59 @@ exports.actualizarEstado = async (req, res) => {
 
 exports.obtenerEventos = async (req, res) => {
     try {
-        const query = `
+        const { sede } = req.query; // Capturamos ?sede=X
+
+        let query = `
             SELECT 
                 e.*, 
                 s.nombre AS nombre_sede,
-                c.nombre_completo AS nombre_cliente
+                c.nombre_completo AS nombre_cliente,
+                sa.nombre AS nombre_sala_real -- Traemos el nombre directo de la tabla salones
             FROM eventos e
             JOIN sedes s ON e.sede_id = s.id
-            JOIN salones sa ON e.salon_id = sa.id
+            LEFT JOIN salones sa ON e.salon_id = sa.id -- Join con salones
             JOIN clientes c ON e.cliente_id = c.id
-            ORDER BY e.fecha_inicio DESC 
-            LIMIT 100
+            WHERE 1=1
         `;
+
+        const params = [];
+        if (sede && sede !== "") {
+            query += ` AND e.sede_id = $1`;
+            params.push(sede);
+        }
+
+        query += ` ORDER BY e.fecha_inicio DESC LIMIT 200`; // Aumenté el límite un poco
         
-        const result = await pool.query(query);
-        
+        const result = await pool.query(query, params);
         res.json(result.rows);
+
     } catch (err) {
         console.error("Error al obtener eventos:", err.message);
-        console.error("Detalle del error SQL:", err);
         res.status(500).send('Error calendario');
+    }
+};
+
+// --- NUEVO: Obtener Salones por Sede (Para los checkboxes) ---
+exports.obtenerSalonesPorSede = async (req, res) => {
+    try {
+        const { sede } = req.query;
+        let query = 'SELECT id, nombre, color FROM salones';
+        const params = [];
+
+        // Asumiendo que tu tabla 'salones' tiene 'sede_id'. 
+        // Si no lo tiene, tendrás que asignarlas manualmente o agregar esa columna.
+        if (sede) {
+            query += ' WHERE sede_id = $1';
+            params.push(sede);
+        }
+        
+        query += ' ORDER BY nombre ASC';
+
+        const result = await pool.query(query, params);
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Error al obtener salones:", err.message);
+        res.status(500).json([]);
     }
 };
 
@@ -506,12 +547,11 @@ exports.eliminarLead = async (req, res) => {
 };
 
 
-// COBRAR SALDO (50% RESTANTE)
 exports.cobrarSaldo = async (req, res) => {
     const { id } = req.params; // ID del Lead
     const { metodoPago } = req.body; 
     const usuarioId = req.usuario.id;
-    const sedeId = req.usuario.sede_id;
+    // ❌ BORRADO: const sedeId = req.usuario.sede_id; (Esto causaba el error)
 
     const client = await pool.connect();
     
@@ -525,7 +565,7 @@ exports.cobrarSaldo = async (req, res) => {
 
         if (!lead.cliente_asociado_id) throw new Error('Sin evento asociado.');
 
-        // 2. Buscar Deuda
+        // 2. Buscar Evento y Deuda
         const eventoRes = await client.query(
             `SELECT * FROM eventos WHERE cliente_id = $1 AND estado != 'cancelado'`, 
             [lead.cliente_asociado_id]
@@ -535,43 +575,58 @@ exports.cobrarSaldo = async (req, res) => {
         
         const evento = eventoRes.rows[0];
         
-        // Validación: Si el saldo ya es 0, no cobrar de nuevo
+        // 🔥 CLAVE: Obtenemos la Sede REAL del evento
+        const sedeReal = evento.sede_id; 
+
+        // Validación: Si el saldo ya es 0
         if (parseFloat(evento.saldo) <= 0) {
             throw new Error('¡Este evento ya está pagado al 100%!');
         }
 
         const montoPagar = parseFloat(evento.saldo);
 
-        // 3. Registrar Pago en Base de Datos (Tabla Pagos)
+        // 3. Registrar en Tabla Auxiliar (pagos_evento)
         const pagoRes = await client.query(
             `INSERT INTO pagos_evento (evento_id, usuario_id, monto, metodo_pago, nro_operacion, tipo_pago)
              VALUES ($1, $2, $3, $4, 'PAGO_FINAL', 'SALDO') RETURNING id`,
             [evento.id, usuarioId, montoPagar, metodoPago || 'efectivo']
         );
 
-        // 4. Ingresar a CAJA (SOLO UNA VEZ)
+        const pagoId = pagoRes.rows[0].id;
+
+        // 4. Ingresar a CAJA (movimientos_caja)
         await client.query(
             `INSERT INTO movimientos_caja (
                 sede_id, usuario_id, tipo_movimiento, categoria, 
-                descripcion, monto, metodo_pago, pago_evento_id
+                descripcion, monto, metodo_pago, pago_evento_id, fecha_registro, es_cuadre_caja
             ) VALUES (
-                $1, $2, 'INGRESO', 'EVENTO_SALDO', 
-                'Saldo Final: ' || $7 || ' (Evento #' || $3 || ')', 
-                $4, $5, $6
+                $1, $2, 'INGRESO', 'Cobro Evento', 
+                $3, $4, $5, $6, CURRENT_TIMESTAMP, false
             )`,
             [
-                sedeId, usuarioId, evento.id, 
-                montoPagar, metodoPago || 'efectivo', pagoRes.rows[0].id,
-                lead.nombre_apoderado // $7 Nombre cliente
+                sedeReal, // ✅ USAMOS LA SEDE DEL EVENTO (CORREGIDO)
+                usuarioId, 
+                `EVENTO_SALDO | Saldo Final: ${lead.nombre_apoderado} (Evento #${evento.id})`, 
+                montoPagar, 
+                metodoPago || 'efectivo', 
+                pagoId
             ]
         );
 
         // 5. Actualizar Evento y Lead
-        await client.query('UPDATE eventos SET saldo = 0, acuenta = costo_total, estado = \'confirmado\' WHERE id = $1', [evento.id]);
-        await client.query('UPDATE leads SET estado = \'cerrado\' WHERE id = $1', [id]);
+        await client.query(
+            `UPDATE eventos SET saldo = 0, acuenta = costo_total, estado = 'confirmado' WHERE id = $1`, 
+            [evento.id]
+        );
+        
+        // Pasamos el Lead a 'ganado' (o 'cerrado' según prefieras tu lógica interna)
+        await client.query(
+            `UPDATE leads SET estado = 'ganado' WHERE id = $1`, 
+            [id]
+        );
 
         await client.query('COMMIT');
-        res.json({ msg: `¡Cobro exitoso de S/ ${montoPagar.toFixed(2)}!`, nuevoEstado: 'cerrado' });
+        res.json({ msg: `¡Cobro exitoso de S/ ${montoPagar.toFixed(2)} en la sede correcta!`, nuevoEstado: 'ganado' });
 
     } catch (err) {
         await client.query('ROLLBACK');

@@ -31,19 +31,19 @@ if (userStr) {
 }
 
 const menuItems = [
-    { id: 'inicio', icon: 'bx-grid-alt', text: 'Dashboard', roles: ['admin', 'colaborador', 'gerente', 'logistica'] },
-    { id: 'calendario', icon: 'bx-calendar-event', text: 'Calendario', roles: ['admin', 'colaborador', 'gerente'] },
-    { id: 'ventas', icon: 'bx-cart-alt', text: 'Ventas', roles: ['admin', 'colaborador', 'gerente'] },
-    { id: 'historial', icon: 'bx-history', text: 'Historial Ventas', roles: ['admin', 'gerente'] },
-    { id: 'caja', icon: 'bx-wallet', text: 'Flujo de Caja', roles: ['admin', 'gerente'] },
-    { id: 'inventario', icon: 'bx-box', text: 'Inventario', roles: ['admin', 'colaborador', 'logistica', 'gerente'] },
-    { id: 'proveedores', icon: 'bx-store-alt', text: 'Proveedores', roles: ['admin', 'logistica', 'gerente'] },
-    { id: 'facturas', icon: 'bx-receipt', text: 'Facturas', roles: ['admin', 'gerente'] },
-    { id: 'clientes', icon: 'bx-user-pin', text: 'Clientes', roles: ['admin', 'colaborador', 'gerente'] },
-    { id: 'crm', icon: 'bx-doughnut-chart', text: 'CRM / Leads', roles: ['admin', 'colaborador', 'gerente'] },
-    { id: 'analitica', icon: 'bx-bar-chart-alt-2', text: 'Analítica', roles: ['admin', 'gerente'] },
-    { id: 'configuracion', icon: 'bx-cog', text: 'Configuración', roles: ['admin'] },
-    { id: 'perfil', icon: 'bx-user', text: 'Mi Perfil', roles: ['admin', 'colaborador', 'gerente', 'logistica'], hidden: true }
+    { id: 'inicio', icon: 'bx-grid-alt', text: 'Dashboard', roles: ['superadmin', 'admin', 'colaborador', 'gerente', 'logistica'] },
+    { id: 'calendario', icon: 'bx-calendar-event', text: 'Calendario', roles: ['superadmin', 'admin', 'colaborador', 'gerente'] },
+    { id: 'ventas', icon: 'bx-cart-alt', text: 'Ventas', roles: ['superadmin', 'admin', 'colaborador', 'gerente'] },
+    { id: 'historial', icon: 'bx-history', text: 'Historial Ventas', roles: ['superadmin', 'admin', 'gerente'] },
+    { id: 'caja', icon: 'bx-wallet', text: 'Flujo de Caja', roles: ['superadmin', 'admin', 'gerente'] },
+    { id: 'inventario', icon: 'bx-box', text: 'Inventario', roles: ['superadmin', 'admin', 'colaborador', 'logistica', 'gerente'] },
+    { id: 'proveedores', icon: 'bx-store-alt', text: 'Proveedores', roles: ['superadmin', 'admin', 'logistica', 'gerente'] },
+    { id: 'facturas', icon: 'bx-receipt', text: 'Facturas', roles: ['superadmin', 'admin', 'gerente'] },
+    { id: 'clientes', icon: 'bx-user-pin', text: 'Clientes', roles: ['superadmin', 'admin', 'colaborador', 'gerente'] },
+    { id: 'crm', icon: 'bx-doughnut-chart', text: 'CRM / Leads', roles: ['superadmin', 'admin', 'colaborador', 'gerente'] },
+    { id: 'analitica', icon: 'bx-bar-chart-alt-2', text: 'Analítica', roles: ['superadmin', 'admin', 'gerente'] },
+    { id: 'configuracion', icon: 'bx-cog', text: 'Configuración', roles: ['superadmin', 'admin'] },
+    { id: 'perfil', icon: 'bx-user', text: 'Mi Perfil', roles: ['superadmin', 'admin', 'colaborador', 'gerente', 'logistica'], hidden: true }
 ];
 
 document.addEventListener('DOMContentLoaded', () => {

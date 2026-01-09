@@ -199,14 +199,13 @@
         } catch (e) { console.error(e); }
     }
 
-// Función para pintar la tabla (CON COSTOS)
-// Función que renderiza SOLO la página actual
+    // Función que renderiza SOLO la página actual
     function renderKardexPaginado() {
         const tbody = document.getElementById('tabla-kardex-body');
         tbody.innerHTML = '';
 
         if(movimientosFiltrados.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px;">Sin movimientos.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px;">Sin movimientos.</td></tr>';
             document.getElementById('kardex-page-info').innerText = "0 de 0";
             document.getElementById('kardex-pagination-controls').innerHTML = "";
             return;
@@ -237,6 +236,13 @@
 
             tr.innerHTML = `
                 <td style="font-size:12px; color:#666;">${fecha}</td>
+                
+                <td>
+                    <span style="background:#e0e7ff; color:#3730a3; padding:4px 8px; border-radius:6px; font-weight:700; font-size:11px;">
+                        ${m.nombre_sede || 'Sede'}
+                    </span>
+                </td>
+
                 <td style="font-weight:600; font-size:13px;">${m.producto}</td>
                 <td>
                     <span style="color:${color}; font-weight:bold; font-size:12px;">
