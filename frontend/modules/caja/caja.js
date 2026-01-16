@@ -77,31 +77,69 @@
         cargarMovimientos();
     }
 
-    // 1. CARGAR RESUMEN (KPIs)
+// EN CAJA.JS - Reemplaza cargarResumen
+
     async function cargarResumen() {
         try {
             const token = localStorage.getItem('token');
-            // Enviamos el parámetro ?sede=X (si está vacío, el backend admin suma todo)
             const url = `/api/caja/resumen?sede=${filtroSedeActual}`;
             
             const res = await fetch(url, { headers: { 'x-auth-token': token } });
+            
             if(res.ok) {
                 const data = await res.json();
                 
-                if(document.getElementById('kpi-ingresos')) 
-                    document.getElementById('kpi-ingresos').innerText = `S/ ${parseFloat(data.ingresos || 0).toFixed(2)}`;
+                // Pinta el Balance Grande (Neto)
+                const setKpi = (id, valor) => {
+                    const el = document.getElementById(id);
+                    if(!el) return;
+                    const val = parseFloat(valor || 0);
+                    el.innerText = `S/ ${val.toFixed(2)}`;
+                    el.style.color = val >= 0 ? '#1e293b' : '#dc2626'; 
+                };
+
+                // Pinta la Cajita Roja (Suma de Gasto + Merma)
+                const setPerdida = (id, gasto, merma) => {
+                    const el = document.getElementById(id);
+                    const badge = document.getElementById('badge-' + id);
+                    if(!el) return;
+                    
+                    const total = parseFloat(gasto || 0) + parseFloat(merma || 0);
+                    el.innerText = `S/ ${total.toFixed(2)}`;
+                    
+                    // Cambiamos el texto de "Merma" a "Egresos" si hay gastos, o lo dejamos genérico
+                    // Opcional: buscar el span hermano y cambiarle el texto a "Salidas"
+                    
+                    if (total > 0) {
+                        el.style.color = '#ef4444'; 
+                        if(badge) badge.style.opacity = "1";
+                    } else {
+                        el.style.color = '#94a3b8'; 
+                        if(badge) badge.style.opacity = "0.6"; 
+                    }
+                };
+
+                // 1. BALANCES
+                setKpi('kpi-dia', data.dia);
+                setKpi('kpi-semana', data.semana);
+                setKpi('kpi-mes', data.mes);
+                setKpi('kpi-anio', data.anio);
                 
-                if(document.getElementById('kpi-egresos')) 
-                    document.getElementById('kpi-egresos').innerText = `S/ ${parseFloat(data.egresos || 0).toFixed(2)}`;
-                
-                const saldo = parseFloat(data.saldo || 0);
+                // 2. SALIDAS (GASTOS DE CAJA + MERMAS DE INVENTARIO)
+                setPerdida('merma-dia', data.gastos.hoy, data.mermas.hoy);
+                setPerdida('merma-semana', data.gastos.semana, data.mermas.semana);
+                setPerdida('merma-mes', data.gastos.mes, data.mermas.mes);
+                setPerdida('merma-anio', data.gastos.anio, data.mermas.anio);
+
+                // 3. SALDO TOTAL
                 const elSaldo = document.getElementById('kpi-saldo');
                 if(elSaldo) {
+                    const saldo = parseFloat(data.saldo || 0);
                     elSaldo.innerText = `S/ ${saldo.toFixed(2)}`;
-                    elSaldo.style.color = saldo >= 0 ? '#16a34a' : '#dc2626';
+                    elSaldo.style.color = '#1e293b'; 
                 }
             }
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error("Error KPIs:", e); }
     }
 
     // 2. CARGAR TABLA

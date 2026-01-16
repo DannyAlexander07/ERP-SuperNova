@@ -1,101 +1,109 @@
-// Ubicacion: SuperNova/backend/controllers/analiticaController.js
+//Ubicación: SuperNova/backend/controllers/analiticaController.js
 const pool = require('../db');
 
-// 1. P&L Detallado por Sede y Categoría
+// 1. P&L Detallado (MODIFICADO: INCLUYE INGRESOS MANUALES DE CAJA)
+// 1. P&L Detallado (CORREGIDO: NETO SIN IGV)
 exports.obtenerPyL = async (req, res) => {
-    // 1. Seguridad
-    const usuarioRol = req.usuario ? req.usuario.rol : '';
-    if (!['admin', 'administrador', 'gerente'].includes(usuarioRol.toLowerCase())) {
-        return res.status(403).json({ msg: 'Acceso denegado.' });
-    }
-    
-    // 2. Filtros de Fecha (A prueba de balas)
+    const rol = req.usuario ? req.usuario.rol.toLowerCase() : '';
+    const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
+    const usuarioSedeId = req.usuario.sede_id;
+
     const startMonth = req.query.inicio || '2023-01-01'; 
-    // Usamos el truco del día siguiente para no fallar con las horas
     const endMonth = req.query.fin || '2030-12-31';
-    const sedeId = req.query.sede || null;
+    
+    let sedeId = req.query.sede || null;
+    if (!esSuperAdmin) sedeId = usuarioSedeId;
     
     try {
         const query = `
             WITH Ingresos AS (
-                -- A. PAGOS DE EVENTOS (MODO CAJA: Cuenta cuando entra el dinero)
-                -- Antes mirábamos la tabla 'eventos', ahora miramos 'pagos_evento'
+                -- A. PAGOS DE EVENTOS (Aquí asumimos que el monto guardado en pagos_evento YA es neto o se maneja aparte)
+                -- Si pagos_evento también incluye IGV, deberíamos dividir entre 1.18.
+                -- Por ahora lo dejamos igual si no tienes columna 'subtotal' en esa tabla.
                 SELECT
-                    e.sede_id,
-                    s.nombre AS nombre_sede,
-                    'Eventos' AS categoria,
-                    pe.monto AS ingreso,
-                    0 AS egreso
+                    e.sede_id, s.nombre AS nombre_sede, 'Eventos' AS categoria,
+                    pe.monto AS ingreso, 0 AS egreso
                 FROM pagos_evento pe
                 JOIN eventos e ON pe.evento_id = e.id
                 JOIN sedes s ON e.sede_id = s.id
-                WHERE pe.fecha_pago >= $1::date 
-                AND pe.fecha_pago < ($2::date + interval '1 day')
+                WHERE pe.fecha_pago >= $1::date AND pe.fecha_pago < ($2::date + interval '1 day')
                 AND ($3::int IS NULL OR e.sede_id = $3::int)
 
                 UNION ALL
 
-                -- B. VENTAS POS (Cafetería, Taquilla, etc.)
+                -- B. VENTAS POS (Tickets) - CORREGIDO PARA USAR NETO
                 SELECT
-                    v.sede_id,
-                    s.nombre AS nombre_sede,
+                    v.sede_id, s.nombre AS nombre_sede,
                     CASE 
                         WHEN UPPER(v.linea_negocio) LIKE '%CAFETERIA%' THEN 'Cafetería'
                         WHEN UPPER(v.linea_negocio) LIKE '%TAQUILLA%' THEN 'Taquilla'
                         WHEN UPPER(v.linea_negocio) LIKE '%MERCH%' THEN 'Merchandising'
                         ELSE 'Otros Ingresos'
                     END AS categoria,
-                    v.total_venta AS ingreso,
+                    -- 🔥 CAMBIO CRÍTICO: Usamos 'subtotal' en lugar de 'total_venta'
+                    -- Esto nos da la Venta Neta (Sin IGV)
+                    COALESCE(v.subtotal, v.total_venta / 1.18) AS ingreso, 
                     0 AS egreso
                 FROM ventas v
                 JOIN sedes s ON v.sede_id = s.id
-                WHERE v.fecha_venta >= $1::date 
-                AND v.fecha_venta < ($2::date + interval '1 day')
+                WHERE v.fecha_venta >= $1::date AND v.fecha_venta < ($2::date + interval '1 day')
                 AND v.estado IN ('completado', 'pagado', 'cerrado')
                 AND ($3::int IS NULL OR v.sede_id = $3::int)
+
+                UNION ALL
+
+                -- C. INGRESOS MANUALES DE CAJA
+                -- Asumimos que estos ingresos manuales son directos y no desglosan IGV automáticamente
+                SELECT 
+                    mc.sede_id, s.nombre AS nombre_sede, 'Ingresos Varios (Caja)' AS categoria,
+                    mc.monto AS ingreso, 0 AS egreso
+                FROM movimientos_caja mc
+                JOIN sedes s ON mc.sede_id = s.id
+                WHERE mc.tipo_movimiento = 'INGRESO'
+                AND mc.categoria != 'VENTA_POS'
+                AND mc.fecha_registro >= $1::date AND mc.fecha_registro < ($2::date + interval '1 day')
+                AND ($3::int IS NULL OR mc.sede_id = $3::int)
             ),
             
             Egresos AS (
-                -- C. MERMAS (Inventario)
+                -- D. MERMAS
                 SELECT
                     mi.sede_id, s.nombre AS nombre_sede, 'Mermas' AS categoria,
                     0 as ingreso, (ABS(mi.cantidad) * COALESCE(mi.costo_unitario_movimiento, 0)) as egreso
                 FROM movimientos_inventario mi
                 JOIN sedes s ON mi.sede_id = s.id
-                WHERE mi.tipo_movimiento ILIKE ANY(ARRAY['%merma%', '%baja%', '%salida%', '%ajuste%', '%perdida%'])
-                AND mi.fecha >= $1::date 
-                AND mi.fecha < ($2::date + interval '1 day')
+                WHERE mi.cantidad < 0
+                AND mi.tipo_movimiento NOT ILIKE '%venta%'
+                AND mi.tipo_movimiento NOT ILIKE '%anulacion%'
+                AND mi.fecha >= $1::date AND mi.fecha < ($2::date + interval '1 day')
                 AND ($3::int IS NULL OR mi.sede_id = $3::int)
                 
                 UNION ALL
                 
-                -- D. GASTOS OPERATIVOS
+                -- E. GASTOS OPERATIVOS
                 SELECT
                     mc.sede_id, s.nombre AS nombre_sede, 'Gastos Operativos' AS categoria,
                     0 AS ingreso, mc.monto AS egreso
                 FROM movimientos_caja mc
                 JOIN sedes s ON mc.sede_id = s.id
                 WHERE mc.tipo_movimiento = 'EGRESO'
-                AND mc.fecha_registro >= $1::date 
-                AND mc.fecha_registro < ($2::date + interval '1 day')
+                AND mc.fecha_registro >= $1::date AND mc.fecha_registro < ($2::date + interval '1 day')
                 AND ($3::int IS NULL OR mc.sede_id = $3::int)
             ),
             
             Todo AS ( SELECT * FROM Ingresos UNION ALL SELECT * FROM Egresos )
 
             SELECT
-                nombre_sede,
-                categoria,
-                COALESCE(SUM(ingreso), 0) AS ingresos,
-                COALESCE(SUM(egreso), 0) AS egresos,
-                (COALESCE(SUM(ingreso), 0) - COALESCE(SUM(egreso), 0)) AS pnl
+                nombre_sede, categoria,
+                ROUND(COALESCE(SUM(ingreso), 0)::numeric, 2) AS ingresos, -- Redondeamos a 2 decimales
+                ROUND(COALESCE(SUM(egreso), 0)::numeric, 2) AS egresos,
+                ROUND((COALESCE(SUM(ingreso), 0) - COALESCE(SUM(egreso), 0))::numeric, 2) AS pnl
             FROM Todo
             GROUP BY nombre_sede, categoria
             ORDER BY nombre_sede, ingresos DESC;
         `;
         
         const result = await pool.query(query, [startMonth, endMonth, sedeId]); 
-        
         const rows = result.rows.map(r => ({ ...r, categoria: r.categoria }));
         res.json(rows);
 
@@ -105,46 +113,22 @@ exports.obtenerPyL = async (req, res) => {
     }
 };
 
-// Función auxiliar (ponla al final del archivo o fuera del export)
-function formatearCategoria(cat) {
-    if(!cat) return 'Otros';
-    const c = cat.toUpperCase();
-    if(c.includes('TAQUILLA')) return 'Taquilla';
-    if(c.includes('CAFETERIA')) return 'Cafetería';
-    if(c.includes('MERCH')) return 'Merchandising';
-    if(c.includes('EVENTO')) return 'Eventos';
-    if(c.includes('MERMA')) return 'Mermas';
-    if(c.includes('GASTOS')) return 'Gastos';
-    return 'Otros';
-}
-
-// 2. KPIs OPERATIVOS (Conversión y Ticket Promedio)
+// 2. KPIs OPERATIVOS
 exports.obtenerKpisEventos = async (req, res) => {
-    const sedeId = req.query.sede || null;
+    const rol = req.usuario ? req.usuario.rol.toLowerCase() : '';
+    const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
+    const usuarioSedeId = req.usuario.sede_id;
+
+    let sedeId = req.query.sede || null;
+    if (!esSuperAdmin) sedeId = usuarioSedeId;
     
-    // Filtro de mes actual
     const fechaInicio = new Date();
     fechaInicio.setDate(1); 
     const startStr = fechaInicio.toISOString().slice(0, 10);
 
     try {
-        // A. TOTAL LEADS (Universo total de oportunidades)
-        const leadsQuery = `
-            SELECT COUNT(*) FROM leads 
-            WHERE fecha_creacion >= $1 
-            AND ($2::int IS NULL OR sede_interes = $2::int)
-        `;
-
-        // B. CONVERSIONES REALES (SOLO PAGADOS AL 100%)
-        // 🚨 CAMBIO AQUÍ: Quitamos 'reservado'. Solo contamos 'confirmado' o 'celebrado'.
-        const eventosQuery = `
-            SELECT COUNT(*) FROM eventos 
-            WHERE fecha_creacion >= $1 
-            AND estado IN ('confirmado', 'celebrado') -- 👈 AQUÍ ESTÁ EL FILTRO ESTRICTO
-            AND ($2::int IS NULL OR sede_id = $2::int)
-        `;
-        
-        // C. TICKET PROMEDIO
+        const leadsQuery = `SELECT COUNT(*) FROM leads WHERE fecha_creacion >= $1 AND ($2::int IS NULL OR sede_interes = $2::int)`;
+        const eventosQuery = `SELECT COUNT(*) FROM eventos WHERE fecha_creacion >= $1 AND estado IN ('confirmado', 'celebrado') AND ($2::int IS NULL OR sede_id = $2::int)`;
         const ticketQuery = `
             SELECT AVG(monto) as promedio FROM (
                 SELECT total_venta as monto FROM ventas WHERE fecha_venta >= $1 AND ($2::int IS NULL OR sede_id = $2::int)
@@ -160,10 +144,8 @@ exports.obtenerKpisEventos = async (req, res) => {
         ]);
 
         const totalLeads = parseInt(resLeads.rows[0].count) || 0;
-        const totalExitos = parseInt(resEventos.rows[0].count) || 0; // Ahora solo cuenta los cerrados
+        const totalExitos = parseInt(resEventos.rows[0].count) || 0; 
         const ticketPromedio = parseFloat(resTicket.rows[0].promedio) || 0;
-
-        // Cálculo
         const conversion = totalLeads > 0 ? ((totalExitos / totalLeads) * 100).toFixed(1) : 0;
 
         res.json({
@@ -178,13 +160,16 @@ exports.obtenerKpisEventos = async (req, res) => {
         res.status(500).json({ msg: 'Error cargando KPIs' });
     }
 };
-// 3. RESUMEN GLOBAL RÁPIDO (Para tarjetas de cabecera)
-// 3. RESUMEN GLOBAL RÁPIDO (Para tarjetas de cabecera: Ingresos, Egresos, Utilidad)
+
+// 3. RESUMEN GLOBAL RÁPIDO
 exports.obtenerResumenGlobal = async (req, res) => {
-    // 1. Recibimos los filtros del Frontend (Igual que hiciste en el P&L)
-    const sedeId = req.query.sede || null;
+    const rol = req.usuario ? req.usuario.rol.toLowerCase() : '';
+    const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
+    const usuarioSedeId = req.usuario.sede_id;
+
+    let sedeId = req.query.sede || null;
+    if (!esSuperAdmin) sedeId = usuarioSedeId;
     
-    // Si el frontend no manda fechas, usamos la fecha de hoy por defecto
     const fechaInicio = req.query.inicio || new Date().toISOString().slice(0, 10);
     const fechaFin = req.query.fin || new Date().toISOString().slice(0, 10);
 
@@ -199,7 +184,6 @@ exports.obtenerResumenGlobal = async (req, res) => {
               AND ($1::int IS NULL OR sede_id = $1::int)
         `;
 
-        // Pasamos las fechas dinámicas a la consulta ($2 y $3)
         const result = await pool.query(query, [sedeId, fechaInicio, fechaFin]);
         
         const ingresos = parseFloat(result.rows[0].ingresos);
@@ -217,39 +201,19 @@ exports.obtenerResumenGlobal = async (req, res) => {
     }
 };
 
-// 3. RESUMEN DEL DÍA (Para el Dashboard Principal)
+// 4. RESUMEN DEL DÍA
 exports.obtenerResumenDia = async (req, res) => {
-    // 1. Detectar Rol y Sede
     const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
-    const esAdmin = ['admin', 'administrador', 'gerente'].includes(rol);
+    const esAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
     const sedeId = req.usuario.sede_id; 
-    
-    // 2. Fecha de Hoy
     const hoy = new Date().toISOString().slice(0, 10);
 
     try {
-        // Construimos el filtro dinámicamente
-        // Si NO es admin, filtramos por su sede. Si ES admin, no filtramos (ve todo).
         const filtroSede = esAdmin ? "" : "AND sede_id = $2";
-        const params = esAdmin ? [hoy] : [hoy, sedeId]; // Ajustamos los parámetros según el filtro
+        const params = esAdmin ? [hoy] : [hoy, sedeId];
 
-        // A. Ventas del día (Caja - Ingresos)
-        const cajaQuery = `
-            SELECT COALESCE(SUM(monto), 0) as total 
-            FROM movimientos_caja 
-            WHERE tipo_movimiento = 'INGRESO' 
-            AND fecha_registro::date = $1
-            ${filtroSede}
-        `;
-        
-        // B. Eventos del día (Calendario)
-        const eventosQuery = `
-            SELECT COUNT(*) as cantidad 
-            FROM eventos 
-            WHERE fecha_inicio::date = $1
-            AND estado != 'cancelado'
-            ${filtroSede}
-        `;
+        const cajaQuery = `SELECT COALESCE(SUM(monto), 0) as total FROM movimientos_caja WHERE tipo_movimiento = 'INGRESO' AND fecha_registro::date = $1 ${filtroSede}`;
+        const eventosQuery = `SELECT COUNT(*) as cantidad FROM eventos WHERE fecha_inicio::date = $1 AND estado != 'cancelado' ${filtroSede}`;
 
         const [resCaja, resEventos] = await Promise.all([
             pool.query(cajaQuery, params),
@@ -264,5 +228,82 @@ exports.obtenerResumenDia = async (req, res) => {
     } catch (err) {
         console.error("Error Resumen Día:", err.message);
         res.status(500).json({ msg: 'Error al cargar resumen.' });
+    }
+};
+
+
+// 5. NUEVO: DATOS PARA GRÁFICOS AVANZADOS
+exports.obtenerGraficosAvanzados = async (req, res) => {
+    const rol = req.usuario ? req.usuario.rol.toLowerCase() : '';
+    const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
+    const usuarioSedeId = req.usuario.sede_id;
+
+    let sedeId = req.query.sede || null;
+    if (!esSuperAdmin) sedeId = usuarioSedeId;
+
+    const startMonth = req.query.inicio || '2023-01-01'; 
+    const endMonth = req.query.fin || '2030-12-31';
+
+    try {
+        // Filtros comunes
+        const whereClause = `
+            WHERE v.fecha_venta >= $1::date 
+            AND v.fecha_venta < ($2::date + interval '1 day')
+            AND v.estado IN ('completado', 'pagado', 'cerrado')
+            AND ($3::int IS NULL OR v.sede_id = $3::int)
+        `;
+        const params = [startMonth, endMonth, sedeId];
+
+        // A. EVOLUCIÓN DIARIA (Venta Neta)
+        const queryEvolucion = `
+            SELECT TO_CHAR(v.fecha_venta, 'YYYY-MM-DD') as fecha, 
+                   SUM(COALESCE(v.subtotal, v.total_venta / 1.18)) as total
+            FROM ventas v
+            ${whereClause}
+            GROUP BY 1 ORDER BY 1 ASC
+        `;
+
+        // B. TOP 5 PRODUCTOS (Por Cantidad)
+        const queryTop = `
+            SELECT dv.nombre_producto_historico as producto, SUM(dv.cantidad) as cantidad
+            FROM detalle_ventas dv
+            JOIN ventas v ON dv.venta_id = v.id
+            ${whereClause}
+            GROUP BY 1 ORDER BY 2 DESC LIMIT 5
+        `;
+
+        // C. MÉTODOS DE PAGO
+        const queryPagos = `
+            SELECT v.metodo_pago, COUNT(*) as transacciones, SUM(v.total_venta) as total
+            FROM ventas v
+            ${whereClause}
+            GROUP BY 1 ORDER BY 3 DESC
+        `;
+
+        // D. HORAS PUNTA
+        const queryHoras = `
+            SELECT EXTRACT(HOUR FROM v.fecha_venta) as hora, COUNT(*) as cantidad
+            FROM ventas v
+            ${whereClause}
+            GROUP BY 1 ORDER BY 1 ASC
+        `;
+
+        const [resEvo, resTop, resPagos, resHoras] = await Promise.all([
+            pool.query(queryEvolucion, params),
+            pool.query(queryTop, params),
+            pool.query(queryPagos, params),
+            pool.query(queryHoras, params)
+        ]);
+
+        res.json({
+            evolucion: resEvo.rows,
+            top: resTop.rows,
+            pagos: resPagos.rows,
+            horas: resHoras.rows
+        });
+
+    } catch (err) {
+        console.error("Error Gráficos Avanzados:", err.message);
+        res.status(500).json({ msg: 'Error al cargar gráficos.' });
     }
 };

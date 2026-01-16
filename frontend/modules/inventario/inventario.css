@@ -859,3 +859,98 @@
     cursor: not-allowed;
 }
 
+/* --- ESTILOS PARA LA SECCIÓN DE COMBOS --- */
+
+/* 1. Contenedor de la Tabla */
+.combo-list-container {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden; /* Para las esquinas redondeadas */
+    box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+}
+
+.combo-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.combo-table thead {
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 11px;
+    text-transform: uppercase;
+    font-weight: 700;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.combo-table th, 
+.combo-table td {
+    padding: 10px 12px;
+}
+
+.combo-table tbody tr {
+    border-bottom: 1px solid #f1f5f9;
+    transition: background 0.2s;
+}
+
+.combo-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.combo-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+/* 2. MENÚ DESPLEGABLE PERSONALIZADO (Reemplazo del Datalist feo) */
+.custom-dropdown-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.combo-results-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    max-height: 200px;
+    overflow-y: auto;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    z-index: 50; /* Para que flote encima de todo */
+    display: none; /* Oculto por defecto */
+    margin-top: 2px;
+}
+
+.combo-results-list.active {
+    display: block;
+}
+
+.combo-option {
+    padding: 10px 15px;
+    font-size: 13px;
+    color: #334155;
+    cursor: pointer;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    justify-content: space-between;
+}
+
+.combo-option:hover {
+    background-color: #eff6ff; /* Azulito suave */
+    color: #2563eb;
+}
+
+.combo-option:last-child {
+    border-bottom: none;
+}
+
+.combo-option span.stock-badge {
+    font-size: 10px;
+    background: #e2e8f0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #64748b;
+}

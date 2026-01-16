@@ -6,28 +6,16 @@ exports.obtenerMovimientos = async (req, res) => {
     try {
         if (!req.usuario) return res.status(401).json({ msg: "No autorizado" });
 
-        // A. DETECTAR ROL Y SEDE
         const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
-        
-        // 🔥 CORRECCIÓN: Ahora incluimos superadmin y gerente
-        const esAdmin = rol === 'superadmin' || rol === 'admin' || rol === 'administrador' || rol === 'gerente';
+        const esAdmin = ['superadmin', 'admin', 'administrador', 'gerente'].includes(rol);
         const usuarioSedeId = req.usuario.sede_id;
-
-        // B. CAPTURAR FILTRO DE SEDE
         const filtroSedeId = req.query.sede; 
 
-        // C. CONSTRUCCIÓN DE LA CONSULTA
         let query = `
             SELECT 
-                mc.id, 
-                mc.fecha_registro, 
-                mc.tipo_movimiento, 
-                mc.categoria AS origen, 
-                mc.descripcion, 
-                mc.monto, 
-                mc.metodo_pago, 
-                u.nombres AS usuario,
-                s.nombre AS nombre_sede
+                mc.id, mc.fecha_registro, mc.tipo_movimiento, mc.categoria AS origen, 
+                mc.descripcion, mc.monto, mc.metodo_pago, 
+                u.nombres AS usuario, s.nombre AS nombre_sede
             FROM movimientos_caja mc
             JOIN usuarios u ON mc.usuario_id = u.id
             JOIN sedes s ON mc.sede_id = s.id
@@ -37,17 +25,13 @@ exports.obtenerMovimientos = async (req, res) => {
         const params = [];
         let paramIndex = 1;
 
-        // D. LÓGICA DE SEGURIDAD (EL CANDADO)
         if (esAdmin) {
-            // Si es Admin (o Superadmin) Y seleccionó una sede específica
             if (filtroSedeId) {
                 query += ` AND mc.sede_id = $${paramIndex}`;
                 params.push(filtroSedeId);
                 paramIndex++;
             }
-            // Si no selecciona nada, ve TODO (no se agrega filtro)
         } else {
-            // Si es mortal, FORZAMOS su sede
             query += ` AND mc.sede_id = $${paramIndex}`;
             params.push(usuarioSedeId);
             paramIndex++;
@@ -95,66 +79,88 @@ exports.registrarMovimiento = async (req, res) => {
     }
 };
 
-// 3. OBTENER RESUMEN (KPIs)
+// 3. OBTENER RESUMEN (KPIs COMPLETOS: CAJA Y MERMA POR PERIODOS)
+// 3. OBTENER RESUMEN (KPIs: NETO + GASTOS + MERMAS)
 exports.obtenerResumenCaja = async (req, res) => {
     try {
         if (!req.usuario) return res.status(401).json({msg: "Sin sesión"});
         
         const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
-        
-        // 🔥 CORRECCIÓN: También aquí actualizamos el permiso
-        const esAdmin = rol === 'superadmin' || rol === 'admin' || rol === 'administrador' || rol === 'gerente';
+        const esAdmin = ['superadmin', 'admin', 'administrador', 'gerente'].includes(rol);
         const usuarioSedeId = req.usuario.sede_id;
-        
         const filtroSedeId = req.query.sede;
 
-        const params = [];
-        let paramIndex = 1;
-        let filtroSQL = "";
+        let sedeConsulta = null; 
+        if (esAdmin && filtroSedeId) sedeConsulta = filtroSedeId; 
+        else if (!esAdmin) sedeConsulta = usuarioSedeId; 
 
-        // --- LÓGICA DE SEGURIDAD ---
-        if (esAdmin) {
-            if (filtroSedeId && filtroSedeId !== "") {
-                filtroSQL = `AND sede_id = $${paramIndex}`;
-                params.push(filtroSedeId);
-                paramIndex++;
-            }
-        } else {
-            filtroSQL = `AND sede_id = $${paramIndex}`;
-            params.push(usuarioSedeId);
-            paramIndex++;
-        }
-
-        // A. Ingresos y Egresos de HOY
-        const queryHoy = `
+        // A. CAJA: Calculamos NETO (Ingreso-Egreso) y GASTOS (Solo Egresos)
+        const queryCaja = `
             SELECT 
-                COALESCE(SUM(CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE 0 END), 0) AS ingresos_hoy,
-                COALESCE(SUM(CASE WHEN tipo_movimiento = 'EGRESO' THEN monto ELSE 0 END), 0) AS egresos_hoy
-            FROM movimientos_caja
-            WHERE fecha_registro::date = CURRENT_DATE
-            ${filtroSQL}
-        `;
-        const resHoy = await pool.query(queryHoy, params);
+                -- NETO (Lo que queda en el bolsillo)
+                COALESCE(SUM(CASE WHEN fecha_registro::date = CURRENT_DATE THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END), 0) AS neto_hoy,
+                COALESCE(SUM(CASE WHEN EXTRACT(WEEK FROM fecha_registro) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END), 0) AS neto_semana,
+                COALESCE(SUM(CASE WHEN EXTRACT(MONTH FROM fecha_registro) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END), 0) AS neto_mes,
+                COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END), 0) AS neto_anio,
+                
+                -- GASTOS (Dinero que salió: Almuerzos, Pagos, etc.)
+                COALESCE(SUM(CASE WHEN fecha_registro::date = CURRENT_DATE AND tipo_movimiento = 'EGRESO' THEN monto ELSE 0 END), 0) AS gastos_hoy,
+                COALESCE(SUM(CASE WHEN EXTRACT(WEEK FROM fecha_registro) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND tipo_movimiento = 'EGRESO' THEN monto ELSE 0 END), 0) AS gastos_semana,
+                COALESCE(SUM(CASE WHEN EXTRACT(MONTH FROM fecha_registro) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND tipo_movimiento = 'EGRESO' THEN monto ELSE 0 END), 0) AS gastos_mes,
+                COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND tipo_movimiento = 'EGRESO' THEN monto ELSE 0 END), 0) AS gastos_anio,
 
-        // B. SALDO TOTAL (Histórico)
-        const queryHistorico = `
-            SELECT 
-                COALESCE(SUM(CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE 0 END), 0) -
-                COALESCE(SUM(CASE WHEN tipo_movimiento = 'EGRESO' THEN monto ELSE 0 END), 0) AS saldo_total
+                -- SALDO TOTAL ACUMULADO
+                COALESCE(SUM(CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END), 0) AS saldo_total
             FROM movimientos_caja
-            WHERE 1=1 
-            ${filtroSQL}
+            WHERE ($1::int IS NULL OR sede_id = $1::int)
         `;
-        const resHist = await pool.query(queryHistorico, params);
+
+        // B. MERMA DE INVENTARIO (Productos perdidos)
+        const queryMerma = `
+            SELECT 
+                COALESCE(SUM(CASE WHEN fecha::date = CURRENT_DATE THEN (ABS(cantidad) * costo_unitario_movimiento) ELSE 0 END), 0) AS merma_hoy,
+                COALESCE(SUM(CASE WHEN EXTRACT(WEEK FROM fecha) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha) = EXTRACT(YEAR FROM CURRENT_DATE) THEN (ABS(cantidad) * costo_unitario_movimiento) ELSE 0 END), 0) AS merma_semana,
+                COALESCE(SUM(CASE WHEN EXTRACT(MONTH FROM fecha) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha) = EXTRACT(YEAR FROM CURRENT_DATE) THEN (ABS(cantidad) * costo_unitario_movimiento) ELSE 0 END), 0) AS merma_mes,
+                COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM fecha) = EXTRACT(YEAR FROM CURRENT_DATE) THEN (ABS(cantidad) * costo_unitario_movimiento) ELSE 0 END), 0) AS merma_anio
+            FROM movimientos_inventario
+            WHERE cantidad < 0 
+            AND tipo_movimiento NOT ILIKE '%venta%' 
+            AND tipo_movimiento NOT ILIKE '%anulacion%'
+            AND ($1::int IS NULL OR sede_id = $1::int)
+        `;
+
+        const [resCaja, resMerma] = await Promise.all([
+            pool.query(queryCaja, [sedeConsulta]),
+            pool.query(queryMerma, [sedeConsulta])
+        ]);
+
+        const c = resCaja.rows[0];
+        const m = resMerma.rows[0];
 
         res.json({ 
-            ingresos: parseFloat(resHoy.rows[0].ingresos_hoy), 
-            egresos: parseFloat(resHoy.rows[0].egresos_hoy), 
-            saldo: parseFloat(resHist.rows[0].saldo_total) 
+            dia: parseFloat(c.neto_hoy),
+            semana: parseFloat(c.neto_semana),
+            mes: parseFloat(c.neto_mes),
+            anio: parseFloat(c.neto_anio),
+            saldo: parseFloat(c.saldo_total),
+            
+            // Enviamos GASTOS y MERMAS por separado para sumarlos en el frontend
+            gastos: {
+                hoy: parseFloat(c.gastos_hoy),
+                semana: parseFloat(c.gastos_semana),
+                mes: parseFloat(c.gastos_mes),
+                anio: parseFloat(c.gastos_anio)
+            },
+            mermas: {
+                hoy: parseFloat(m.merma_hoy),
+                semana: parseFloat(m.merma_semana),
+                mes: parseFloat(m.merma_mes),
+                anio: parseFloat(m.merma_anio)
+            }
         });
 
     } catch (err) {
-        console.error("Error resumen caja:", err.message);
-        res.status(500).json({ msg: 'Error al calcular saldo.' });
+        console.error("❌ Error resumen caja:", err.message);
+        res.status(500).json({ msg: 'Error interno al calcular KPIs.' });
     }
 };

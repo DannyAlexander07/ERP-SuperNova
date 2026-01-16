@@ -1,14 +1,10 @@
 // Ubicacion: SuperNova/backend/controllers/inventarioController.js
 const pool = require('../db');
 
-// 1. OBTENER PRODUCTOS (CON STOCK DE MI SEDE ACTUAL)
 // 1. OBTENER PRODUCTOS (FILTRADO POR SEDE)
 exports.obtenerProductos = async (req, res) => {
     try {
         const sedeId = req.usuario.sede_id; 
-        
-        // Verificamos si es Admin para darle opción de ver todo (opcional)
-        // Por ahora, aplicamos la regla estricta: "Solo lo que hay en mi sede"
         
         const query = `
             SELECT 
@@ -26,12 +22,12 @@ exports.obtenerProductos = async (req, res) => {
             FROM productos p
             INNER JOIN inventario_sedes i 
                 ON p.id = i.producto_id AND i.sede_id = $1
+            WHERE p.estado = 'ACTIVO'  -- <--- ESTA ES LA LÍNEA MÁGICA
             ORDER BY p.nombre ASC
         `;
 
         const result = await pool.query(query, [sedeId]);
         
-        // Obtenemos el nombre de la sede para el título
         const sedeInfo = await pool.query('SELECT nombre FROM sedes WHERE id = $1', [sedeId]);
         const nombreSede = sedeInfo.rows[0]?.nombre || 'Sede Desconocida';
 
@@ -43,9 +39,9 @@ exports.obtenerProductos = async (req, res) => {
     }
 };
 
-// 2. CREAR PRODUCTO (GLOBAL + STOCK INICIAL)
+// 2. CREAR PRODUCTO (CON DEDUCCIÓN AUTOMÁTICA DE INGREDIENTES)
 exports.crearProducto = async (req, res) => {
-    const { nombre, codigo, categoria, tipo, precio, costo, stock, stock_minimo, unidad, imagen, comboDetalles } = req.body;
+    let { nombre, codigo, categoria, tipo, precio, costo, stock, stock_minimo, unidad, imagen, comboDetalles } = req.body;
     const client = await pool.connect(); 
 
     try {
@@ -53,55 +49,88 @@ exports.crearProducto = async (req, res) => {
         const sedeId = req.usuario.sede_id;
         const usuarioId = req.usuario.id;
 
-        // 🧠 LÓGICA INTELIGENTE: Asignar Línea de Negocio
-        let lineaNegocio = 'CAFETERIA'; // Default
-        const catUpper = categoria ? categoria.toUpperCase() : '';
+        // Limpieza de tipo
+        let tipoLimpio = (tipo || 'fisico').toLowerCase().trim();
+        if (tipoLimpio === 'físico') tipoLimpio = 'fisico';
+        if (tipoLimpio.includes('producto')) tipoLimpio = 'fisico';
 
+        // Línea de Negocio
+        let lineaNegocio = 'CAFETERIA'; 
+        const catUpper = categoria ? categoria.toUpperCase() : '';
         if (catUpper === 'TAQUILLA') lineaNegocio = 'TAQUILLA';
         else if (catUpper === 'MERCH') lineaNegocio = 'MERCH';
-        else if (catUpper === 'ARCADE' || catUpper === 'JUEGOS') lineaNegocio = 'JUEGOS';
+        else if (catUpper === 'ARCADE') lineaNegocio = 'JUEGOS';
+        else if (catUpper === 'EVENTOS') lineaNegocio = 'EVENTOS';
         
-        // 👇 AGREGAR ESTA LÍNEA NUEVA:
-        else if (catUpper === 'EVENTOS' || catUpper.includes('PAQUETE')) lineaNegocio = 'EVENTOS';
         // A. Insertar Ficha Maestra
-        // 🚨 CAMBIO: Agregamos linea_negocio al INSERT
         const resProd = await client.query(
             `INSERT INTO productos (
                 nombre, codigo_interno, categoria, tipo_item, 
                 precio_venta, costo_compra, unidad_medida, imagen_url, 
                 linea_negocio
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-            [nombre, codigo, categoria, tipo, precio, costo, unidad, imagen, lineaNegocio]
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+            [nombre, codigo, categoria, tipoLimpio, precio, costo, unidad, imagen, lineaNegocio]
         );
         const nuevoId = resProd.rows[0].id;
 
-        // B. Insertar Stock Inicial (Solo si es físico)
-        if (tipo !== 'servicio') {
-            const stockInicial = parseInt(stock) || 0;
-            const minStock = parseInt(stock_minimo) || 5;
-            
+        const stockInicial = parseInt(stock) || 0;
+        const minStock = parseInt(stock_minimo) || 5;
+
+        // B. Insertar Stock Inicial (Ahora permite 'combo' con stock)
+        if (tipoLimpio !== 'servicio') {
             await client.query(
                 `INSERT INTO inventario_sedes (sede_id, producto_id, cantidad, stock_minimo_local) VALUES ($1, $2, $3, $4)`,
                 [sedeId, nuevoId, stockInicial, minStock]
             );
 
-            // Registrar Kardex (Si hay stock inicial)
+            // Registro en Kardex del nuevo combo (ENTRADA)
             if (stockInicial > 0) {
                 await client.query(
                     `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
-                     VALUES ($1, $2, $3, 'entrada', $4, $5, 'Carga Inicial', $6)`,
+                     VALUES ($1, $2, $3, 'entrada', $4, $5, 'Armado de Combo Inicial', $6)`,
                     [sedeId, nuevoId, usuarioId, stockInicial, stockInicial, costo]
                 );
             }
         }
 
-        // C. Combos (Opcional)
-        if (tipo === 'combo' && comboDetalles && comboDetalles.length > 0) {
+        // C. LÓGICA DE COMBOS (Guardar receta Y RESTAR INGREDIENTES)
+        if (tipoLimpio === 'combo' && comboDetalles && comboDetalles.length > 0) {
+            
+            // 1. Guardar la receta
             for (const item of comboDetalles) {
                 await client.query(
                     `INSERT INTO productos_combo (producto_padre_id, producto_hijo_id, cantidad) VALUES ($1, $2, $3)`,
                     [nuevoId, item.id_producto, item.cantidad]
                 );
+
+                // 2. 🔥 SI CREAMOS STOCK DEL COMBO, RESTAMOS LOS INGREDIENTES 🔥
+                if (stockInicial > 0) {
+                    const cantidadARestar = item.cantidad * stockInicial; // ej: 2 panes * 10 combos = 20 panes
+
+                    // Restar stock físico del ingrediente
+                    await client.query(
+                        `UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3`,
+                        [cantidadARestar, item.id_producto, sedeId]
+                    );
+
+                    // Obtener stock restante para el Kardex
+                    const resStockIng = await client.query('SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2', [item.id_producto, sedeId]);
+                    const stockFinalIngrediente = resStockIng.rows[0].cantidad;
+
+                    // Registrar SALIDA en el Kardex del ingrediente
+                    await client.query(
+                        `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
+                         VALUES ($1, $2, $3, 'salida_produccion', $4, $5, $6, 0)`, 
+                        [
+                            sedeId, 
+                            item.id_producto, 
+                            usuarioId, 
+                            -cantidadARestar, // Negativo porque sale
+                            stockFinalIngrediente, 
+                            `Usado en Combo: ${nombre} (x${stockInicial})`
+                        ]
+                    );
+                }
             }
         }
 
@@ -117,6 +146,28 @@ exports.crearProducto = async (req, res) => {
         res.status(500).send('Error al guardar producto');
     } finally {
         client.release();
+    }
+};
+
+// 6. OBTENER RECETA DE COMBO (Para edición)
+exports.obtenerRecetaCombo = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const query = `
+            SELECT 
+                pc.producto_hijo_id as id_producto,
+                p.nombre,
+                pc.cantidad,
+                p.costo_compra as costo
+            FROM productos_combo pc
+            JOIN productos p ON pc.producto_hijo_id = p.id
+            WHERE pc.producto_padre_id = $1
+        `;
+        const result = await pool.query(query, [id]);
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ msg: 'Error al cargar receta' });
     }
 };
 
@@ -187,40 +238,47 @@ exports.eliminarProducto = async (req, res) => {
     const client = await pool.connect();
 
     try {
-        await client.query('BEGIN');
-
-        // 1. Borrar historial del Kardex
-        await client.query('DELETE FROM movimientos_inventario WHERE producto_id = $1', [id]);
-
-        // 2. Borrar stock en las sedes
-        await client.query('DELETE FROM inventario_sedes WHERE producto_id = $1', [id]);
-
-        // 3. Borrar de combos (si es parte de uno)
-        await client.query('DELETE FROM productos_combo WHERE producto_hijo_id = $1 OR producto_padre_id = $1', [id]);
-
-        // 4. FINALMENTE: Borrar el producto maestro
-        await client.query('DELETE FROM productos WHERE id = $1', [id]);
-
-        await client.query('COMMIT');
-        res.json({ msg: 'Producto y todo su historial eliminado' });
+        // 1. Verificar si el producto tiene historial de ventas
+        const ventasCheck = await client.query('SELECT 1 FROM detalle_ventas WHERE producto_id = $1 LIMIT 1', [id]);
+        
+        if (ventasCheck.rows.length > 0) {
+            // --- TIENE VENTAS: NO BORRAMOS, SOLO ARCHIVAMOS (Soft Delete) ---
+            await client.query("UPDATE productos SET estado = 'INACTIVO' WHERE id = $1", [id]);
+            
+            // Opcional: Poner stock en 0 para que no salga en búsquedas de venta
+            await client.query("UPDATE inventario_sedes SET cantidad = 0 WHERE producto_id = $1", [id]);
+            
+            return res.json({ msg: 'Producto archivado correctamente (Tenía historial de ventas).' });
+        } else {
+            // --- NO TIENE VENTAS: BORRADO FÍSICO LIMPIO ---
+            await client.query('BEGIN');
+            // Borrar de Kardex primero
+            await client.query('DELETE FROM movimientos_inventario WHERE producto_id = $1', [id]);
+            // Borrar stock físico
+            await client.query('DELETE FROM inventario_sedes WHERE producto_id = $1', [id]);
+            // Borrar relaciones de combo (si era padre o hijo)
+            await client.query('DELETE FROM productos_combo WHERE producto_hijo_id = $1 OR producto_padre_id = $1', [id]);
+            // Finalmente borrar el producto
+            await client.query('DELETE FROM productos WHERE id = $1', [id]);
+            await client.query('COMMIT');
+            
+            return res.json({ msg: 'Producto eliminado permanentemente del sistema.' });
+        }
 
     } catch (err) {
         await client.query('ROLLBACK');
         console.error("Error al eliminar:", err.message);
-        // Si falla por ventas realizadas (que es otra tabla), avisamos
-        if (err.code === '23503') {
-            return res.status(400).json({ msg: 'No se puede eliminar: Este producto ya tiene Ventas registradas.' });
-        }
-        res.status(500).send('Error al eliminar');
+        res.status(500).send('Error al procesar la eliminación');
     } finally {
         client.release();
     }
 };
-
 // 4. ACTUALIZAR PRODUCTO (CON AJUSTE DE STOCK INTELIGENTE)
+// 4. ACTUALIZAR PRODUCTO (CORREGIDO: AHORA GUARDA EL TIPO)
 exports.actualizarProducto = async (req, res) => {
     const { id } = req.params;
-    const { nombre, precio, categoria, costo, stock, stock_minimo } = req.body;
+    // 🔥 CORRECCIÓN 1: Recibimos 'tipo' del body (antes no lo leías)
+    let { nombre, precio, categoria, costo, stock, stock_minimo, tipo } = req.body;
     const sedeId = req.usuario.sede_id;
     const usuarioId = req.usuario.id;
 
@@ -229,22 +287,29 @@ exports.actualizarProducto = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // A. Actualizar Datos Globales (Nombre, Precio, etc.)
+        // --- 🧹 LIMPIEZA DE TIPO ---
+        let tipoLimpio = (tipo || 'fisico').toLowerCase().trim();
+        if (tipoLimpio === 'físico') tipoLimpio = 'fisico';
+
+        // A. Actualizar Datos Globales
+        // 🔥 CORRECCIÓN 2: Agregamos "tipo_item=$5" al SQL
         await client.query(
-            `UPDATE productos SET nombre=$1, precio_venta=$2, categoria=$3, costo_compra=$4 WHERE id=$5`,
-            [nombre, precio, categoria, costo, id]
+            `UPDATE productos 
+             SET nombre=$1, precio_venta=$2, categoria=$3, costo_compra=$4, tipo_item=$5 
+             WHERE id=$6`,
+            [nombre, precio, categoria, costo, tipoLimpio, id]
         );
 
         // B. LÓGICA DE STOCK (MAGIA MULTI-SEDE)
-        // 1. Buscamos cuánto stock tiene ESTA sede actualmente
+        // 1. Buscamos stock actual
         const stockActualRes = await client.query(
             `SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2`,
             [id, sedeId]
         );
 
-        // Si no existía registro en esta sede (ej: es la primera vez que La Molina toca este producto), lo creamos
         let stockViejo = 0;
         if (stockActualRes.rows.length === 0) {
+            // Si lo cambiamos a físico y no tenía registro, se lo creamos en 0
             await client.query(
                 `INSERT INTO inventario_sedes (sede_id, producto_id, cantidad, stock_minimo_local) VALUES ($1, $2, 0, 5)`,
                 [sedeId, id]
@@ -253,13 +318,13 @@ exports.actualizarProducto = async (req, res) => {
             stockViejo = stockActualRes.rows[0].cantidad;
         }
 
-        // 2. Calculamos la diferencia
+        // 2. Calcular diferencia
         const stockNuevo = parseInt(stock);
         const diferencia = stockNuevo - stockViejo;
 
-        // 3. Si hubo cambio en el número, actualizamos y registramos en Kardex
+        // 3. Actualizar Stock y Kardex solo si cambió el número
+        // (Y si el producto sigue siendo físico, o si queremos mantener el historial aunque sea servicio)
         if (diferencia !== 0) {
-            // Actualizar tabla de inventario
             await client.query(
                 `UPDATE inventario_sedes 
                  SET cantidad = $1, stock_minimo_local = $2 
@@ -267,18 +332,16 @@ exports.actualizarProducto = async (req, res) => {
                 [stockNuevo, stock_minimo, id, sedeId]
             );
 
-            // Determinar tipo de movimiento
             const tipoMov = diferencia > 0 ? 'ajuste_positivo' : 'ajuste_negativo';
             const motivo = 'Ajuste Manual (Edición)';
 
-            // Insertar en Kardex
             await client.query(
                 `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
                 [sedeId, id, usuarioId, tipoMov, diferencia, stockNuevo, motivo, costo]
             );
         } else {
-            // Si solo cambió el mínimo pero no la cantidad
+            // Actualizar solo el mínimo
             await client.query(
                 `UPDATE inventario_sedes SET stock_minimo_local = $1 WHERE producto_id = $2 AND sede_id = $3`,
                 [stock_minimo, id, sedeId]
@@ -286,7 +349,7 @@ exports.actualizarProducto = async (req, res) => {
         }
 
         await client.query('COMMIT');
-        res.json({ msg: 'Producto y stock actualizados correctamente' });
+        res.json({ msg: 'Producto actualizado correctamente' });
 
     } catch (err) {
         await client.query('ROLLBACK');

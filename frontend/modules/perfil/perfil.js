@@ -3,11 +3,29 @@
 (function() {
     console.log("Modulo Perfil Conectado 👤");
 
-    const userStr = localStorage.getItem('user');
-    if (!userStr) return; 
-    const usuarioLogueado = JSON.parse(userStr);
+    // 1. CARGAR DATOS DEL PERFIL (Usando la ruta correcta)
+    async function cargarDatosPerfil() {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) return;
 
-    // 1. CARGAR SEDES
+            // 🔥 CAMBIO CLAVE: Usamos la ruta específica de perfil
+            const res = await fetch('/api/usuarios/perfil', { 
+                method: 'GET',
+                headers: { 'x-auth-token': token } 
+            });
+            
+            if (res.ok) {
+                const miPerfil = await res.json();
+                llenarFormulario(miPerfil);
+            } else {
+                console.error("Error al cargar perfil:", res.status);
+                // Si falla por token vencido, podrías redirigir al login aquí
+            }
+        } catch (error) { console.error(error); }
+    }
+
+    // 2. CARGAR SEDES (Para el select)
     async function cargarSedes() {
         const select = document.getElementById('me-sede');
         if(!select) return;
@@ -29,145 +47,107 @@
         } catch (e) { console.error(e); }
     }
 
-    // 2. CARGAR DATOS
-    async function cargarDatosPerfil() {
-        try {
-            const token = localStorage.getItem('token');
-            const res = await fetch('/api/usuarios', { headers: { 'x-auth-token': token } });
-            
-            if (res.ok) {
-                const usuarios = await res.json();
-                const miPerfil = usuarios.find(u => u.id === usuarioLogueado.id);
-                if (miPerfil) {
-                    llenarFormulario(miPerfil);
-                }
-            }
-        } catch (error) { console.error(error); }
-    }
-
     // 3. LLENAR HTML
     function llenarFormulario(user) {
+        // Tarjeta de Presentación
         setText('display-name', `${user.nombres} ${user.apellidos || ''}`);
         setText('display-cargo', user.cargo || 'Sin Cargo');
         setText('display-sede', user.nombre_sede || 'Sin Sede');
-        setText('display-celular', user.celular || '-');
-        setText('display-email', user.correo || '-');
+        setText('display-celular', user.telefono || '-'); // Nota: Backend devuelve 'telefono' (alias de celular)
+        setText('display-email', user.email || '-');
         setText('display-direccion', user.direccion || '-');
         
         const rolEl = document.getElementById('display-rol');
         if(rolEl) rolEl.innerText = (user.rol || 'Usuario').toUpperCase();
 
         const previewImg = document.getElementById('profile-preview-img');
-        // Si hay foto guardada, la ponemos. Si no, la default.
         if(previewImg) previewImg.src = user.foto_url || "https://cdn-icons-png.flaticon.com/512/3135/3135715.png";
 
+        // Formulario de Edición
         setVal('me-nombres', user.nombres);
         setVal('me-apellidos', user.apellidos);
         setVal('me-cargo', user.cargo);
-        setVal('me-celular', user.celular);
+        setVal('me-celular', user.telefono); // Usamos 'telefono' que viene del backend
         setVal('me-direccion', user.direccion);
-        setVal('me-email', user.correo);
+        // El email suele ser de solo lectura para evitar problemas de login
+        const emailInput = document.getElementById('me-email');
+        if(emailInput) {
+            emailInput.value = user.email;
+            emailInput.disabled = true; 
+        }
         
+        // Seleccionar Sede
         const selectSede = document.getElementById('me-sede');
-        if(selectSede && user.nombre_sede) {
-            for (let i = 0; i < selectSede.options.length; i++) {
-                if (selectSede.options[i].text === user.nombre_sede) {
-                    selectSede.selectedIndex = i;
-                    break;
-                }
-            }
+        if(selectSede && user.sede_id) {
+            selectSede.value = user.sede_id;
+            selectSede.disabled = true; // Generalmente el usuario no se cambia de sede solo
         }
     }
 
     function setText(id, txt) { const el = document.getElementById(id); if(el) el.innerText = txt; }
     function setVal(id, val) { const el = document.getElementById(id); if(el) el.value = val || ''; }
 
-    // 4. PREVISUALIZAR FOTO (CORREGIDO Y BLINDADO)
+    // 4. PREVISUALIZAR FOTO
     function activarSubidaFoto() {
         const uploadInput = document.getElementById('upload-avatar');
         const previewImg = document.getElementById('profile-preview-img');
 
         if(uploadInput && previewImg) {
-            console.log("📸 Sistema de foto activado");
-            
-            // Removemos eventos anteriores para evitar duplicados
-            uploadInput.onchange = null;
-
             uploadInput.onchange = function(e) {
-                console.log("📂 Archivo seleccionado...");
                 const file = e.target.files[0];
-                
                 if (file) {
-                    // Validar que sea imagen
-                    if (!file.type.startsWith('image/')) {
-                        alert("Por favor selecciona un archivo de imagen (JPG, PNG).");
-                        return;
-                    }
-
+                    if (!file.type.startsWith('image/')) return alert("Solo imágenes JPG/PNG.");
                     const reader = new FileReader();
                     reader.onload = function(evt) {
-                        console.log("✅ Vista previa generada");
-                        previewImg.src = evt.target.result; // Cambiar la foto en pantalla
+                        previewImg.src = evt.target.result;
                     };
                     reader.readAsDataURL(file);
                 }
             };
-        } else {
-            console.error("❌ No se encontró el input de foto (upload-avatar)");
         }
     }
 
-// 6. GUARDAR CAMBIOS (CON SOPORTE DE FOTOS)
+    // 5. GUARDAR CAMBIOS (A LA RUTA DE PERFIL)
     const formProfile = document.getElementById('form-update-profile');
-    
     if(formProfile) {
         formProfile.addEventListener('submit', async (e) => {
             e.preventDefault();
             const btn = formProfile.querySelector('.btn-save');
-            const txtOriginal = btn.innerHTML; // Guardamos el icono también
-            btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Subiendo..."; 
+            const txtOriginal = btn.innerHTML;
+            btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Guardando..."; 
             btn.disabled = true;
 
-            // USAMOS FORMDATA (Necesario para enviar archivos)
-            const formData = new FormData();
-            formData.append('nombres', document.getElementById('me-nombres').value);
-            formData.append('apellidos', document.getElementById('me-apellidos').value);
-            formData.append('celular', document.getElementById('me-celular').value);
-            formData.append('direccion', document.getElementById('me-direccion').value);
-            formData.append('cargo', document.getElementById('me-cargo').value);
-            formData.append('sede_id', document.getElementById('me-sede').value || usuarioLogueado.sede_id);
-            formData.append('password', document.getElementById('me-password').value);
-
-            // ¿Hay foto seleccionada?
-            const fileInput = document.getElementById('upload-avatar');
-            if (fileInput.files[0]) {
-                formData.append('foto', fileInput.files[0]); // El nombre 'foto' debe coincidir con el backend
-            }
+            // Usamos JSON porque tu endpoint 'actualizarPerfil' espera JSON, no FormData
+            // (Si quisieras subir foto, tendríamos que cambiar el backend para usar Multer en /perfil)
+            const data = {
+                nombres: document.getElementById('me-nombres').value,
+                apellidos: document.getElementById('me-apellidos').value,
+                celular: document.getElementById('me-celular').value,
+                direccion: document.getElementById('me-direccion').value,
+                cargo: document.getElementById('me-cargo').value,
+                password: document.getElementById('me-password').value
+            };
 
             try {
                 const token = localStorage.getItem('token');
                 
-                // IMPORTANTE: Al usar FormData, NO ponemos 'Content-Type': 'application/json'
-                // El navegador se encarga de eso.
-                const res = await fetch(`/api/usuarios/${usuarioLogueado.id}`, {
+                // 🔥 CAMBIO CLAVE: PUT a /api/usuarios/perfil
+                const res = await fetch('/api/usuarios/perfil', {
                     method: 'PUT',
-                    headers: { 'x-auth-token': token }, 
-                    body: formData
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'x-auth-token': token 
+                    }, 
+                    body: JSON.stringify(data)
                 });
 
-                const data = await res.json();
+                const result = await res.json();
 
                 if (res.ok) {
-                    alert("✅ " + data.msg);
-                    
-                    // Actualizar memoria local
-                    const userActualizado = { ...usuarioLogueado, ...data.usuario };
-                    localStorage.setItem('user', JSON.stringify(userActualizado));
-                    
-                    // Recargar para ver la foto nueva en el menú lateral
+                    alert("✅ " + result.msg);
                     location.reload();
                 } else {
-                    alert("❌ Error: " + data.msg);
+                    alert("❌ Error: " + result.msg);
                 }
             } catch (error) {
                 console.error(error);
@@ -179,11 +159,10 @@
         });
     }
 
-    // ORDEN DE EJECUCIÓN
+    // INICIO
+    // Primero cargamos sedes, luego el perfil
     cargarSedes().then(() => {
         cargarDatosPerfil();
-        
-        // Retrasamos un poquito la activación de la foto para asegurar que el HTML existe
         setTimeout(activarSubidaFoto, 100);
     });
 

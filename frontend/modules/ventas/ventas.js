@@ -5,6 +5,7 @@
 
     let productosGlobal = [];
     let carrito = [];
+    let totalVentaOriginal = 0; // Para guardar el total sin descuento
     let categoriaActual = 'todos';
 
     // --- 1. UTILIDADES ---
@@ -28,9 +29,74 @@
         }
     }
 
+    // --- CARGAR VENDEDORES EN EL MODAL ---
+    async function cargarVendedoresEnModal() {
+        const select = document.getElementById('modal-vendedor');
+        if(!select) return;
+
+        const token = localStorage.getItem('token');
+        let miId = null;
+
+        try {
+            // PASO 1: Averiguar quién está conectado (Tú)
+            // Usamos la ruta de perfil que ya arreglamos anteriormente
+            const resPerfil = await fetch('/api/usuarios/perfil', {
+                headers: { 'x-auth-token': token }
+            });
+            if(resPerfil.ok) {
+                const miPerfil = await resPerfil.json();
+                miId = miPerfil.id;
+                // console.log("Usuario logueado ID:", miId);
+            }
+
+            // PASO 2: Obtener la lista de TODOS los vendedores (de todas las sedes)
+            const resVendedores = await fetch('/api/ventas/vendedores', {
+                headers: { 'x-auth-token': token }
+            });
+            
+            if(resVendedores.ok) {
+                const vendedores = await resVendedores.json();
+                
+                // Limpiamos el select
+                select.innerHTML = '';
+
+                // Opción opcional por si quieres dejarlo en blanco
+                // select.innerHTML = '<option value="">-- Seleccionar --</option>';
+                
+                // PASO 3: Llenar la lista y marcarte a ti
+                vendedores.forEach(v => {
+                    const opt = document.createElement('option');
+                    opt.value = v.id;
+                    // Mostramos Nombre y Sede para que sea fácil ubicar a gente de otras tiendas
+                    // (Asumiendo que el backend devuelva la sede, si no, solo nombre)
+                    opt.textContent = `${v.nombres} ${v.apellidos} (${v.rol})`; 
+
+                    // 🔥 AQUÍ ESTÁ LA MAGIA: Si el ID coincide contigo, se selecciona solo
+                    if (miId && v.id === miId) {
+                        opt.selected = true;
+                    }
+
+                    select.appendChild(opt);
+                });
+
+                // Si no se encontró tu ID (raro), agregamos una opción de "Caja General" al inicio
+                if (!miId) {
+                    const optDefault = document.createElement('option');
+                    opt.value = "";
+                    opt.textContent = "Caja General (Sin asignar)";
+                    opt.selected = true;
+                    select.prepend(optDefault);
+                }
+            }
+        } catch (error) {
+            console.error("Error cargando vendedores:", error);
+            select.innerHTML = '<option>Error al cargar lista</option>';
+        }
+    }
 
     // --- 2. INICIALIZAR ---
     async function initPOS() {
+        await cargarVendedoresEnModal();
         try {
             const token = localStorage.getItem('token');
             if (!token) return console.error("Falta Token");
@@ -194,6 +260,7 @@
     }
 
     function actualizarTotales(total) {
+        totalVentaOriginal = total;
         const base = total / 1.18;
         const igv = total - base;
 
@@ -208,80 +275,80 @@
 
     // --- 5. COBRO ---
     window.abrirModalCobro = function() {
-        if(carrito.length === 0) {
-            return alert("⚠️ El carrito está vacío. Agrega productos primero.");
-        }
-        // Agregamos la clase que hace visible el modal
+        if(carrito.length === 0) return alert("⚠️ Carrito vacío.");
+        
+        // Resetear selector
+        const selector = document.getElementById('modal-convenio');
+        if(selector) selector.value = "0"; 
+        
+        // Resetear texto total
+        actualizarTotales(totalVentaOriginal); 
+
         document.getElementById('modal-cobro').classList.add('active');
     }
-
     window.cerrarModalCobro = function() {
         document.getElementById('modal-cobro').classList.remove('active');
     }
 
-    // FUNCION PRINCIPAL DE PAGO
+    
     window.procesarVenta = async function() {
-        if (carrito.length === 0) {
-            return alert("⚠️ Carrito vacío.");
-        }
+        if (carrito.length === 0) return alert("⚠️ Carrito vacío.");
 
-        const btn = document.querySelector('.btn-primary.full-width'); // Botón Confirmar Pago
-        const textoOriginal = btn.innerText;
+        const btn = document.querySelector('.btn-primary.full-width');
+        const originalText = btn.innerText;
         btn.disabled = true;
         btn.innerText = "Procesando...";
 
         try {
-            // Leer valores del formulario
+            // Recopilar datos
+            const vendedorId = document.getElementById('modal-vendedor').value;
+            const tipoVenta = document.getElementById('modal-tipo-venta').value;
             const metodoPago = document.querySelector('input[name="pago"]:checked').value;
             const clienteDni = document.getElementById('cliente-dni').value;
-            const totalVenta = parseFloat(document.getElementById('lbl-total').innerText.replace('S/ ', ''));
-            const subtotal = parseFloat(document.getElementById('lbl-subtotal').innerText.replace('S/ ', ''));
-            const igv = parseFloat(document.getElementById('lbl-igv').innerText.replace('S/ ', ''));
+            const selectorConvenio = document.getElementById('modal-convenio');
+            const descuentoFactor = parseFloat(selectorConvenio.value) || 0; // 0.50
+            const nombreConvenio = selectorConvenio.options[selectorConvenio.selectedIndex].text;
 
-            // Payload
-            const ventaPayload = {
-                metodoPago,
-                clienteDni,
-                totalVenta,
-                subtotal,
-                igv,
-                carrito: carrito.map(i => ({
-                    id: i.id,
-                    cantidad: i.cantidad,
-                    precio: i.precio,
-                    nombre: i.nombre
-                }))
+            // 🔥 ENVIAMOS TODO JUNTO (Carrito completo)
+            // El backend se encarga de recorrerlo, descontar stock y generar 1 solo ticket.
+            const payload = {
+                carrito: carrito.map(i => ({ id: i.id, cantidad: i.cantidad })),
+                vendedor_id: vendedorId,
+                tipo_venta: tipoVenta,
+                metodoPago: metodoPago,
+                clienteDni: clienteDni,
+                observaciones: (descuentoFactor > 0) ? `Convenio Aplicado: ${nombreConvenio}` : "", // Guardamos en observaciones
+                descuento_factor: descuentoFactor // Enviamos el factor numérico
             };
 
             const token = localStorage.getItem('token');
-            const res = await fetch('/api/ventas', {
+            const res = await fetch('/api/ventas', { // Asegúrate que la ruta sea POST /api/ventas
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
                     'x-auth-token': token
                 },
-                body: JSON.stringify(ventaPayload)
+                body: JSON.stringify(payload)
             });
 
             const data = await res.json();
 
             if (res.ok) {
-                alert(`✅ ¡Venta Exitosa!\nTicket #${data.ventaId}`);
+                alert(`✅ ¡Venta Exitosa!\nTicket: ${data.ticketCodigo}\nTotal: S/ ${parseFloat(data.total).toFixed(2)}`);
                 carrito = [];
                 renderCarrito();
                 cerrarModalCobro();
-                initPOS(); // Recargar para ver stock actualizado
+                initPOS(); // Recargar inventario
             } else {
-                // Si falla (ej: error 500 o stock insuficiente) mostramos el mensaje
-                alert(`❌ ERROR: ${data.msg || 'Error desconocido en servidor'}`);
+                alert(`❌ Error: ${data.msg}`);
             }
 
         } catch (error) {
             console.error(error);
-            alert("❌ Error de conexión. Verifique que el servidor esté encendido.");
+            alert("❌ Error de conexión.");
         } finally {
             btn.disabled = false;
-            btn.innerText = textoOriginal;
+            btn.innerText = originalText;
         }
     }
 
@@ -302,6 +369,25 @@
         if(termino) filtrados = filtrados.filter(p => p.nombre.toLowerCase().includes(termino));
         renderProductos(filtrados);
     }
+
+    window.aplicarDescuentoConvenio = function() {
+    const selector = document.getElementById('modal-convenio');
+    const display = document.getElementById('modal-total-display');
+    
+    const descuentoPorcentaje = parseFloat(selector.value); // ej: 0.50
+    const montoDescontar = totalVentaOriginal * descuentoPorcentaje;
+    const nuevoTotal = totalVentaOriginal - montoDescontar;
+
+    display.innerText = "S/ " + nuevoTotal.toFixed(2);
+    
+    // Cambio visual si hay descuento
+    if (descuentoPorcentaje > 0) {
+        display.style.color = "#28a745"; // Verde
+        display.innerHTML += ` <small style='font-size:14px; color:#666;'>(Desc. -S/${montoDescontar.toFixed(2)})</small>`;
+    } else {
+        display.style.color = ""; // Color original
+    }
+}
 
     initPOS();
 })();

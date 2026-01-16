@@ -3,8 +3,22 @@
 (function() {
     console.log("Modulo Inventario FINAL Activo 🏢");
 
+    // --- 🚨 INICIO CORRECCIÓN 1: CAZAFANTASMAS ---
+    // Esto detecta si el inventario se cargó dos veces y borra los modales viejos
+    const modalesViejos = document.querySelectorAll('#modal-producto');
+    if (modalesViejos.length > 1) {
+        console.warn(`⚠️ Se detectaron ${modalesViejos.length} modales duplicados. Limpiando...`);
+        // Borramos todos menos el último (que es el nuevo y correcto)
+        for (let i = 0; i < modalesViejos.length - 1; i++) {
+            modalesViejos[i].remove();
+        }
+        // Limpiamos también los otros modales por seguridad
+        document.querySelectorAll('#modal-stock').forEach((m, i, arr) => { if(i < arr.length-1) m.remove(); });
+        document.querySelectorAll('#modal-kardex').forEach((m, i, arr) => { if(i < arr.length-1) m.remove(); });
+    }
+
     let productosData = [];
-    
+    let comboDetallesTemp = []; // Aquí guardaremos la "receta" temporalmente
     let filtroActual = 'todos';
     let nombreSedeActual = "";
     // Variables de Paginación Inventario
@@ -404,89 +418,129 @@
     }
 
     window.cerrarModalStock = function() { document.getElementById('modal-stock').classList.remove('active'); }
+    
     window.cerrarModalKardex = function() { document.getElementById('modal-kardex').classList.remove('active'); }
+
     window.abrirModalProducto = function() {
         document.getElementById('modal-producto').classList.add('active');
         document.getElementById('form-producto').reset();
         document.getElementById('prod-id').value = "";
         document.querySelector('#modal-title').innerText = "Nuevo Ítem";
+        
+        // --- LIMPIEZA DE COMBOS ---
+        comboDetallesTemp = []; // Reiniciar receta
+        renderizarTablaCombo(); // Limpiar tabla visual
+        
         const inputCodigo = document.getElementById('prod-codigo');
         if (inputCodigo) inputCodigo.value = getPrefijoSede();
         toggleTipoProducto();
     }
+
     window.cerrarModalProducto = function() { document.getElementById('modal-producto').classList.remove('active'); }
 
-    // --- FORMULARIO PRODUCTO ---
-    window.guardarProducto = async function() {
-        const id = document.getElementById('prod-id').value;
-        const nombre = document.getElementById('prod-nombre').value;
-        const codigo = document.getElementById('prod-codigo').value;
-        const precio = document.getElementById('prod-precio').value;
-        const tipo = document.getElementById('prod-tipo').value;
-        const categoria = document.getElementById('prod-categoria').value;
+// --- GUARDAR PRODUCTO (Corregido: Lee solo el modal activo) ---
+// --- GUARDAR PRODUCTO (Corregido: Validación Inteligente al Editar) ---
+window.guardarProducto = async function() {
+    const modalActivo = document.querySelector('#modal-producto.active');
+    if (!modalActivo) return alert("Error modal.");
+
+    const id = modalActivo.querySelector('#prod-id').value; // Si tiene ID, es EDICIÓN
+    const nombre = modalActivo.querySelector('#prod-nombre').value;
+    const codigo = modalActivo.querySelector('#prod-codigo').value;
+    const precio = modalActivo.querySelector('#prod-precio').value;
+    const tipo = modalActivo.querySelector('#prod-tipo').value;
+    const categoria = modalActivo.querySelector('#prod-categoria').value;
+    const unidad = modalActivo.querySelector('#prod-unidad').value;
+    const costo = modalActivo.querySelector('#prod-costo').value;
+    const stockInput = modalActivo.querySelector('#prod-stock').value;
+    const minimo = modalActivo.querySelector('#prod-minimo').value;
+    
+    if(!nombre || !codigo || !precio) return alert("Faltan datos obligatorios.");
+
+    // --- Lógica de Stock ---
+    let stockIngresado = parseInt(stockInput) || 0;
+    
+    // Si estamos editando, buscamos el stock que ya tenía para calcular la diferencia
+    let stockAnterior = 0;
+    if (id) {
+        const prodOriginal = productosData.find(p => p.id == id);
+        if (prodOriginal) stockAnterior = prodOriginal.stock;
+    }
+
+    // La cantidad que realmente vamos a "armar" ahora (solo si sube el stock)
+    const cantidadAArmar = (id) ? (stockIngresado - stockAnterior) : stockIngresado;
+
+    // --- 🔥 VALIDACIÓN MATEMÁTICA 🔥 ---
+    // Solo validamos si estamos creando stock nuevo (cantidadAArmar > 0)
+    if (tipo === 'combo' && cantidadAArmar > 0) {
         
-        if(!nombre || !codigo || !precio) return alert("Faltan datos obligatorios.");
+        if (comboDetallesTemp.length === 0) return alert("⚠️ La receta del combo está vacía. Cárgala o agrégale ingredientes.");
 
-        // 🧠 LÓGICA INTELIGENTE: Inferir Línea de Negocio para el P&L
-        let lineaNegocioCalculada = 'CAFETERIA'; // Default
-        const catUpper = categoria.toUpperCase();
-        
-        if (catUpper.includes('ENTRADA') || catUpper.includes('TICKET') || catUpper.includes('PULSERA')) {
-            lineaNegocioCalculada = 'TAQUILLA';
-        } else if (catUpper.includes('MERCH') || catUpper.includes('ROPA') || catUpper.includes('MEDIA')) {
-            lineaNegocioCalculada = 'MERCH';
-        } else if (catUpper.includes('EVENTO') || catUpper.includes('CUMPLEAÑOS')) {
-            lineaNegocioCalculada = 'EVENTO';
-        }
-
-        const formObj = {
-            nombre, codigo, categoria, tipo,
-            unidad: document.getElementById('prod-unidad').value,
-            precio: parseFloat(precio),
-            costo: parseFloat(document.getElementById('prod-costo').value) || 0,
-            stock: parseInt(document.getElementById('prod-stock').value) || 0,
-            stock_minimo: parseInt(document.getElementById('prod-minimo').value) || 0,
-            imagen: getDefaultIcon(categoria),
-            comboDetalles: [],
-            // 🚨 ENVIAMOS LA LÍNEA CALCULADA
-            lineaNegocio: lineaNegocioCalculada 
-        };
-
-        const btnSave = document.querySelector('#modal-producto .btn-primary');
-        const txtOriginal = btnSave.innerText;
-        btnSave.innerText = "Guardando..."; btnSave.disabled = true;
-
-        try {
-            let url = '/api/inventario';
-            let method = 'POST';
-            if(id) { 
-                // Nota: Si es editar, podrías necesitar otra lógica o enviarlo igual
-                url = `/api/inventario/${id}`; 
-                // En editar también solemos querer actualizar la línea de negocio
-                // pero necesitaríamos actualizar la función 'actualizarProducto' en el backend también.
-                // Por ahora, nos enfocamos en CREAR.
-                method = 'PUT'; 
-            }
-
-            const res = await fetch(url, {
-                method: method,
-                headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('token') },
-                body: JSON.stringify(formObj)
-            });
+        for (const itemReceta of comboDetallesTemp) {
+            // Buscamos el ingrediente en el almacén
+            const productoReal = productosData.find(p => p.id === itemReceta.id_producto);
             
-            const data = await res.json();
-            if(res.ok) {
-                alert("✅ " + data.msg);
-                cerrarModalProducto();
-                await initInventario();
-            } else {
-                alert("❌ Error: " + data.msg);
+            if (productoReal) {
+                // Cuántos combos ADICIONALES puedo armar con el stock actual del ingrediente
+                const maximoAdicional = Math.floor(productoReal.stock / itemReceta.cantidad);
+                
+                if (cantidadAArmar > maximoAdicional) {
+                    return alert(
+                        `❌ STOCK INSUFICIENTE PARA AUMENTAR\n\n` +
+                        `Estás intentando sumar +${cantidadAArmar} combos.\n` +
+                        `Pero el ingrediente "${itemReceta.nombre}" solo alcanza para +${maximoAdicional}.\n\n` +
+                        `📉 Stock actual ingrediente: ${productoReal.stock}`
+                    );
+                }
             }
-        } catch (error) { console.error(error); alert("Error conexión"); }
-        finally {
-            btnSave.innerText = txtOriginal; btnSave.disabled = false;
         }
     }
+    // ------------------------------------------------------------
+
+    // Inferir Línea de Negocio
+    let lineaNegocioCalculada = 'CAFETERIA'; 
+    const catUpper = categoria.toUpperCase();
+    if (catUpper.includes('ENTRADA') || catUpper.includes('TICKET')) lineaNegocioCalculada = 'TAQUILLA';
+    else if (catUpper.includes('MERCH')) lineaNegocioCalculada = 'MERCH';
+    else if (catUpper.includes('EVENTO')) lineaNegocioCalculada = 'EVENTO';
+
+    const formObj = {
+        nombre, codigo, categoria, tipo, unidad, 
+        precio: parseFloat(precio),
+        costo: parseFloat(costo) || 0,
+        stock: stockIngresado, // Enviamos el stock final deseado
+        stock_minimo: parseInt(minimo) || 0,
+        imagen: getDefaultIcon(categoria),
+        comboDetalles: (tipo === 'combo') ? comboDetallesTemp : [],
+        lineaNegocio: lineaNegocioCalculada 
+    };
+
+    const btnSave = modalActivo.querySelector('.btn-primary');
+    const txtOriginal = btnSave.innerText;
+    btnSave.innerText = "Guardando..."; btnSave.disabled = true;
+
+    try {
+        let url = '/api/inventario';
+        let method = 'POST';
+        if(id) { url = `/api/inventario/${id}`; method = 'PUT'; }
+
+        const res = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('token') },
+            body: JSON.stringify(formObj)
+        });
+        
+        const data = await res.json();
+        if(res.ok) {
+            alert("✅ " + data.msg);
+            cerrarModalProducto();
+            await initInventario();
+        } else {
+            alert("❌ Error: " + data.msg);
+        }
+    } catch (error) { console.error(error); alert("Error conexión"); }
+    finally { btnSave.innerText = txtOriginal; btnSave.disabled = false; }
+}
 
     // --- FORMULARIO STOCK ---
     const formStock = document.getElementById('form-stock');
@@ -540,13 +594,160 @@
         return "GEN-";
     }
 
-    window.toggleTipoProducto = function() { 
-        const tipo = document.getElementById('prod-tipo').value;
-        const seccionStock = document.getElementById('seccion-stock');
-        const groupUnidad = document.getElementById('group-unidad');
-        if(seccionStock) seccionStock.style.display = (tipo === 'fisico') ? 'block' : 'none';
-        if(groupUnidad) groupUnidad.style.visibility = (tipo === 'combo') ? 'hidden' : 'visible';
+window.toggleTipoProducto = function() { 
+    const tipo = document.getElementById('prod-tipo').value;
+    const seccionStock = document.getElementById('seccion-stock');
+    const groupUnidad = document.getElementById('group-unidad');
+    const seccionCombo = document.getElementById('seccion-combo');
+    const inputCosto = document.getElementById('prod-costo');
+    const inputStock = document.getElementById('prod-stock');
+
+    // 1. VISIBILIDAD STOCK: Ahora visible para Físico Y Combo
+    if(seccionStock) {
+        seccionStock.style.display = (tipo === 'fisico' || tipo === 'combo') ? 'block' : 'none';
     }
+    
+    // 2. Unidad de medida (oculta en combos)
+    if(groupUnidad) groupUnidad.style.visibility = (tipo === 'combo') ? 'hidden' : 'visible';
+    
+    // 3. Sección Receta Combo
+    if(seccionCombo) seccionCombo.style.display = (tipo === 'combo') ? 'block' : 'none';
+
+    // 4. Lógica de Costo (Bloqueado en Combo)
+    if(inputCosto) {
+        if(tipo === 'combo') {
+            inputCosto.readOnly = true;
+            inputCosto.style.backgroundColor = "#f1f5f9";
+            // Si hay receta, recalcula. Si no, 0.
+            if (typeof recalcularCostoCombo === 'function' && comboDetallesTemp.length > 0) {
+                recalcularCostoCombo();
+            } else {
+                inputCosto.value = 0;
+            }
+        } else {
+            inputCosto.readOnly = false;
+            inputCosto.style.backgroundColor = "";
+        }
+    }
+
+    // 5. UX: Cambiar placeholder del stock
+    if (inputStock) {
+        if (tipo === 'combo') {
+            inputStock.placeholder = "Cant. a armar (ej: 10)";
+            inputStock.title = "¿Cuántos combos vas a dejar listos?";
+        } else {
+            inputStock.placeholder = "Stock Inicial";
+            inputStock.title = "Cantidad actual en almacén";
+        }
+    }
+}
+
+    // 1. Filtrar mientras escribes
+    window.filtrarBusquedaCombo = function() {
+        const input = document.getElementById('combo-search');
+        const lista = document.getElementById('combo-results');
+        const texto = input.value.toLowerCase();
+
+        // Limpiamos selección anterior
+        document.getElementById('combo-selected-id').value = "";
+
+        if (texto.length < 1) {
+            lista.classList.remove('active');
+            return;
+        }
+
+        // Filtramos solo físicos
+        const coincidencias = productosData.filter(p => 
+            p.tipo === 'fisico' && 
+            (p.nombre.toLowerCase().includes(texto) || p.codigo.toLowerCase().includes(texto))
+        );
+
+        lista.innerHTML = '';
+        
+        if (coincidencias.length === 0) {
+            lista.innerHTML = '<div class="combo-option" style="color:#999; cursor:default;">No encontrado</div>';
+        } else {
+            coincidencias.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'combo-option';
+                div.innerHTML = `
+                    <span>${p.nombre}</span> 
+                    <span class="stock-badge">Stock: ${p.stock}</span>
+                `;
+                // Al hacer click, seleccionamos
+                div.onclick = () => seleccionarProductoCombo(p.id, p.nombre);
+                lista.appendChild(div);
+            });
+        }
+        
+        lista.classList.add('active');
+    }
+
+    // 2. Seleccionar un item de la lista
+    window.seleccionarProductoCombo = function(id, nombre) {
+        document.getElementById('combo-search').value = nombre; // Mostrar nombre
+        document.getElementById('combo-selected-id').value = id; // Guardar ID oculto
+        document.getElementById('combo-results').classList.remove('active'); // Ocultar lista
+        document.getElementById('combo-qty').focus(); // Saltar a cantidad
+    }
+
+    // 3. Modificamos agregarItemAlCombo para usar el ID oculto
+    window.agregarItemAlCombo = function() {
+        const idSeleccionado = document.getElementById('combo-selected-id').value;
+        const nombreInput = document.getElementById('combo-search').value;
+        const cantidad = parseInt(document.getElementById('combo-qty').value);
+
+        // Validación más estricta usando ID
+        if (!idSeleccionado) {
+            // Intento de recuperación: buscar por nombre exacto si el usuario no hizo click
+            const prod = productosData.find(p => p.nombre.toLowerCase() === nombreInput.toLowerCase() && p.tipo === 'fisico');
+            if(!prod) return alert("Por favor selecciona un producto de la lista.");
+            // Si lo encontramos, usamos ese
+            return procesarAgregado(prod.id, prod.nombre, cantidad);
+        }
+
+        procesarAgregado(parseInt(idSeleccionado), nombreInput, cantidad);
+    }
+
+    function procesarAgregado(id, nombre, cantidad) {
+            if (cantidad <= 0) return alert("Cantidad inválida.");
+
+            // 1. Buscar el COSTO del producto original
+            const productoOriginal = productosData.find(p => p.id === id);
+            // Si no tiene costo definido, asumimos 0
+            const costoUnitario = productoOriginal ? (productoOriginal.costo || 0) : 0;
+
+            // 2. Verificar si ya existe en la receta
+            const existe = comboDetallesTemp.find(d => d.id_producto === id);
+            
+            if (existe) {
+                existe.cantidad += cantidad;
+            } else {
+                comboDetallesTemp.push({ 
+                    id_producto: id, 
+                    nombre: nombre, 
+                    cantidad: cantidad,
+                    costo: costoUnitario // <--- ¡IMPORTANTE! Guardamos el costo aquí
+                });
+            }
+
+            // 3. Resetear UI
+            document.getElementById('combo-search').value = '';
+            document.getElementById('combo-selected-id').value = '';
+            document.getElementById('combo-qty').value = 1;
+            
+            renderizarTablaCombo();
+            recalcularCostoCombo(); // <--- Recalcular Total
+        }
+
+    // Cierra el menú si haces click fuera
+    document.addEventListener('click', function(e) {
+        const wrapper = document.querySelector('.custom-dropdown-wrapper');
+        const lista = document.getElementById('combo-results');
+        if (lista && !wrapper.contains(e.target)) {
+            lista.classList.remove('active');
+        }
+    });
 
     function getDefaultIcon(cat) {
         if(cat === 'Cafeteria') return 'bx bxs-coffee';
@@ -562,24 +763,113 @@
         return 'bg-default';
     }
 
-    // EDITAR Y ELIMINAR
-    function editarProducto(id) {
-        const prod = productosData.find(p => p.id === id);
-        if(!prod) return;
-        document.getElementById('modal-producto').classList.add('active');
-        document.querySelector('#modal-title').innerText = "Editar Producto";
-        document.getElementById('prod-id').value = prod.id;
-        document.getElementById('prod-nombre').value = prod.nombre;
-        document.getElementById('prod-codigo').value = prod.codigo;
-        document.getElementById('prod-categoria').value = prod.categoria;
-        document.getElementById('prod-tipo').value = prod.tipo;
-        document.getElementById('prod-unidad').value = prod.unidad;
-        document.getElementById('prod-precio').value = prod.precio;
-        document.getElementById('prod-costo').value = prod.costo || 0;
-        document.getElementById('prod-stock').value = prod.stock;
-        document.getElementById('prod-minimo').value = prod.minimo;
-        toggleTipoProducto();
+// --- EDICIÓN MULTIOBJETIVO (Con Carga de Receta) ---
+window.editarProducto = async function(id) {
+    console.log("📝 Editando ID:", id);
+    
+    // 1. Buscar producto en memoria
+    const prod = productosData.find(p => p.id === id);
+    if(!prod) return;
+
+    // 2. DETECTAR TODOS LOS MODALES (Fantasmas y Reales)
+    const modales = document.querySelectorAll('#modal-producto');
+    console.log(`⚠️ Se encontraron ${modales.length} modales en pantalla.`);
+
+    // 3. ACTUALIZARLOS TODOS
+    modales.forEach((modal) => {
+        modal.classList.add('active');
+        
+        // Buscamos los inputs
+        const titulo = modal.querySelector('#modal-title');
+        const iId = modal.querySelector('#prod-id');
+        const iNombre = modal.querySelector('#prod-nombre');
+        const iCodigo = modal.querySelector('#prod-codigo');
+        const iUnidad = modal.querySelector('#prod-unidad');
+        const iPrecio = modal.querySelector('#prod-precio');
+        const iCosto = modal.querySelector('#prod-costo');
+        const iStock = modal.querySelector('#prod-stock');
+        const iMinimo = modal.querySelector('#prod-minimo');
+        const sCategoria = modal.querySelector('#prod-categoria');
+        const sTipo = modal.querySelector('#prod-tipo');
+
+        // Llenamos datos básicos
+        if(titulo) titulo.innerText = "Editar Producto";
+        if(iId) iId.value = prod.id;
+        if(iNombre) iNombre.value = prod.nombre;
+        if(iCodigo) iCodigo.value = prod.codigo;
+        if(iUnidad) iUnidad.value = prod.unidad;
+        if(iPrecio) iPrecio.value = prod.precio;
+        if(iCosto) iCosto.value = prod.costo || 0;
+        if(iStock) iStock.value = prod.stock;
+        if(iMinimo) iMinimo.value = prod.minimo;
+
+        // Categoría
+        if(sCategoria) {
+            sCategoria.value = prod.categoria;
+            if(sCategoria.selectedIndex === -1) {
+                Array.from(sCategoria.options).forEach(opt => {
+                    if(opt.value.toLowerCase() === (prod.categoria||'').toLowerCase()) {
+                        sCategoria.value = opt.value;
+                    }
+                });
+            }
+        }
+
+        // Tipo de ítem
+        if(sTipo) {
+            let tipoBD = (prod.tipo || 'fisico').toLowerCase().trim();
+            if (tipoBD === 'físico') tipoBD = 'fisico';
+            sTipo.value = tipoBD;
+            if (sTipo.selectedIndex === -1) sTipo.value = 'fisico';
+        }
+    });
+
+    // 4. FORZAR VISIBILIDAD DE STOCK (Toggle Visual)
+    if(window.toggleTipoProducto) window.toggleTipoProducto();
+
+    // 5. 🔥 CARGAR RECETA SI ES COMBO 🔥
+    // Esta es la parte nueva que te faltaba
+    if (prod.tipo === 'combo') {
+        try {
+            // Mostrar "Cargando..." en la tabla del combo
+            document.querySelectorAll('#tabla-combo-items').forEach(tbody => {
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center">Cargando ingredientes...</td></tr>';
+            });
+
+            // Pedir receta al backend
+            const res = await fetch(`/api/inventario/${id}/receta`, {
+                headers: { 'x-auth-token': localStorage.getItem('token') }
+            });
+            
+            if (res.ok) {
+                const receta = await res.json();
+                // Llenar variable global
+                comboDetallesTemp = receta.map(r => ({
+                    id_producto: r.id_producto,
+                    nombre: r.nombre,
+                    cantidad: r.cantidad,
+                    costo: parseFloat(r.costo) || 0
+                }));
+                
+                // Actualizar UI
+                renderizarTablaCombo();
+                recalcularCostoCombo();
+            } else {
+                console.error("Error al cargar receta:", await res.text());
+                comboDetallesTemp = [];
+                renderizarTablaCombo();
+            }
+        } catch (e) {
+            console.error("Error de red cargando receta", e);
+        }
+    } else {
+        // Si no es combo, limpiamos la memoria de combos
+        comboDetallesTemp = [];
+        renderizarTablaCombo();
     }
+}
+    // Asegúrate de que esta función sea global (window.)
+    window.editarProducto = editarProducto;
 
 // --- ELIMINAR PRODUCTO (VERSIÓN MODERNA) ---
     async function eliminarProducto(id) {
@@ -638,6 +928,100 @@
             );
             renderizarTabla(filtrados);
         };
+    }
+
+    // --- FUNCIONES PARA COMBOS ---
+
+    function llenarDatalistCombos() {
+        const datalist = document.getElementById('lista-productos-combo');
+        if(!datalist) return;
+        
+        datalist.innerHTML = '';
+        const candidatos = productosData.filter(p => p.tipo === 'fisico');
+        
+        candidatos.forEach(p => {
+            const option = document.createElement('option');
+            option.value = p.nombre; 
+            option.dataset.id = p.id; 
+            datalist.appendChild(option);
+        });
+    }
+
+    // B. Agregar Item a la lista temporal
+    window.agregarItemAlCombo = function() {
+        const idSeleccionado = document.getElementById('combo-selected-id').value;
+        const nombreInput = document.getElementById('combo-search').value;
+        const cantidad = parseInt(document.getElementById('combo-qty').value);
+
+        // Validación
+        if (!nombreInput || cantidad <= 0) return alert("Selecciona un producto y cantidad válida.");
+
+        // 1. Si tenemos ID oculto (seleccionado de la lista)
+        if (idSeleccionado) {
+            return procesarAgregado(parseInt(idSeleccionado), nombreInput, cantidad);
+        }
+
+        // 2. Si NO tenemos ID (escribió el nombre a mano), buscamos en la data
+        const prod = productosData.find(p => p.nombre.toLowerCase() === nombreInput.toLowerCase() && p.tipo === 'fisico');
+        
+        if(!prod) return alert("Producto no encontrado en el inventario o no es físico.");
+        
+        procesarAgregado(prod.id, prod.nombre, cantidad);
+    } 
+
+    // C. Renderizar la tabla visual de ingredientes
+function renderizarTablaCombo() {
+        const tbody = document.getElementById('tabla-combo-items');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        if (comboDetallesTemp.length === 0) {
+            tbody.innerHTML = '<tr id="combo-empty-msg"><td colspan="3" style="text-align:center; padding: 15px; color:#94a3b8; font-size:12px;">Sin ingredientes agregados</td></tr>';
+            return;
+        }
+
+        comboDetallesTemp.forEach((item, index) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="padding: 8px; font-size: 13px; color: #334155;">${item.nombre}</td>
+                <td style="padding: 8px; text-align: center; font-weight: bold;">${item.cantidad}</td>
+                <td style="padding: 8px; text-align: right;">
+                    <button type="button" onclick="eliminarItemCombo(${index})" style="background:none; border:none; color:#ef4444; cursor:pointer;">
+                        <i class='bx bx-trash'></i>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // D. Eliminar item de la lista
+    window.eliminarItemCombo = function(index) {
+        comboDetallesTemp.splice(index, 1);
+        renderizarTablaCombo();
+        recalcularCostoCombo(); // <--- Recalcular Total al borrar
+    }
+
+    function recalcularCostoCombo() {
+        const tipo = document.getElementById('prod-tipo').value;
+        // Solo calculamos si es tipo Combo
+        if (tipo !== 'combo') return;
+
+        let costoTotal = 0;
+        
+        comboDetallesTemp.forEach(item => {
+            // (Costo Unitario del producto * Cantidad en la receta)
+            costoTotal += (item.costo * item.cantidad);
+        });
+
+        // Actualizar el input
+        const inputCosto = document.getElementById('prod-costo');
+        if (inputCosto) {
+            inputCosto.value = costoTotal.toFixed(2);
+            // Efecto visual rápido
+            inputCosto.style.backgroundColor = "#e0e7ff"; 
+            setTimeout(() => inputCosto.style.backgroundColor = "#f1f5f9", 300); // Volver al gris de readOnly
+        }
     }
 
     // INICIO

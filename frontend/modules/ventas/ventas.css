@@ -909,3 +909,135 @@
 .close-ticket-mobile {
     display: none;
 }
+/* =========================================
+   🚨 CORRECCIONES DE SCROLL (PEGAR AL FINAL)
+   ========================================= */
+
+/* 1. Aseguramos que la columna izquierda ocupe el 100% del alto */
+.pos-catalog {
+    height: 100%;       /* Forza a respetar la altura del contenedor padre */
+    overflow: hidden;   /* Oculta lo que se salga del borde redondeado */
+}
+
+/* 2. La cabecera (buscador/tabs) NO debe encogerse nunca */
+.catalog-header {
+    flex-shrink: 0; /* Esto evita que se aplaste si hay poco espacio */
+}
+
+/* 3. La grilla de productos ocupa el espacio sobrante y hace scroll */
+.products-grid {
+    flex: 1;              /* Ocupa todo el espacio disponible debajo del header */
+    overflow-y: auto;     /* Activa el scroll vertical */
+    min-height: 0;        /* Truco vital para que el scroll funcione en Flexbox */
+    padding-bottom: 20px; /* Espacio extra al final para que no se corte el último */
+}
+
+/* 4. Arreglar también el scroll del Ticket (Derecha) */
+.pos-ticket {
+    height: 100%;
+    overflow: hidden; 
+}
+
+.ticket-items {
+    flex: 1;             /* Ocupa el espacio entre el header y el total */
+    overflow-y: auto;    /* Scroll si la lista es larga */
+    min-height: 0;
+}
+
+/* 5. Estilizar la barra de scroll (Para que se vea elegante) */
+.products-grid::-webkit-scrollbar,
+.ticket-items::-webkit-scrollbar {
+    width: 6px;
+}
+
+.products-grid::-webkit-scrollbar-thumb,
+.ticket-items::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1; /* Gris suave */
+    border-radius: 4px;
+}
+
+.products-grid::-webkit-scrollbar-track,
+.ticket-items::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* =======================================================
+   🚨 PARCHE DE CORRECCIÓN VISUAL Y SCROLL (PEGAR AL FINAL)
+   ======================================================= */
+
+/* 1. RESET CRÍTICO: Evita que los paddings rompan el tamaño */
+* {
+    box-sizing: border-box;
+}
+
+/* 2. AJUSTE DEL CONTENEDOR PRINCIPAL */
+.pos-container {
+    /* Ajusta el 90px si tu barra de arriba es más alta o más baja */
+    height: calc(100vh - 85px) !important; 
+    overflow: hidden; /* Mantiene todo dentro de la pantalla */
+    padding-bottom: 0 !important;
+}
+
+/* 3. COLUMNA IZQUIERDA (CATÁLOGO) */
+.pos-catalog {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 20px !important; /* Reduje un poco el padding para ganar espacio */
+    overflow: hidden !important; 
+}
+
+/* 4. CABECERA (BUSCADOR) FIJA */
+.catalog-header {
+    flex-shrink: 0 !important; /* Prohibido encogerse */
+    margin-bottom: 15px !important;
+}
+
+/* 5. ZONA DE PRODUCTOS (SCROLL ACTIVADO) */
+.products-grid {
+    flex: 1 !important;           /* Ocupa TODO el espacio sobrante */
+    overflow-y: auto !important;  /* Activa el Scroll Vertical */
+    min-height: 0 !important;     /* Truco vital para Flexbox */
+    
+    /* Mejoras visuales de la grilla */
+    padding: 5px 5px 40px 5px !important; /* 40px abajo para que el último ítem respire */
+    align-content: flex-start !important; 
+    gap: 15px !important;
+}
+
+/* 6. CORRECCIÓN DE TARJETAS CORTADAS */
+.product-card {
+    height: auto !important;      /* Deja que la tarjeta crezca según su texto */
+    min-height: 130px;            /* Altura mínima para uniformidad */
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding-bottom: 12px !important; /* Espacio interno extra abajo */
+    overflow: visible !important;    /* Permite ver sombras y badges */
+}
+
+/* 7. ARREGLO DEL TICKET (DERECHA) */
+.pos-ticket {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+
+.ticket-items {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    padding-bottom: 20px; /* Espacio al final de la lista */
+}
+
+/* 8. SCROLLBAR MODERNA (Estética) */
+.products-grid::-webkit-scrollbar,
+.ticket-items::-webkit-scrollbar {
+    width: 8px;
+}
+.products-grid::-webkit-scrollbar-thumb,
+.ticket-items::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 4px;
+    border: 2px solid #fff; /* Borde blanco para separarlo */
+}

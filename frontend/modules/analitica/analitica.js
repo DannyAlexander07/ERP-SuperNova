@@ -31,13 +31,13 @@
 
     // --- 1. FUNCIONES DE RENDERIZADO (DEFINIR PRIMERO) ---
     
-    function renderizarTabla() {
+function renderizarTabla() {
         const tbody = document.getElementById('pyl-detalle-body');
         if(!tbody) return;
         tbody.innerHTML = '';
         
         if (datosGlobalesPyL.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">No hay movimientos registrados.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;">No hay movimientos registrados.</td></tr>';
             return;
         }
 
@@ -47,9 +47,16 @@
         
         datosPagina.forEach(row => {
             const tr = document.createElement('tr');
-            const pnl = parseFloat(row.pnl);
-            let color = pnl >= 0 ? '#166534' : '#dc2626';
             
+            // Valores numéricos
+            const ingresoNeto = parseFloat(row.ingresos);
+            const egresos = parseFloat(row.egresos);
+            const pnl = parseFloat(row.pnl);
+            
+            // Colores
+            let color = pnl >= 0 ? '#166534' : '#dc2626'; // Verde o Rojo para utilidad
+            
+            // Iconos
             let icon = '';
             const cat = row.categoria || '';
             if(cat.includes('Mermas')) icon = '🗑️';
@@ -57,13 +64,32 @@
             else if(cat.includes('Eventos')) icon = '🎉';
             else if(cat.includes('Taquilla')) icon = '🎟️';
             else if(cat.includes('Cafetería')) icon = '☕';
+            else if(cat.includes('Caja')) icon = '💰';
+
+            // 🔥 CÁLCULO DEL IGV (Separado)
+            let igvMonto = 0;
+            // Solo calculamos IGV a las categorías de venta, no a la caja manual
+            if (ingresoNeto > 0 && !cat.includes('Caja')) {
+                igvMonto = ingresoNeto * 0.18;
+            }
 
             tr.innerHTML = `
-                <td style="font-weight:600">${row.nombre_sede}</td>
-                <td>${icon} ${row.categoria}</td>
-                <td style="color: #2ecc71;">S/ ${parseFloat(row.ingresos).toFixed(2)}</td>
-                <td style="color: #e74c3c;">S/ ${parseFloat(row.egresos).toFixed(2)}</td>
-                <td style="color: ${color}; font-weight: 700;">S/ ${pnl.toFixed(2)}</td>
+                <td style="font-weight:600; font-size: 13px;">${row.nombre_sede}</td>
+                <td style="font-size: 13px;">${icon} ${row.categoria}</td>
+                
+                <td style="color: #2ecc71; font-weight:700; font-size: 14px;">
+                    S/ ${ingresoNeto.toFixed(2)}
+                </td>
+
+                <td style="color: #64748b; font-size: 13px;">
+                    S/ ${igvMonto.toFixed(2)}
+                </td>
+                
+                <td style="color: #e74c3c;">S/ ${egresos.toFixed(2)}</td>
+                
+                <td style="color: ${color}; font-weight: 700; font-size: 14px; background: ${pnl >= 0 ? '#f0fdf4' : '#fef2f2'}; border-radius: 8px;">
+                    S/ ${pnl.toFixed(2)}
+                </td>
             `;
             tbody.appendChild(tr);
         });
@@ -209,7 +235,7 @@
         }
     }
 
-    // --- 2. OBTENER DATOS (AHORA SÍ PUEDE LLAMAR A LAS FUNCIONES) ---
+// --- FUNCIÓN ACTUALIZADA: OBTENER TODOS LOS DATOS ---
     async function obtenerReporteCompleto() {
         const token = localStorage.getItem('token');
         if (!token) return;
@@ -218,32 +244,40 @@
         const fin = document.getElementById('filtro-fin')?.value || '';
         const sede = document.getElementById('filtro-sede-analitica')?.value || '';
 
-        let url = '/api/analitica/pyl?';
-        if (inicio) url += `inicio=${inicio}&`;
-        if (fin) url += `fin=${fin}&`;
-        if (sede) url += `sede=${sede}`;
+        // Construir Query String
+        let params = [];
+        if (inicio) params.push(`inicio=${inicio}`);
+        if (fin) params.push(`fin=${fin}`);
+        if (sede) params.push(`sede=${sede}`);
+        const queryString = params.length > 0 ? '?' + params.join('&') : '';
 
         try {
-            const res = await fetch(url, { headers: { 'x-auth-token': token } });
-            if (res.status === 403) return mostrarErrorTabla("Acceso Denegado.");
+            // 1. Cargar P&L (Existente)
+            const resPyL = await fetch(`/api/analitica/pyl${queryString}`, { headers: { 'x-auth-token': token } });
             
-            const data = await res.json();
-            
-            if (res.ok && Array.isArray(data)) {
-                datosGlobalesPyL = data;
-                paginaActual = 1;
+            // 2. Cargar GRÁFICOS NUEVOS (Nuevo endpoint)
+            const resGraficos = await fetch(`/api/analitica/graficos${queryString}`, { headers: { 'x-auth-token': token } });
 
+            if (resPyL.ok) {
+                const dataPyL = await resPyL.json();
+                datosGlobalesPyL = dataPyL; // Guardamos global
+                
                 renderizarTabla();
                 renderizarPaginacion();
-                renderizarGraficos(data);
-                calcularTotales(data);
-                obtenerKpisEventos(sede); 
-
-            } else {
-                mostrarErrorTabla("Error al procesar datos.");
+                renderizarGraficos(dataPyL); // Renderiza los gráficos viejos (Mix, Gastos, etc)
+                calcularTotales(dataPyL);
+                obtenerKpisEventos(sede);
             }
+
+            if (resGraficos.ok) {
+                const dataGraficos = await resGraficos.json();
+                // 🔥 AQUÍ SE DIBUJAN LOS NUEVOS
+                renderizarGraficosAvanzados(dataGraficos); 
+            }
+
         } catch (error) {
             console.error("Error Analítica:", error);
+            mostrarErrorTabla("Error de conexión.");
         }
     }
 
@@ -310,6 +344,91 @@
             await obtenerReporteCompleto();
         } catch (error) {
             console.error("Error init:", error);
+        }
+    }
+
+    // --- NUEVA FUNCIÓN: RENDERIZAR GRÁFICOS AVANZADOS ---
+    let chartEvo=null, chartTop=null, chartPagos=null, chartHoras=null; // Variables globales para instancias
+
+    function renderizarGraficosAvanzados(data) {
+        if (typeof Chart === 'undefined') return;
+
+        // 1. EVOLUCIÓN (Línea)
+        const ctxEvo = document.getElementById('chart-evolucion');
+        if (ctxEvo) {
+            if (chartEvo) chartEvo.destroy();
+            chartEvo = new Chart(ctxEvo, {
+                type: 'line',
+                data: {
+                    labels: data.evolucion.map(d => d.fecha),
+                    datasets: [{
+                        label: 'Venta Neta (S/)',
+                        data: data.evolucion.map(d => parseFloat(d.total)),
+                        borderColor: '#4f46e5',
+                        backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                        fill: true, tension: 0.3
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        // 2. TOP PRODUCTOS (Barra Horizontal)
+        const ctxTop = document.getElementById('chart-top');
+        if (ctxTop) {
+            if (chartTop) chartTop.destroy();
+            chartTop = new Chart(ctxTop, {
+                type: 'bar',
+                indexAxis: 'y', // Hace las barras horizontales
+                data: {
+                    labels: data.top.map(d => d.producto),
+                    datasets: [{
+                        label: 'Cantidad Vendida',
+                        data: data.top.map(d => parseInt(d.cantidad)),
+                        backgroundColor: '#10b981'
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        // 3. MÉTODOS DE PAGO (Dona)
+        const ctxPagos = document.getElementById('chart-pagos');
+        if (ctxPagos) {
+            if (chartPagos) chartPagos.destroy();
+            chartPagos = new Chart(ctxPagos, {
+                type: 'doughnut',
+                data: {
+                    labels: data.pagos.map(d => d.metodo_pago),
+                    datasets: [{
+                        data: data.pagos.map(d => parseFloat(d.total)),
+                        backgroundColor: ['#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        // 4. HORAS PUNTA (Barras Verticales)
+        const ctxHoras = document.getElementById('chart-horas');
+        if (ctxHoras) {
+            if (chartHoras) chartHoras.destroy();
+            // Preparamos datos para las 24 horas (rellenar huecos con 0)
+            const horasMap = new Array(24).fill(0);
+            data.horas.forEach(h => horasMap[parseInt(h.hora)] = parseInt(h.cantidad));
+            
+            chartHoras = new Chart(ctxHoras, {
+                type: 'bar',
+                data: {
+                    labels: Array.from({length: 24}, (_, i) => `${i}:00`),
+                    datasets: [{
+                        label: 'Tickets Emitidos',
+                        data: horasMap,
+                        backgroundColor: '#f97316'
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
         }
     }
 

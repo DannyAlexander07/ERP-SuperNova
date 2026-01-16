@@ -1,67 +1,107 @@
 // Ubicación: SuperNova/backend/controllers/ventasController.js
 const pool = require('../db');
 
-// 1. REGISTRAR VENTA (CON NUMERACIÓN POR SEDE)
+// 1. REGISTRAR VENTA (ACTUALIZADO CON DESCUENTOS)
 exports.registrarVenta = async (req, res) => {
-    const { clienteDni, metodoPago, carrito } = req.body; 
+    // 1. AÑADIDO: Recibimos 'descuento_factor' (ej: 0.20 para 20%, 0.50 para 50%)
+    const { clienteDni, metodoPago, carrito, vendedor_id, tipo_venta, observaciones, descuento_factor } = req.body;
     const usuarioId = req.usuario.id;
     const sedeId = req.usuario.sede_id;
 
     const client = await pool.connect();
 
     try {
+        if (!carrito || !Array.isArray(carrito) || carrito.length === 0) {
+            throw new Error("El carrito de compras está vacío o tiene un formato incorrecto.");
+        }
+
+        // Validación de seguridad para el descuento
+        const factor = parseFloat(descuento_factor) || 0; // Si no envían nada, es 0
+        if (factor < 0 || factor > 1) throw new Error("El porcentaje de descuento no es válido.");
+
+        // Si vendedor_id viene vacío, asumimos que el vendedor es el mismo cajero.
+        const vendedorFinal = vendedor_id ? vendedor_id : usuarioId;
+
         await client.query('BEGIN');
 
-        // A. OBTENER DATOS DE LA SEDE (Prefijo)
+        // A. OBTENER PREFIJO SEDE
         const sedeRes = await client.query('SELECT prefijo_ticket FROM sedes WHERE id = $1', [sedeId]);
         const prefijo = sedeRes.rows[0]?.prefijo_ticket || 'GEN';
 
-        // B. CALCULAR CORRELATIVO LOCAL
-        // Buscamos el número más alto usado en ESTA sede
+        // B. CALCULAR CORRELATIVO
         const maxTicketRes = await client.query(
-            'SELECT COALESCE(MAX(numero_ticket_sede), 0) as max_num FROM ventas WHERE sede_id = $1', 
+            'SELECT COALESCE(MAX(numero_ticket_sede), 0) as max_num FROM ventas WHERE sede_id = $1',
             [sedeId]
         );
         const nuevoNumeroTicket = parseInt(maxTicketRes.rows[0].max_num) + 1;
-        
-        // Formato Ticket visual (Ej: P-0001)
         const codigoTicketVisual = `${prefijo}-${nuevoNumeroTicket.toString().padStart(4, '0')}`;
 
-        // C. RECALCULAR TOTALES
+        // C. PROCESAR TOTALES Y DETALLES (CON MATEMÁTICA DE DESCUENTO)
         let totalCalculado = 0;
         let detalleInsertar = [];
 
         for (const item of carrito) {
             const prodRes = await client.query('SELECT id, precio_venta, costo_compra, nombre, linea_negocio FROM productos WHERE id = $1', [item.id]);
-            if (prodRes.rows.length === 0) throw new Error(`Producto ${item.nombre} ya no existe.`);
+            
+            if (prodRes.rows.length === 0) throw new Error(`Producto ID ${item.id} no encontrado.`);
             
             const prod = prodRes.rows[0];
-            const subtotal = prod.precio_venta * item.cantidad;
+
+            // --- 2. AÑADIDO: APLICAR DESCUENTO AL PRECIO UNITARIO ---
+            // Precio Original * (1 - 0.50) = Precio con 50% descuento
+            const precioConDescuento = prod.precio_venta * (1 - factor);
+            
+            const subtotal = precioConDescuento * item.cantidad;
             totalCalculado += subtotal;
 
             detalleInsertar.push({
                 ...item,
-                precioReal: prod.precio_venta,
+                nombre: prod.nombre,
+                precioReal: precioConDescuento, // Guardamos el precio YA descontado
                 costoReal: prod.costo_compra,
-                lineaProd: prod.linea_negocio, 
-                subtotal
+                lineaProd: prod.linea_negocio,
+                subtotal // Subtotal con descuento
             });
         }
 
+        // LIMPIEZA DE DECIMALES (Agrega esto para evitar errores de redondeo como 2.40000004)
+        totalCalculado = Math.round(totalCalculado * 100) / 100;
+
         const subtotalFactura = totalCalculado / 1.18;
         const igvFactura = totalCalculado - subtotalFactura;
-        const lineaPrincipal = detalleInsertar[0].lineaProd || 'CAFETERIA';
+        const lineaPrincipal = detalleInsertar[0].lineaProd || 'GENERAL';
 
-        // D. INSERTAR VENTA (Guardamos el número local)
+        // --- 3. AÑADIDO: ACTUALIZAR OBSERVACIONES ---
+        // Si hubo descuento, lo anotamos automáticamente para que quede registro
+        let obsFinal = observaciones || '';
+        if (factor > 0) {
+            const porcentaje = (factor * 100).toFixed(0);
+            obsFinal = `[Descuento Aplicado: ${porcentaje}%] ${obsFinal}`;
+        }
+
+        // D. INSERTAR VENTA 
         const ventaRes = await client.query(
-            `INSERT INTO ventas 
-            (sede_id, usuario_id, doc_cliente_temporal, metodo_pago, total_venta, subtotal, igv, linea_negocio, numero_ticket_sede) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-            [sedeId, usuarioId, clienteDni || 'PUBLICO', metodoPago, totalCalculado, subtotalFactura, igvFactura, lineaPrincipal, nuevoNumeroTicket]
+            `INSERT INTO ventas
+            (sede_id, usuario_id, vendedor_id, doc_cliente_temporal, metodo_pago, total_venta, subtotal, igv, linea_negocio, numero_ticket_sede, tipo_venta, observaciones)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+            [
+                sedeId, 
+                usuarioId, 
+                vendedorFinal,
+                clienteDni || 'PUBLICO', 
+                metodoPago, 
+                totalCalculado, // Este total YA TIENE el descuento aplicado
+                subtotalFactura, 
+                igvFactura, 
+                lineaPrincipal, 
+                nuevoNumeroTicket,
+                tipo_venta || 'Unitaria',
+                obsFinal // Observación actualizada
+            ]
         );
         const ventaId = ventaRes.rows[0].id;
 
-        // E. GUARDAR DETALLES Y DESCONTAR STOCK
+        // E. GUARDAR DETALLES Y DESCONTAR STOCK (Igual que antes)
         for (const item of detalleInsertar) {
             await client.query(
                 `INSERT INTO detalle_ventas (venta_id, producto_id, nombre_producto_historico, cantidad, precio_unitario, subtotal, costo_historico)
@@ -69,40 +109,47 @@ exports.registrarVenta = async (req, res) => {
                 [ventaId, item.id, item.nombre, item.cantidad, item.precioReal, item.subtotal, item.costoReal]
             );
 
-            // Verificar Combo
+            // Lógica de Combos vs Productos Simples
             const esCombo = await client.query('SELECT producto_hijo_id, cantidad FROM productos_combo WHERE producto_padre_id = $1', [item.id]);
+            
             if (esCombo.rows.length > 0) {
                 for (const hijo of esCombo.rows) {
                     const cantTotal = item.cantidad * hijo.cantidad;
-                    await descontarStock(client, hijo.producto_hijo_id, sedeId, cantTotal, usuarioId, codigoTicketVisual, `Combo ${item.id}`);
+                    await descontarStock(client, hijo.producto_hijo_id, sedeId, cantTotal, usuarioId, codigoTicketVisual, `Combo ${item.nombre}`);
                 }
             } else {
                 await descontarStock(client, item.id, sedeId, item.cantidad, usuarioId, codigoTicketVisual, 'Venta Directa');
             }
         }
 
-        // F. REGISTRAR EN CAJA (Usando el código visual P-001)
-        await client.query(
-            `INSERT INTO movimientos_caja (sede_id, usuario_id, tipo_movimiento, categoria, descripcion, monto, metodo_pago, venta_id)
-             VALUES ($1, $2, 'INGRESO', 'VENTA_POS', 'Ticket ' || $3, $4, $5, $6)`,
-            [sedeId, usuarioId, codigoTicketVisual, totalCalculado, metodoPago, ventaId]
-        );
+        // F. REGISTRAR EN CAJA (Si el total es > 0)
+        if (totalCalculado > 0) {
+            await client.query(
+                `INSERT INTO movimientos_caja (sede_id, usuario_id, tipo_movimiento, categoria, descripcion, monto, metodo_pago, venta_id)
+                 VALUES ($1, $2, 'INGRESO', 'VENTA_POS', 'Ticket ' || $3, $4, $5, $6)`,
+                [sedeId, usuarioId, codigoTicketVisual, totalCalculado, metodoPago, ventaId]
+            );
+        }
 
         await client.query('COMMIT');
         
-        // Devolvemos el ID global y el código visual para imprimir
-        res.json({ msg: 'Venta Procesada', ventaId, ticketCodigo: codigoTicketVisual, total: totalCalculado });
+        res.json({ 
+            msg: 'Venta Procesada', 
+            ventaId, 
+            ticketCodigo: codigoTicketVisual, 
+            total: totalCalculado 
+        });
 
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error(err);
+        console.error("Error en registrarVenta:", err.message);
         res.status(400).json({ msg: err.message });
     } finally {
         client.release();
     }
 };
 
-// 2. OBTENER HISTORIAL (MODIFICADO PARA MOSTRAR PREFIJO)
+// 2. OBTENER HISTORIAL (CORREGIDO: AHORA INCLUYE OBSERVACIONES)
 exports.obtenerHistorialVentas = async (req, res) => {
     try {
         const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
@@ -112,19 +159,26 @@ exports.obtenerHistorialVentas = async (req, res) => {
 
         let query = `
             SELECT 
-                v.id,
-                v.fecha_venta,
-                v.total_venta,
-                v.metodo_pago,
-                v.doc_cliente_temporal,
-                v.nombre_cliente_temporal,
-                v.numero_ticket_sede, -- Nuevo campo
+                v.id, 
+                v.fecha_venta, 
+                v.total_venta, 
+                v.metodo_pago, 
+                v.numero_ticket_sede,
+                v.tipo_venta,
+                v.observaciones,  -- 👈 ¡ESTA ES LA CLAVE! Agregamos este campo.
                 s.nombre AS nombre_sede,
-                s.prefijo_ticket, -- Nuevo campo
-                u.nombres AS nombre_usuario,
-                u.apellidos AS apellido_usuario
+                s.prefijo_ticket,
+                
+                -- Datos del CAJERO (Quien usó el sistema)
+                u.nombres AS nombre_cajero,
+                
+                -- Datos del VENDEDOR (Quien hizo la venta)
+                vend.nombres AS nombre_vendedor,
+                vend.apellidos AS apellido_vendedor
+
             FROM ventas v
-            JOIN usuarios u ON v.usuario_id = u.id
+            JOIN usuarios u ON v.usuario_id = u.id          -- Join para Cajero
+            LEFT JOIN usuarios vend ON v.vendedor_id = vend.id -- Join para Vendedor
             JOIN sedes s ON v.sede_id = s.id
             WHERE 1=1
         `;
@@ -148,10 +202,10 @@ exports.obtenerHistorialVentas = async (req, res) => {
 
         const result = await pool.query(query, params);
         
-        // FORMATEAR RESPUESTA: Creamos el campo "codigo_visual"
         const ventasFormateadas = result.rows.map(v => ({
             ...v,
-            codigo_visual: `${v.prefijo_ticket || 'GEN'}-${(v.numero_ticket_sede || v.id).toString().padStart(4, '0')}`
+            codigo_visual: `${v.prefijo_ticket || 'GEN'}-${(v.numero_ticket_sede || v.id).toString().padStart(4, '0')}`,
+            vendedor_final: v.nombre_vendedor ? `${v.nombre_vendedor} ${v.apellido_vendedor || ''}` : 'Caja General'
         }));
 
         res.json(ventasFormateadas);
@@ -162,7 +216,7 @@ exports.obtenerHistorialVentas = async (req, res) => {
     }
 };
 
-// 3. OBTENER DETALLE (Sin cambios, solo exportado)
+// 3. OBTENER DETALLE
 exports.obtenerDetalleVenta = async (req, res) => {
     const { id } = req.params;
     try {
@@ -174,7 +228,7 @@ exports.obtenerDetalleVenta = async (req, res) => {
     }
 };
 
-// 4. ANULAR VENTA (RESTAURADO)
+// 4. ANULAR VENTA
 exports.eliminarVenta = async (req, res) => {
     const { id } = req.params;
     const usuarioId = req.usuario.id;
@@ -217,11 +271,30 @@ exports.eliminarVenta = async (req, res) => {
     }
 };
 
-// FUNCIONES AUXILIARES (STOCK)
+// 5. OBTENER LISTA DE VENDEDORES (Para el Select)
+exports.obtenerVendedores = async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT id, nombres, apellidos, rol 
+            FROM usuarios 
+            WHERE UPPER(estado) = 'ACTIVO' 
+            ORDER BY nombres ASC
+        `);
+
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Error al obtener vendedores:", err.message);
+        res.status(500).send('Error del servidor');
+    }
+};
+
+// --- FUNCIONES AUXILIARES (STOCK) ---
+
 async function descontarStock(client, prodId, sedeId, cantidad, usuarioId, ticketCodigo, motivo) {
     const prod = await client.query('SELECT controla_stock, tipo_item, nombre, costo_compra FROM productos WHERE id = $1', [prodId]);
     if (prod.rows.length === 0) return;
     const { controla_stock, tipo_item, costo_compra } = prod.rows[0];
+    
     if (tipo_item === 'servicio' || tipo_item === 'combo' || !controla_stock) return;
 
     const stockRes = await client.query('SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2 FOR UPDATE', [prodId, sedeId]);
@@ -231,11 +304,10 @@ async function descontarStock(client, prodId, sedeId, cantidad, usuarioId, ticke
 
     await client.query('UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3', [cantidad, prodId, sedeId]);
     
-    // Kardex: Usamos el código visual en el motivo
     await client.query(
         `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
          VALUES ($1, $2, $3, 'salida_venta', $4, $5, $6, $7)`, 
-        [sedeId, prodId, usuarioId, cantidad, (stockActual - cantidad), `Venta ${ticketCodigo} (${motivo})`, parseFloat(costo_compra) || 0]
+        [sedeId, prodId, usuarioId, -cantidad, (stockActual - cantidad), `Venta ${ticketCodigo} (${motivo})`, parseFloat(costo_compra) || 0]
     );
 }
 

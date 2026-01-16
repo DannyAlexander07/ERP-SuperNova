@@ -95,7 +95,41 @@
             </div>
             <div class="modal-body">
                 <h2 class="total-amount-display" id="modal-total-display">S/ 0.00</h2>
-                
+                <div class="assignment-section" style="background: #f8f9fa; padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e0e0e0;">
+                    
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; font-size: 12px; font-weight: 700; color: #555; margin-bottom: 5px; text-transform: uppercase;">
+                            <i class='bx bx-user'></i> ¿Quién realizó la venta?
+                        </label>
+                        <select id="modal-vendedor" style="width: 100%; height: 45px; padding: 0 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px; background: white; color: #333; outline: none; cursor: pointer;">
+                            <option value="" selected>Caja General (Sin asignar)</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; font-size: 12px; font-weight: 700; color: #555; margin-bottom: 5px; text-transform: uppercase;">
+                            <i class='bx bx-tag'></i> Tipo de Precio
+                        </label>
+                        <select id="modal-tipo-venta" style="width: 100%; height: 45px; padding: 0 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px; background: white; color: #333; outline: none; cursor: pointer;">
+                            <option value="Unitaria">💰 Venta Unitaria (Precio Normal)</option>
+                            <option value="Mayorista">📦 Venta Mayorista (Por Volumen)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 700; color: #555; margin-bottom: 5px; text-transform: uppercase;">
+                            <i class='bx bx-party'></i> Convenio / Descuento
+                        </label>
+                        <select id="modal-convenio" onchange="aplicarDescuentoConvenio()" style="width: 100%; height: 45px; padding: 0 12px; border: 2px solid #695CFE; border-radius: 8px; font-size: 14px; background: #f0f4ff; color: #333; outline: none; cursor: pointer;">
+                            <option value="0" selected>Ninguno (Precio Full)</option>
+                            <option value="0.50">Convenio: Empleados (50% Off)</option>
+                            <option value="0.20">Convenio: Socios (20% Off)</option>
+                            <option value="0.10">Promo: Cumpleañero (10% Off)</option>
+                            <option value="1.00">Cortesía Total (100% Off)</option>
+                        </select>
+                    </div>
+
+                </div>
                 <div class="payment-methods-grid">
                     <label class="method-card">
                         <input type="radio" name="pago" value="Efectivo" checked>

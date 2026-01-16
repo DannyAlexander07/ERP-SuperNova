@@ -3,10 +3,10 @@
     <div class="module-header">
         <div class="header-titles">
             <h2>💰 Flujo de Caja</h2>
-            <p>Control de ingresos y egresos en tiempo real.</p>
+            <p>Control de ingresos, egresos y mermas en tiempo real.</p>
         </div>
         
-        <div class="header-actions" style="display:flex; gap:10px; align-items:center;">
+        <div class="header-actions">
             <select id="filtro-sede-caja" class="select-sede-admin" style="display:none;" onchange="filtrarCajaPorSede()">
                 <option value="">🏢 Todas las Sedes (Global)</option>
             </select>
@@ -15,39 +15,89 @@
                 <i class='bx bx-plus-circle'></i> Registrar Movimiento
             </button>
 
-            <button onclick="exportarTablaCaja()" class="btn-success" style="background: #10b981; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 5px;">
-                <i class='bx bxs-file-export'></i> Exportar Excel
+            <button onclick="exportarTablaCaja()" class="btn-success">
+                <i class='bx bxs-file-export'></i> Excel
             </button>
         </div>
     </div>
 
-    <div class="kpi-grid">
-        <div class="kpi-card ingreso">
-            <div class="kpi-icon"><i class='bx bx-trending-up'></i></div>
-            <div class="kpi-data">
-                <span class="kpi-label">Ingresos (Hoy)</span>
-                <h3 id="kpi-ingresos">S/ 0.00</h3>
+    <div class="kpi-grid-temporal">
+        
+        <div class="kpi-card" style="border-left: 5px solid #3b82f6;">
+            <div class="card-header-flex">
+                <div class="kpi-icon" style="background: #eff6ff; color: #3b82f6;"><i class='bx bx-calendar'></i></div>
+                <span>HOY</span>
+            </div>
+            
+            <h3 id="kpi-dia" class="amount-big">S/ 0.00</h3>
+            
+            <div class="merma-badge" id="badge-merma-dia">
+                <div class="merma-label"><i class='bx bx-trending-down'></i> Egresos</div>
+                <div id="merma-dia" class="merma-value">S/ 0.00</div>
             </div>
         </div>
 
-        <div class="kpi-card egreso">
-            <div class="kpi-icon"><i class='bx bx-trending-down'></i></div>
-            <div class="kpi-data">
-                <span class="kpi-label">Egresos (Hoy)</span>
-                <h3 id="kpi-egresos">S/ 0.00</h3>
+        <div class="kpi-card" style="border-left: 5px solid #8b5cf6;">
+            <div class="card-header-flex">
+                <div class="kpi-icon" style="background: #f5f3ff; color: #8b5cf6;"><i class='bx bx-calendar-week'></i></div>
+                <span>SEMANA</span>
+            </div>
+
+            <h3 id="kpi-semana" class="amount-big">S/ 0.00</h3>
+            
+            <div class="merma-badge" id="badge-merma-semana">
+                <div class="merma-label"><i class='bx bx-trending-down'></i> Egresos</div>
+                <div id="merma-semana" class="merma-value">S/ 0.00</div>
             </div>
         </div>
 
-        <div class="kpi-card saldo">
-            <div class="kpi-icon"><i class='bx bx-wallet'></i></div>
-            <div class="kpi-data">
-                <span class="kpi-label">Saldo en Caja</span>
-                <h3 id="kpi-saldo">S/ 0.00</h3>
+        <div class="kpi-card" style="border-left: 5px solid #10b981;">
+            <div class="card-header-flex">
+                <div class="kpi-icon" style="background: #ecfdf5; color: #10b981;"><i class='bx bx-calendar-event'></i></div>
+                <span>MES</span>
+            </div>
+
+            <h3 id="kpi-mes" class="amount-big">S/ 0.00</h3>
+            
+            <div class="merma-badge" id="badge-merma-mes">
+                <div class="merma-label"><i class='bx bx-trending-down'></i> Egresos</div>
+                <div id="merma-mes" class="merma-value">S/ 0.00</div>
+            </div>
+        </div>
+
+        <div class="kpi-card" style="border-left: 5px solid #f59e0b;">
+            <div class="card-header-flex">
+                <div class="kpi-icon" style="background: #fffbeb; color: #f59e0b;"><i class='bx bx-calendar-star'></i></div>
+                <span>AÑO</span>
+            </div>
+
+            <h3 id="kpi-anio" class="amount-big">S/ 0.00</h3>
+            
+            <div class="merma-badge" id="badge-merma-anio">
+                <div class="merma-label"><i class='bx bx-trending-down'></i> Egresos</div>
+                <div id="merma-anio" class="merma-value">S/ 0.00</div>
             </div>
         </div>
     </div>
 
-    <div class="table-module-container" style="margin-top: 20px;">
+    <div class="saldo-caja-container">
+        <div style="display:flex; align-items:center; gap: 20px;">
+            <div style="width: 60px; height: 60px; background: #dbeafe; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #2563eb; font-size: 30px;">
+                <i class='bx bx-wallet'></i>
+            </div>
+            <div>
+                <span style="font-size: 13px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Saldo Disponible en Caja</span>
+                <h2 id="kpi-saldo" style="margin: 0; font-size: 32px; color: #1e293b; font-weight:800;">S/ 0.00</h2>
+            </div>
+        </div>
+        <div style="text-align: right;">
+            <span style="font-size: 11px; color: #94a3b8; background:#f1f5f9; padding:5px 10px; border-radius:20px;">
+                <i class='bx bx-info-circle'></i> Efectivo acumulado histórico
+            </span>
+        </div>
+    </div>
+
+    <div class="table-module-container">
         <div class="table-responsive">
             <table class="premium-table">
                 <thead>
@@ -67,14 +117,14 @@
     </div>
 
     <div id="modal-caja" class="modal-overlay">
-        <div class="modal-content center-modal" style="width: 500px;"> <div class="modal-header">
+        <div class="modal-content center-modal">
+            <div class="modal-header">
                 <h3>Registrar Movimiento</h3>
                 <button class="btn-close" onclick="cerrarModalCaja()"><i class='bx bx-x'></i></button>
             </div>
 
             <div class="modal-body">
                 <form id="form-caja">
-                    
                     <div class="input-group">
                         <label class="static">Tipo de Movimiento</label>
                         <select id="mov-tipo" required>
@@ -89,6 +139,7 @@
                             <option value="MANUAL">Ajuste Manual / Aporte</option>
                             <option value="GASTO_CHICA">Gasto Caja Chica</option>
                             <option value="VENTA_EXTRA">Venta Extraordinaria</option>
+                            <option value="OTROS">Otros</option>
                         </select>
                     </div>
 

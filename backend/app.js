@@ -39,7 +39,7 @@ app.use('/api/ventas', ventasRoutes);
 app.use('/api/caja', cajaRoutes);
 app.use('/api/analitica', analiticaRoutes);
 app.use('/api/sedes', sedesRoutes);
-
+app.use('/backend/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // --- SERVIR FRONTEND ---
 app.use(express.static(path.join(__dirname, '../frontend')));

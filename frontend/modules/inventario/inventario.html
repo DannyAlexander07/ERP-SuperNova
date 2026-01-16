@@ -146,16 +146,54 @@
                         </div>
                     </div>
 
-                    <div id="seccion-combo" style="display: none;">
-                        <h4 class="form-subtitle">Contenido del Combo</h4>
-                        <p style="font-size:12px; color:#666; margin-bottom:10px;">Selecciona los productos que incluye este combo.</p>
-                        <div class="combo-products-select">
-                            <select id="combo-productos-select" multiple>
-                                </select>
-                        </div>
-                        <p style="font-size:11px; color:#999; margin-top:5px;">Mantén presionado Ctrl (Windows) o Cmd (Mac) para seleccionar múltiples.</p>
-                    </div>
+                    <div id="seccion-combo" style="display: none; background: #f8fafc; padding: 15px; border-radius: 12px; margin-top: 20px; border: 1px dashed #cbd5e1;">
+                        <h4 class="form-subtitle" style="margin-top:0; color:#475569;">
+                            <i class='bx bx-layer'></i> Armar Receta del Combo
+                        </h4>
+                        <p style="font-size:12px; color:#64748b; margin-bottom:15px;">
+                            Busca ingredientes para descontar del stock al vender este combo.
+                        </p>
+                        
+                        <div style="display: flex; gap: 10px; align-items: flex-start; margin-bottom: 15px;">
+                            
+                            <div class="input-group" style="flex: 2; margin-top: 0;">
+                                <div class="custom-dropdown-wrapper">
+                                    <input type="text" id="combo-search" placeholder="Escribe para buscar..." autocomplete="off" onkeyup="filtrarBusquedaCombo()">
+                                    <div id="combo-results" class="combo-results-list">
+                                        </div>
+                                </div>
+                                <input type="hidden" id="combo-selected-id">
+                            </div>
+                            
+                            <div class="input-group" style="flex: 1; max-width: 80px; margin-top: 0;">
+                                <input type="number" id="combo-qty" value="1" min="1" style="text-align: center;">
+                                <label>Cant.</label>
+                            </div>
 
+                            <button type="button" class="btn-secondary" onclick="agregarItemAlCombo()" style="height: 42px; width: 42px; display:flex; align-items:center; justify-content:center; padding:0; border-radius: 8px;">
+                                <i class='bx bx-plus' style="font-size: 20px;"></i>
+                            </button>
+                        </div>
+
+                        <div class="combo-list-container">
+                            <table class="combo-table">
+                                <thead>
+                                    <tr>
+                                        <th style="text-align: left;">Producto</th>
+                                        <th style="text-align: center;">Cant.</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabla-combo-items">
+                                    <tr id="combo-empty-msg">
+                                        <td colspan="3" style="text-align:center; padding: 20px; color:#94a3b8; font-size:12px;">
+                                            Sin ingredientes. Usa el buscador ↑
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </form>
             </div>
 

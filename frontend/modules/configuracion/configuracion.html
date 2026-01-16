@@ -49,16 +49,12 @@
                         <label>DNI / Documento Identidad</label>
                     </div>
                     <div class="input-group">
-                        <input type="date" id="fechaNacimiento" required placeholder=" ">
-                        <label class="static">Fecha de Nacimiento</label>
+                         <input type="tel" id="celular" required placeholder=" ">
+                         <label>Celular Personal</label>
                     </div>
                 </div>
                 <div class="form-row">
-                    <div class="input-group">
-                        <input type="tel" id="celular" required placeholder=" ">
-                        <label>Celular Personal</label>
-                    </div>
-                     <div class="input-group">
+                      <div class="input-group full">
                         <input type="text" id="direccion" placeholder=" ">
                         <label>Dirección Domiciliaria</label>
                     </div>
@@ -83,6 +79,7 @@
                     <div class="input-group">
                         <select id="rol" required>
                             <option value="" disabled selected></option>
+                            <option value="superadmin">Super Admin</option>
                             <option value="admin">Administrador</option>
                             <option value="gerente">Gerente</option>
                             <option value="logistica">Logística</option>
@@ -131,6 +128,18 @@
                     <tbody id="tabla-usuarios-body">
                         </tbody>
                 </table>
+            </div>
+            
+            <div class="pagination-controls" style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding: 10px;">
+                <span id="info-paginacion" style="color: #666; font-size: 14px;">Mostrando 0 de 0</span>
+                <div class="btn-group">
+                    <button class="btn-secondary" id="btn-prev" onclick="cambiarPagina(-1)" disabled>
+                        <i class='bx bx-chevron-left'></i> Anterior
+                    </button>
+                    <button class="btn-secondary" id="btn-next" onclick="cambiarPagina(1)" disabled>
+                        Siguiente <i class='bx bx-chevron-right'></i>
+                    </button>
+                </div>
             </div>
         </div>
     </div>

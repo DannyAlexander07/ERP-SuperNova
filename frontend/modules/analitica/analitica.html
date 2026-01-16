@@ -122,6 +122,54 @@
         </div>
     </div>
 
+    <div style="margin-top: 40px; margin-bottom: 20px; padding-left: 5px; border-left: 4px solid #6366f1;">
+        <h3 class="section-title" style="margin:0; font-size: 18px; color: #1e293b;">🔍 Análisis de Tendencias y Operaciones</h3>
+        <p style="margin:0; font-size: 13px; color: #64748b;">Profundiza en el comportamiento de tus ventas.</p>
+    </div>
+
+    <div class="charts-grid" style="grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-bottom: 30px;">
+        
+        <div class="chart-card" style="grid-column: span 2;">
+            <div class="chart-header">
+                <h4>📈 Evolución Diaria de Ventas</h4>
+                <span class="badge badge-blue">Tendencia</span>
+            </div>
+            <div class="chart-body" style="height: 300px;">
+                <canvas id="chart-evolucion"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-header">
+                <h4>🏆 Top 5 Productos Más Vendidos</h4>
+                <span class="badge badge-green">Ranking</span>
+            </div>
+            <div class="chart-body" style="height: 250px;">
+                <canvas id="chart-top"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-header">
+                <h4>💳 Distribución de Pagos</h4>
+                <span class="badge badge-purple">Finanzas</span>
+            </div>
+            <div class="chart-body donut-container" style="height: 250px; position: relative;">
+                <canvas id="chart-pagos"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-card" style="grid-column: span 2;">
+            <div class="chart-header">
+                <h4>🕒 Horas Punta (Actividad por Hora)</h4>
+                <span class="badge badge-red">Operativo</span>
+            </div>
+            <div class="chart-body" style="height: 250px;">
+                <canvas id="chart-horas"></canvas>
+            </div>
+        </div>
+    </div>
+
     <div class="table-section">
         <h3 class="section-title">Detalle Operativo (Histórico)</h3>
         <div class="table-responsive-modern">
@@ -130,9 +178,10 @@
                     <tr>
                         <th>Sede</th>
                         <th>Concepto</th>
-                        <th class="text-right">Ingresos</th>
-                        <th class="text-right">Egresos</th>
-                        <th class="text-right">P&L Neto</th>
+                        <th class="text-right" style="color:#166534">Venta Neta (Real)</th>
+                        <th class="text-right" style="color:#64748b">IGV (18%)</th>
+                        <th class="text-right" style="color:#dc2626">Egresos</th>
+                        <th class="text-right">Utilidad Final</th>
                     </tr>
                 </thead>
                 <tbody id="pyl-detalle-body">
