@@ -39,7 +39,8 @@ exports.obtenerProductos = async (req, res) => {
     }
 };
 
-// 2. CREAR PRODUCTO (CON DEDUCCIÓN AUTOMÁTICA DE INGREDIENTES)
+// 2. CREAR PRODUCTO (CORREGIDO: NO RESTA STOCK DE INGREDIENTES AL CREAR COMBO)
+// 2. CREAR PRODUCTO (CORREGIDO: NO RESTA STOCK DE INGREDIENTES AL CREAR COMBO)
 exports.crearProducto = async (req, res) => {
     let { nombre, codigo, categoria, tipo, precio, costo, stock, stock_minimo, unidad, imagen, comboDetalles } = req.body;
     const client = await pool.connect(); 
@@ -76,61 +77,35 @@ exports.crearProducto = async (req, res) => {
         const stockInicial = parseInt(stock) || 0;
         const minStock = parseInt(stock_minimo) || 5;
 
-        // B. Insertar Stock Inicial (Ahora permite 'combo' con stock)
+        // B. Insertar Stock Inicial (Ahora permite 'combo' con stock limitado)
         if (tipoLimpio !== 'servicio') {
             await client.query(
                 `INSERT INTO inventario_sedes (sede_id, producto_id, cantidad, stock_minimo_local) VALUES ($1, $2, $3, $4)`,
                 [sedeId, nuevoId, stockInicial, minStock]
             );
 
-            // Registro en Kardex del nuevo combo (ENTRADA)
+            // Registro en Kardex del nuevo producto/combo (ENTRADA)
             if (stockInicial > 0) {
                 await client.query(
                     `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
-                     VALUES ($1, $2, $3, 'entrada', $4, $5, 'Armado de Combo Inicial', $6)`,
+                     VALUES ($1, $2, $3, 'entrada', $4, $5, 'Stock Inicial / Definición de Combo', $6)`,
                     [sedeId, nuevoId, usuarioId, stockInicial, stockInicial, costo]
                 );
             }
         }
 
-        // C. LÓGICA DE COMBOS (Guardar receta Y RESTAR INGREDIENTES)
+        // C. LÓGICA DE COMBOS (SOLO GUARDAR RECETA)
         if (tipoLimpio === 'combo' && comboDetalles && comboDetalles.length > 0) {
             
-            // 1. Guardar la receta
+            // 1. Guardar la receta (Relación Padre-Hijo)
             for (const item of comboDetalles) {
                 await client.query(
                     `INSERT INTO productos_combo (producto_padre_id, producto_hijo_id, cantidad) VALUES ($1, $2, $3)`,
                     [nuevoId, item.id_producto, item.cantidad]
                 );
 
-                // 2. 🔥 SI CREAMOS STOCK DEL COMBO, RESTAMOS LOS INGREDIENTES 🔥
-                if (stockInicial > 0) {
-                    const cantidadARestar = item.cantidad * stockInicial; // ej: 2 panes * 10 combos = 20 panes
-
-                    // Restar stock físico del ingrediente
-                    await client.query(
-                        `UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3`,
-                        [cantidadARestar, item.id_producto, sedeId]
-                    );
-
-                    // Obtener stock restante para el Kardex
-                    const resStockIng = await client.query('SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2', [item.id_producto, sedeId]);
-                    const stockFinalIngrediente = resStockIng.rows[0].cantidad;
-
-                    // Registrar SALIDA en el Kardex del ingrediente
-                    await client.query(
-                        `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
-                         VALUES ($1, $2, $3, 'salida_produccion', $4, $5, $6, 0)`, 
-                        [
-                            sedeId, 
-                            item.id_producto, 
-                            usuarioId, 
-                            -cantidadARestar, // Negativo porque sale
-                            stockFinalIngrediente, 
-                            `Usado en Combo: ${nombre} (x${stockInicial})`
-                        ]
-                    );
-                }
+                // 🔥 CORRECCIÓN: ELIMINADO EL BLOQUE QUE RESTABA STOCK FÍSICO.
+                // Ahora solo se guarda la definición (receta) para usarla al vender.
             }
         }
 
@@ -273,15 +248,17 @@ exports.eliminarProducto = async (req, res) => {
         client.release();
     }
 };
-// 4. ACTUALIZAR PRODUCTO (CON AJUSTE DE STOCK INTELIGENTE)
-// 4. ACTUALIZAR PRODUCTO (CORREGIDO: AHORA GUARDA EL TIPO)
+
+// 4. ACTUALIZAR PRODUCTO (VERSIÓN ROBUSTA CON LOGS PARA RECETAS)
 exports.actualizarProducto = async (req, res) => {
     const { id } = req.params;
-    // 🔥 CORRECCIÓN 1: Recibimos 'tipo' del body (antes no lo leías)
-    let { nombre, precio, categoria, costo, stock, stock_minimo, tipo } = req.body;
+    // Agregamos 'comboDetalles' al destructuring
+    let { nombre, precio, categoria, costo, stock, stock_minimo, tipo, comboDetalles } = req.body;
+    
+    console.log(`🔄 Backend Actualizando ID: ${id} | Tipo: ${tipo}`);
+    
     const sedeId = req.usuario.sede_id;
     const usuarioId = req.usuario.id;
-
     const client = await pool.connect();
 
     try {
@@ -292,7 +269,6 @@ exports.actualizarProducto = async (req, res) => {
         if (tipoLimpio === 'físico') tipoLimpio = 'fisico';
 
         // A. Actualizar Datos Globales
-        // 🔥 CORRECCIÓN 2: Agregamos "tipo_item=$5" al SQL
         await client.query(
             `UPDATE productos 
              SET nombre=$1, precio_venta=$2, categoria=$3, costo_compra=$4, tipo_item=$5 
@@ -301,7 +277,6 @@ exports.actualizarProducto = async (req, res) => {
         );
 
         // B. LÓGICA DE STOCK (MAGIA MULTI-SEDE)
-        // 1. Buscamos stock actual
         const stockActualRes = await client.query(
             `SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2`,
             [id, sedeId]
@@ -309,7 +284,6 @@ exports.actualizarProducto = async (req, res) => {
 
         let stockViejo = 0;
         if (stockActualRes.rows.length === 0) {
-            // Si lo cambiamos a físico y no tenía registro, se lo creamos en 0
             await client.query(
                 `INSERT INTO inventario_sedes (sede_id, producto_id, cantidad, stock_minimo_local) VALUES ($1, $2, 0, 5)`,
                 [sedeId, id]
@@ -318,34 +292,55 @@ exports.actualizarProducto = async (req, res) => {
             stockViejo = stockActualRes.rows[0].cantidad;
         }
 
-        // 2. Calcular diferencia
         const stockNuevo = parseInt(stock);
         const diferencia = stockNuevo - stockViejo;
 
-        // 3. Actualizar Stock y Kardex solo si cambió el número
-        // (Y si el producto sigue siendo físico, o si queremos mantener el historial aunque sea servicio)
+        // Actualizar Stock numérico
         if (diferencia !== 0) {
             await client.query(
-                `UPDATE inventario_sedes 
-                 SET cantidad = $1, stock_minimo_local = $2 
-                 WHERE producto_id = $3 AND sede_id = $4`,
+                `UPDATE inventario_sedes SET cantidad = $1, stock_minimo_local = $2 WHERE producto_id = $3 AND sede_id = $4`,
                 [stockNuevo, stock_minimo, id, sedeId]
             );
 
             const tipoMov = diferencia > 0 ? 'ajuste_positivo' : 'ajuste_negativo';
-            const motivo = 'Ajuste Manual (Edición)';
-
             await client.query(
                 `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-                [sedeId, id, usuarioId, tipoMov, diferencia, stockNuevo, motivo, costo]
+                [sedeId, id, usuarioId, tipoMov, diferencia, stockNuevo, 'Ajuste Manual (Edición)', costo]
             );
         } else {
-            // Actualizar solo el mínimo
             await client.query(
                 `UPDATE inventario_sedes SET stock_minimo_local = $1 WHERE producto_id = $2 AND sede_id = $3`,
                 [stock_minimo, id, sedeId]
             );
+        }
+
+        // C. 🔥 ACTUALIZACIÓN DE RECETA (CON LOGS Y SEGURIDAD) 🔥
+        if (tipoLimpio === 'combo') {
+            console.log(`🍽️ Procesando receta para Combo ID ${id}...`);
+            
+            // 1. Borramos la receta anterior
+            await client.query('DELETE FROM productos_combo WHERE producto_padre_id = $1', [id]);
+
+            // 2. Insertamos la nueva receta
+            if (comboDetalles && Array.isArray(comboDetalles) && comboDetalles.length > 0) {
+                
+                for (const item of comboDetalles) {
+                    // Convertimos a enteros para asegurar que no sean strings vacíos
+                    const hijoId = parseInt(item.id_producto);
+                    const hijoCant = parseInt(item.cantidad);
+
+                    if (hijoId && hijoCant > 0) {
+                        await client.query(
+                            `INSERT INTO productos_combo (producto_padre_id, producto_hijo_id, cantidad) VALUES ($1, $2, $3)`,
+                            [id, hijoId, hijoCant]
+                        );
+                    }
+                }
+                console.log(`✅ Receta actualizada con ${comboDetalles.length} items.`);
+            } else {
+                console.warn("⚠️ Receta vacía o inválida recibida en Backend.");
+            }
         }
 
         await client.query('COMMIT');
@@ -353,7 +348,7 @@ exports.actualizarProducto = async (req, res) => {
 
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error(err.message);
+        console.error("❌ Error en Backend:", err.message);
         res.status(500).send('Error al actualizar');
     } finally {
         client.release();

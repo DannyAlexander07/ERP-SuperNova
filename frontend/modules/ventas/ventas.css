@@ -1,9 +1,17 @@
 /* Ubicacion: SuperNova/frontend/modules/ventas/ventas.css */
 
+/* =========================================
+   ESTILOS GENERALES (Reset Básico)
+   ========================================= */
+* {
+    box-sizing: border-box;
+}
+
 /* CONTENEDOR PRINCIPAL: Pantalla completa sin scroll externo */
 .pos-container {
     display: flex;
-    height: calc(100vh - 90px);
+    /* Ajusta el 90px si tu barra de arriba es más alta o más baja */
+    height: calc(100vh - 85px); 
     gap: 25px;
     overflow: hidden;
     padding-bottom: 10px;
@@ -20,6 +28,7 @@
     padding: 25px;
     overflow: hidden;
     border: 1px solid #f3f4f6;
+    height: 100%; /* Forza a respetar la altura */
 }
 
 /* HEADER DEL CATALOGO */
@@ -28,6 +37,7 @@
     display: flex;
     flex-direction: column;
     gap: 15px;
+    flex-shrink: 0; /* Prohibido encogerse */
 }
 
 /* Barra superior con título */
@@ -156,12 +166,34 @@
 /* GRID DE PRODUCTOS */
 .products-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    /* Ajuste para que las tarjetas tengan un ancho ideal de 160px */
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 18px;
     overflow-y: auto;
     padding: 5px;
     padding-right: 10px;
     align-content: flex-start;
+    flex: 1; /* Ocupa el espacio restante */
+    min-height: 0; /* Truco vital para scroll en flex */
+    padding-bottom: 40px;
+}
+
+/* Scrollbar Bonita */
+.products-grid::-webkit-scrollbar,
+.ticket-items::-webkit-scrollbar,
+#modal-cobro .modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+.products-grid::-webkit-scrollbar-thumb,
+.ticket-items::-webkit-scrollbar-thumb,
+#modal-cobro .modal-body::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 4px;
+}
+.products-grid::-webkit-scrollbar-track,
+.ticket-items::-webkit-scrollbar-track,
+#modal-cobro .modal-body::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 /* Mensaje cuando no hay productos */
@@ -189,19 +221,21 @@
     color: #9ca3af;
 }
 
-/* TARJETA DE PRODUCTO (SOLO ICONOS) */
+/* TARJETA DE PRODUCTO */
 .product-card {
     background: #ffffff;
     border: 1px solid #e5e7eb;
     border-radius: 16px;
     cursor: pointer;
     transition: 0.25s;
-    overflow: hidden;
+    overflow: visible; /* Permite ver sombras */
     position: relative;
     padding: 14px 14px 16px;
     display: flex;
     flex-direction: column;
     gap: 10px;
+    min-height: 130px; /* Altura mínima uniforme */
+    justify-content: space-between;
 }
 .product-card:hover {
     transform: translateY(-4px);
@@ -229,22 +263,10 @@
 }
 
 /* Colores según categoría */
-.icon-bg-coffee {
-    background: rgba(249, 115, 22, 0.08);
-    color: #ea580c;
-}
-.icon-bg-ticket {
-    background: rgba(59, 130, 246, 0.08);
-    color: #2563eb;
-}
-.icon-bg-merch {
-    background: rgba(244, 114, 182, 0.10);
-    color: #db2777;
-}
-.icon-bg-arcade {
-    background: rgba(52, 211, 153, 0.10);
-    color: #059669;
-}
+.icon-bg-coffee { background: rgba(249, 115, 22, 0.08); color: #ea580c; }
+.icon-bg-ticket { background: rgba(59, 130, 246, 0.08); color: #2563eb; }
+.icon-bg-merch { background: rgba(244, 114, 182, 0.10); color: #db2777; }
+.icon-bg-arcade { background: rgba(52, 211, 153, 0.10); color: #059669; }
 
 .product-info {
     width: 100%;
@@ -300,7 +322,7 @@
     font-size: 14px;
 }
 
-/* Badge de stock bajo (opcional) */
+/* Badge de stock bajo */
 .stock-alert {
     position: absolute;
     top: 10px;
@@ -323,6 +345,8 @@
     flex-direction: column;
     border: 1px solid #e5e7eb;
     position: relative;
+    height: 100%;
+    overflow: hidden;
 }
 
 .ticket-header {
@@ -333,6 +357,7 @@
     align-items: center;
     background: #f9fafb;
     border-radius: 20px 20px 0 0;
+    flex-shrink: 0;
 }
 
 .ticket-title {
@@ -372,24 +397,7 @@
     overflow-y: auto;
     padding: 20px;
     background: #ffffff;
-}
-
-/* Estado vacio */
-.empty-cart-msg {
-    text-align: center;
-    color: #d1d5db;
-    margin-top: 60px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-.empty-cart-msg i {
-    font-size: 60px;
-    margin-bottom: 10px;
-}
-.empty-cart-msg p {
-    font-size: 15px;
-    font-weight: 500;
+    min-height: 0;
 }
 
 /* ITEM EN TICKET */
@@ -403,14 +411,8 @@
     animation: slideIn 0.2s ease-out;
 }
 @keyframes slideIn {
-    from {
-        opacity: 0;
-        transform: translateX(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
+    from { opacity: 0; transform: translateX(10px); }
+    to { opacity: 1; transform: translateX(0); }
 }
 
 .item-info h4 {
@@ -472,6 +474,7 @@
     background: #f9fafb;
     border-top: 2px dashed #e5e7eb;
     border-radius: 0 0 20px 20px;
+    flex-shrink: 0;
 }
 
 .summary-row {
@@ -516,9 +519,9 @@
     box-shadow: 0 10px 24px rgba(22, 163, 74, 0.45);
 }
 
-/* BOTON FLOTANTE VER CARRITO (SOLO MOVIL) */
+/* BOTON FLOTANTE VER CARRITO (SOLO MOVIL/TABLET) */
 .float-cart-btn {
-    display: none;
+    display: none; /* Por defecto oculto en escritorio */
     position: fixed;
     bottom: 20px;
     right: 20px;
@@ -540,15 +543,11 @@
 }
 
 @keyframes bounce {
-    0%, 100% {
-        transform: translateY(0);
-    }
-    50% {
-        transform: translateY(-5px);
-    }
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
 }
 
-/* MODAL DE COBRO (solo ajustes de monto y cards de pago) */
+/* MODAL DE COBRO (ESTILOS Y DETALLES) */
 .total-amount-display {
     text-align: center;
     font-size: 40px;
@@ -603,8 +602,7 @@
     color: var(--primary-color);
 }
 
-/* ==== ESTILOS ESPECÍFICOS DEL MODAL DE COBRO (DNI/RUC + BOTÓN) ==== */
-
+/* ESTILOS DE INPUTS DEL MODAL */
 .pos-container .input-group {
     position: relative;
     width: 100%;
@@ -621,10 +619,6 @@
     outline: none;
     transition: 0.25s;
     color: #111827;
-}
-
-.pos-container .input-group input::placeholder {
-    color: transparent; /* no texto de placeholder, solo para el truco del label flotante */
 }
 
 .pos-container .input-group input:focus {
@@ -647,7 +641,6 @@
     padding: 0 4px;
 }
 
-/* Cuando el input tiene foco o texto */
 .pos-container .input-group input:focus + label,
 .pos-container .input-group input:not(:placeholder-shown) + label {
     top: 8px;
@@ -657,387 +650,428 @@
     background: #ffffff;
 }
 
-.pos-container .btn-primary {
-    border: none;
-    border-radius: 14px;
-    background: linear-gradient(135deg, var(--primary-color) 0%, #4f46e5 100%);
-    color: #ffffff;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 12px 18px;
-    font-size: 14px;
-    font-weight: 700;
-    cursor: pointer;
-    gap: 8px;
-    transition: 0.25s;
-    box-shadow: 0 8px 22px rgba(129, 140, 248, 0.35);
-}
-
-.pos-container .btn-primary.full-width {
-    width: 100%;
-}
-
-.pos-container .btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 12px 30px rgba(129, 140, 248, 0.45);
-}
-
-.pos-container .btn-primary:active {
-    transform: translateY(0);
-    box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4);
-}
-
-/* ===== CABECERA DEL MODAL DE COBRO (Finalizar venta) ===== */
-
-#modal-cobro .modal-content {
-    border-radius: 18px;
-    border: 1px solid #e5e7eb;
-    background: #ffffff;
-    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.25);
-    padding: 18px 20px 20px;
-}
-
-#modal-cobro .modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #e5e7eb;
-    margin-bottom: 10px;
-}
-
-#modal-cobro .modal-header h3 {
-    margin: 0;
-    font-size: 17px;
-    font-weight: 700;
-    color: #111827;
-    letter-spacing: 0.01em;
-}
-
-/* Botón de cierre redondo */
-#modal-cobro .btn-close {
-    width: 32px;
-    height: 32px;
-    border-radius: 999px;
-    border: 1px solid #e5e7eb;
-    background: #f9fafb;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    padding: 0;
-    transition: 0.2s;
-}
-
-#modal-cobro .btn-close i {
-    font-size: 18px;
-    color: #6b7280;
-}
-
-#modal-cobro .btn-close:hover {
-    background: #fee2e2;
-    border-color: #fecaca;
-}
-
-#modal-cobro .btn-close:hover i {
-    color: #b91c1c;
-}
-
-/* Ajuste extra para input DNI/RUC y separación con el botón */
-
-.pos-container .input-group {
-    position: relative;
-    width: 100%;
-    margin-top: 24px;
-    margin-bottom: 14px;   /* espacio extra antes del botón */
-}
-
-.pos-container .input-group input {
-    width: 100%;
-    /* más espacio arriba para que el texto no choque con el label */
-    padding: 20px 14px 8px;
-    border-radius: 12px;
-    border: 2px solid #e5e7eb;
-    background: #f9fafb;
-    font-size: 14px;
-    outline: none;
-    transition: 0.25s;
-    color: #111827;
-}
-
-.pos-container .input-group input::placeholder {
-    color: transparent;
-}
-
-/* Label inicial centrado verticalmente */
-.pos-container .input-group label {
-    position: absolute;
-    left: 14px;
-    top: 50%;
-    transform: translateY(-50%);
+/* ESTILOS BOTÓN BOLETA/FACTURA */
+.comprobante-btn {
+    transition: all 0.2s ease;
     font-size: 13px;
-    color: #9ca3af;
-    pointer-events: none;
-    transition: 0.2s;
-    padding: 0 4px;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+.comprobante-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+input[type="radio"]:checked + .comprobante-btn {
+    transform: translateY(1px);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
 }
 
-/* Cuando hay texto o foco, el label sube más y ya no tapa el contenido */
-.pos-container .input-group input:focus + label,
-.pos-container .input-group input:not(:placeholder-shown) + label {
-    top: 6px;                 /* más arriba */
-    transform: translateY(0);
-    font-size: 11px;
-    color: var(--primary-color);
-    background: #ffffff;
+/* ANIMACIONES DEL MODAL */
+#campos-factura { animation: fadeInDown 0.3s ease-out; }
+#opciones-tarjeta { animation: fadeIn 0.3s ease-out; }
+#opciones-tarjeta label { transition: 0.2s; padding: 8px; border-radius: 6px; }
+#opciones-tarjeta label:hover { background: rgba(22, 101, 52, 0.1); }
+
+@keyframes fadeInDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+    from { opacity: 0; } to { opacity: 1; }
 }
 
-/* Un poco de aire entre el input y el botón */
-.pos-container .btn-primary {
-    margin-top: 8px;
-}
 /* =======================================================
-   MISSING LINK: EL MOTOR DE LA VENTANA EMERGENTE
-   (Agrega esto al final de tu archivo CSS)
+   MOTOR DEL MODAL (Overlay) - CORREGIDO
    ======================================================= */
-
 .modal-overlay {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.6); /* Fondo oscuro */
-    backdrop-filter: blur(4px);      /* Efecto borroso profesional */
-    z-index: 2000;                   /* Por encima de todo */
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
     
-    /* ESTADO INICIAL: OCULTO */
+    /* 🔥 CORRECCIÓN: Z-Index debe ser mayor que el del ticket (3000) */
+    z-index: 4000 !important; 
+    
     display: none;
     opacity: 0;
     transition: opacity 0.3s ease;
-    
-    /* Centrar el contenido */
     align-items: center;
     justify-content: center;
 }
-
-/* ESTADO ACTIVO: VISIBLE (Esto se activa con JS al dar click en Cobrar) */
-.modal-overlay.active {
-    display: flex;
-    opacity: 1;
-}
-
-/* Animación de entrada suave para la cajita blanca */
+.modal-overlay.active { display: flex !important; opacity: 1; }
 .modal-overlay.active .modal-content {
     animation: modalSlideIn 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
 }
-
 @keyframes modalSlideIn {
-    from {
-        opacity: 0;
-        transform: translateY(30px) scale(0.95);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-} 
-
-
-/* --- RESPONSIVE TOTAL (TABLET Y MOVIL) --- */
-@media (max-width: 1024px) {
-    .products-grid {
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    }
+    from { opacity: 0; transform: translateY(30px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-@media (max-width: 768px) {
+/* =================================================================
+   CORRECCIONES VISUALES MODAL (Botones y Scroll)
+   ================================================================= */
+#modal-cobro .modal-content {
+    border-radius: 18px;
+    border: 1px solid #e5e7eb;
+    background: #ffffff;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.25);
+    padding: 0;
+    max-height: 90vh; /* Máximo 90% altura */
+    display: flex;
+    flex-direction: column;
+    width: 500px; /* Ancho fijo desktop */
+    max-width: 95%; /* Móvil */
+    overflow: hidden;
+}
+
+#modal-cobro .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 15px 20px;
+    border-bottom: 1px solid #e5e7eb;
+    background: #fff;
+    flex-shrink: 0;
+}
+#modal-cobro .modal-header h3 { margin: 0; font-size: 17px; font-weight: 700; color: #111827; }
+
+/* Botón cerrar modal */
+#modal-cobro .btn-close {
+    width: 32px; height: 32px; border-radius: 999px;
+    border: 1px solid #e5e7eb; background: #f9fafb;
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; padding: 0; transition: 0.2s;
+}
+#modal-cobro .btn-close:hover { background: #fee2e2; border-color: #fecaca; color: #b91c1c; }
+
+/* Cuerpo con Scroll */
+#modal-cobro .modal-body {
+    overflow-y: auto;
+    padding: 20px;
+    flex: 1;
+}
+
+/* Pie fijo */
+#modal-cobro .modal-footer {
+    padding: 15px 20px;
+    border-top: 1px solid #e5e7eb;
+    background: #f9fafb;
+    flex-shrink: 0;
+}
+
+/* Botón Confirmar Azul */
+.btn-primary, #modal-cobro .btn-primary {
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+    color: #ffffff !important;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 20px; font-size: 16px; font-weight: 700;
+    cursor: pointer; gap: 8px; transition: all 0.25s ease;
+    box-shadow: 0 8px 20px rgba(79, 70, 229, 0.3);
+    width: 100%; height: 50px;
+}
+.btn-primary:hover, #modal-cobro .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 25px rgba(79, 70, 229, 0.45);
+}
+
+/* =======================================================
+   📱 RESPONSIVE MEJORADO (TABLET Y MÓVIL)
+   Este bloque maneja que se vea bien en iPad
+   ======================================================= */
+
+/* 1. TABLETS Y MÓVILES (Hasta 1100px) 
+   Esto incluye iPads, Tablets Android y Celulares */
+@media (max-width: 1100px) {
+    
+    /* El contenedor principal deja de ser fila y se adapta */
     .pos-container {
         flex-direction: column;
-        height: auto;
-        overflow: visible;
-        padding-bottom: 80px;
+        height: auto !important; /* Altura automática para permitir scroll */
+        overflow: visible !important;
+        padding-bottom: 90px; /* Espacio abajo para que el botón flotante no tape productos */
     }
 
+    /* --- CATÁLOGO (IZQUIERDA) --- */
+    .pos-catalog {
+        width: 100%;
+        height: auto !important;
+        border-right: none;
+        border-radius: 0;
+        box-shadow: none;
+        padding: 15px;
+        overflow: visible !important;
+    }
+
+    /* Grilla de productos: Se ajusta mejor al ancho */
+    .products-grid {
+        /* Ajuste responsivo automático */
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 15px;
+        padding-bottom: 20px;
+        height: auto !important; /* Permite que la lista crezca */
+        overflow: visible !important;
+    }
+
+    /* --- TICKET / CARRITO (DERECHA) --- */
+    /* Por defecto OCULTO en tablets y móviles */
     .pos-ticket {
-        display: none;
+        display: none; 
         position: fixed;
         top: 0;
         right: 0;
         width: 100%;
         height: 100%;
-        z-index: 3000;
+        z-index: 3000; /* Encima de todo */
+        background: #ffffff;
+        flex-direction: column;
         border-radius: 0;
-    }
-    .pos-ticket.active {
-        display: flex;
+        border: none;
+        
+        /* Animación suave al aparecer */
+        animation: slideUp 0.3s ease-out;
     }
 
+    /* Esta clase se agrega con JS cuando tocas el botón flotante */
+    .pos-ticket.active {
+        display: flex !important;
+    }
+
+    /* Ajustes del encabezado del ticket */
+    .ticket-header {
+        padding: 15px 20px;
+        background: #fff;
+        border-bottom: 1px solid #eee;
+        flex-shrink: 0;
+    }
+
+    /* Botón X para CERRAR el carrito (Vital para poder volver a comprar) */
+    .close-ticket-mobile {
+        display: flex !important; /* Forzamos que se vea */
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        color: #333;
+        background: #f3f4f6;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        cursor: pointer;
+        position: absolute; /* Lo posicionamos a la derecha */
+        right: 15px;
+        top: 15px;
+    }
+
+    /* Mostrar el botón flotante (Carrito azul abajo) */
     .float-cart-btn {
         display: flex;
     }
+}
 
+/* 2. MÓVILES PEQUEÑOS (Pantallas < 480px) */
+@media (max-width: 480px) {
+    /* Forzamos 2 columnas de productos para que se vea ordenado */
     .products-grid {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 12px;
+        grid-template-columns: repeat(2, 1fr); 
+        gap: 10px;
     }
-
-    .ticket-header {
-        justify-content: center;
-        position: relative;
+    
+    .catalog-title-bar h2 {
+        font-size: 18px;
     }
-    .close-ticket-mobile {
-        position: absolute;
-        right: 20px;
-        font-size: 24px;
-        cursor: pointer;
-        display: block !important;
+    
+    /* El ticket ocupa toda la pantalla sin bordes */
+    .pos-ticket {
+        width: 100%;
+        height: 100%;
     }
-
-    .catalog-title-bar {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-    .catalog-meta {
-        justify-content: flex-start;
+    
+    /* El modal de cobro ocupa todo */
+    #modal-cobro .modal-content {
+        width: 100%;
+        height: 100%;
+        border-radius: 0;
+        max-height: 100vh;
     }
 }
 
-/* Ocultar boton cerrar ticket en PC */
-.close-ticket-mobile {
-    display: none;
-}
-/* =========================================
-   🚨 CORRECCIONES DE SCROLL (PEGAR AL FINAL)
-   ========================================= */
-
-/* 1. Aseguramos que la columna izquierda ocupe el 100% del alto */
-.pos-catalog {
-    height: 100%;       /* Forza a respetar la altura del contenedor padre */
-    overflow: hidden;   /* Oculta lo que se salga del borde redondeado */
-}
-
-/* 2. La cabecera (buscador/tabs) NO debe encogerse nunca */
-.catalog-header {
-    flex-shrink: 0; /* Esto evita que se aplaste si hay poco espacio */
-}
-
-/* 3. La grilla de productos ocupa el espacio sobrante y hace scroll */
-.products-grid {
-    flex: 1;              /* Ocupa todo el espacio disponible debajo del header */
-    overflow-y: auto;     /* Activa el scroll vertical */
-    min-height: 0;        /* Truco vital para que el scroll funcione en Flexbox */
-    padding-bottom: 20px; /* Espacio extra al final para que no se corte el último */
-}
-
-/* 4. Arreglar también el scroll del Ticket (Derecha) */
-.pos-ticket {
-    height: 100%;
-    overflow: hidden; 
-}
-
-.ticket-items {
-    flex: 1;             /* Ocupa el espacio entre el header y el total */
-    overflow-y: auto;    /* Scroll si la lista es larga */
-    min-height: 0;
-}
-
-/* 5. Estilizar la barra de scroll (Para que se vea elegante) */
-.products-grid::-webkit-scrollbar,
-.ticket-items::-webkit-scrollbar {
-    width: 6px;
-}
-
-.products-grid::-webkit-scrollbar-thumb,
-.ticket-items::-webkit-scrollbar-thumb {
-    background-color: #cbd5e1; /* Gris suave */
-    border-radius: 4px;
-}
-
-.products-grid::-webkit-scrollbar-track,
-.ticket-items::-webkit-scrollbar-track {
-    background: transparent;
+/* Animación para que el carrito suba como una app nativa */
+@keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
 }
 
 /* =======================================================
-   🚨 PARCHE DE CORRECCIÓN VISUAL Y SCROLL (PEGAR AL FINAL)
+   📱 RESPONSIVE MEJORADO (TABLET Y MÓVIL)
+   Pega esto AL FINAL de ventas.css (Borrando lo anterior responsive)
    ======================================================= */
 
-/* 1. RESET CRÍTICO: Evita que los paddings rompan el tamaño */
-* {
-    box-sizing: border-box;
-}
-
-/* 2. AJUSTE DEL CONTENEDOR PRINCIPAL */
-.pos-container {
-    /* Ajusta el 90px si tu barra de arriba es más alta o más baja */
-    height: calc(100vh - 85px) !important; 
-    overflow: hidden; /* Mantiene todo dentro de la pantalla */
-    padding-bottom: 0 !important;
-}
-
-/* 3. COLUMNA IZQUIERDA (CATÁLOGO) */
-.pos-catalog {
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    padding: 20px !important; /* Reduje un poco el padding para ganar espacio */
-    overflow: hidden !important; 
-}
-
-/* 4. CABECERA (BUSCADOR) FIJA */
-.catalog-header {
-    flex-shrink: 0 !important; /* Prohibido encogerse */
-    margin-bottom: 15px !important;
-}
-
-/* 5. ZONA DE PRODUCTOS (SCROLL ACTIVADO) */
-.products-grid {
-    flex: 1 !important;           /* Ocupa TODO el espacio sobrante */
-    overflow-y: auto !important;  /* Activa el Scroll Vertical */
-    min-height: 0 !important;     /* Truco vital para Flexbox */
+/* TABLETS Y MÓVILES (Hasta 1100px) - Modo "App Táctil" */
+@media (max-width: 1100px) {
     
-    /* Mejoras visuales de la grilla */
-    padding: 5px 5px 40px 5px !important; /* 40px abajo para que el último ítem respire */
-    align-content: flex-start !important; 
-    gap: 15px !important;
+    /* El contenedor principal en columna */
+    .pos-container {
+        flex-direction: column;
+        height: auto !important;
+        overflow: visible !important;
+        padding-bottom: 90px; /* Espacio para el botón flotante */
+    }
+
+    /* --- CATÁLOGO (IZQUIERDA) --- */
+    .pos-catalog {
+        width: 100%;
+        height: auto !important;
+        border-right: none;
+        border-radius: 0;
+        box-shadow: none;
+        padding: 15px;
+        overflow: visible !important;
+    }
+
+    /* Grilla de productos: Se ajusta al ancho */
+    .products-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 15px;
+        padding-bottom: 20px;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    /* --- TICKET / CARRITO (DERECHA) --- */
+    /* Por defecto OCULTO */
+    .pos-ticket {
+        display: none; 
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 3000; /* Encima de todo */
+        background: #ffffff;
+        flex-direction: column;
+        border-radius: 0;
+        border: none;
+        animation: slideUp 0.3s ease-out;
+    }
+
+    /* Esta clase se agrega con JS al tocar el botón morado */
+    .pos-ticket.active {
+        display: flex !important;
+    }
+
+    .ticket-header {
+        padding: 15px 20px;
+        background: #fff;
+        border-bottom: 1px solid #eee;
+        flex-shrink: 0;
+    }
+
+    /* Botón X para CERRAR el carrito */
+    .close-ticket-mobile {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        color: #333;
+        background: #f3f4f6;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        cursor: pointer;
+        position: absolute;
+        right: 15px;
+        top: 15px;
+    }
+
+    /* Mostrar el botón flotante */
+    .float-cart-btn {
+        display: flex;
+    }
 }
 
-/* 6. CORRECCIÓN DE TARJETAS CORTADAS */
-.product-card {
-    height: auto !important;      /* Deja que la tarjeta crezca según su texto */
-    min-height: 130px;            /* Altura mínima para uniformidad */
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    padding-bottom: 12px !important; /* Espacio interno extra abajo */
-    overflow: visible !important;    /* Permite ver sombras y badges */
+/* MÓVILES PEQUEÑOS (< 480px) */
+@media (max-width: 480px) {
+    .products-grid {
+        grid-template-columns: repeat(2, 1fr); /* 2 columnas fijas */
+        gap: 10px;
+    }
+    
+    .catalog-title-bar h2 { font-size: 18px; }
+    
+    #modal-cobro .modal-content {
+        width: 100%;
+        height: 100%;
+        border-radius: 0;
+        max-height: 100vh;
+    }
 }
 
-/* 7. ARREGLO DEL TICKET (DERECHA) */
-.pos-ticket {
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    overflow: hidden !important;
+@keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
 }
 
-.ticket-items {
-    flex: 1 !important;
-    overflow-y: auto !important;
-    padding-bottom: 20px; /* Espacio al final de la lista */
+/* =======================================================
+   ESTILOS PARA INPUTS DEL MODAL (DNI, RUC, NOMBRE)
+   Pega esto al final de ventas.css
+   ======================================================= */
+
+/* Contenedor del input para controlar posición */
+#modal-cobro .input-group {
+    position: relative;
+    width: 100%;
+    margin-bottom: 15px; /* Espacio debajo del input */
+    margin-top: 5px;
 }
 
-/* 8. SCROLLBAR MODERNA (Estética) */
-.products-grid::-webkit-scrollbar,
-.ticket-items::-webkit-scrollbar {
-    width: 8px;
+/* Estilo de la caja de texto (Input) */
+#modal-cobro .input-group input {
+    width: 100%;
+    height: 50px; /* Altura cómoda para el dedo */
+    padding: 22px 15px 6px; /* Espacio interno (Arriba más espacio para el label) */
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    background-color: #f8fafc;
+    font-size: 15px;
+    color: #1e293b;
+    outline: none;
+    transition: all 0.2s ease-in-out;
+    box-sizing: border-box; /* Vital para que no se salga del borde */
 }
-.products-grid::-webkit-scrollbar-thumb,
-.ticket-items::-webkit-scrollbar-thumb {
-    background-color: #cbd5e1;
-    border-radius: 4px;
-    border: 2px solid #fff; /* Borde blanco para separarlo */
+
+/* Efecto al seleccionar (Focus) */
+#modal-cobro .input-group input:focus {
+    border-color: #6366f1; /* Color primario (Azul/Morado) */
+    background-color: #ffffff;
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+}
+
+/* Estilo del Label (Texto "DNI / Cliente...") */
+#modal-cobro .input-group label {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%); /* Centrado verticalmente */
+    font-size: 14px;
+    color: #94a3b8;
+    pointer-events: none; /* Permite hacer clic a través del texto */
+    transition: 0.2s all;
+    background: transparent;
+}
+
+/* ANIMACIÓN DEL LABEL FLOTANTE */
+/* Cuando el input tiene foco O tiene texto escrito... */
+#modal-cobro .input-group input:focus + label,
+#modal-cobro .input-group input:not(:placeholder-shown) + label {
+    top: 10px; /* Sube arriba */
+    font-size: 11px; /* Se hace pequeño */
+    font-weight: 700;
+    color: #6366f1; /* Se pinta del color primario */
+}
+
+/* Ajuste específico para cuando se muestra el RUC y Razón Social (Factura) */
+#campos-factura .input-group {
+    margin-bottom: 12px;
 }

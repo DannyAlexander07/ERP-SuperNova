@@ -72,7 +72,7 @@
         } catch (error) { console.error(error); }
     }
 
-    // --- RENDERIZADO ---
+// --- RENDERIZADO ---
     function renderizarTabla(datos = productosData) {
         const tbody = document.getElementById('tabla-productos-body');
         if (!tbody) return;
@@ -99,12 +99,18 @@
             let stockHtml = '';
             let mostrarBotonStock = 'none';
 
-            if (prod.tipo === 'fisico') {
+            // 🔥 CORRECCIÓN: Ahora mostramos stock real y botón (+) también para COMBOS
+            // Antes: if (prod.tipo === 'fisico')
+            if (prod.tipo === 'fisico' || prod.tipo === 'combo') {
                 mostrarBotonStock = 'inline-flex';
+                
+                // Formato visual del stock
                 if (prod.stock <= 0) stockHtml = `<span style="color:red; font-weight:bold;">🔴 Agotado</span>`;
                 else if (prod.stock <= prod.minimo) stockHtml = `<span style="color:orange; font-weight:bold;">⚠️ ${prod.stock} (Bajo)</span>`;
                 else stockHtml = `<span style="color:green; font-weight:bold;">🟢 ${prod.stock} UND</span>`;
+            
             } else {
+                // Solo para 'servicio' mostramos infinito
                 stockHtml = `<span style="color:#999;">∞</span>`;
             }
 
@@ -124,7 +130,7 @@
                 <td>S/ ${prod.precio.toFixed(2)}</td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn-action add-stock" data-id="${prod.id}" style="display:${mostrarBotonStock}; background:#dcfce7; color:#16a34a;" title="Sumar Stock"><i class='bx bx-plus-medical'></i></button>
+                        <button class="btn-action add-stock" data-id="${prod.id}" style="display:${mostrarBotonStock}; background:#dcfce7; color:#16a34a;" title="Sumar/Restar Stock"><i class='bx bx-plus-medical'></i></button>
                         <button class="btn-action edit" data-id="${prod.id}"><i class='bx bx-edit-alt'></i></button>
                         <button class="btn-action delete" data-id="${prod.id}"><i class='bx bx-trash'></i></button>
                     </div>
@@ -146,6 +152,7 @@
         // 5. Actualizar los botones de abajo
         actualizarControlesPaginacionInv(datosFiltrados.length);
     }
+
 
     function actualizarControlesPaginacionInv(totalItems) {
         const totalPaginas = Math.ceil(totalItems / filasInv) || 1;
@@ -438,13 +445,16 @@
 
     window.cerrarModalProducto = function() { document.getElementById('modal-producto').classList.remove('active'); }
 
-// --- GUARDAR PRODUCTO (Corregido: Lee solo el modal activo) ---
-// --- GUARDAR PRODUCTO (Corregido: Validación Inteligente al Editar) ---
+// --- GUARDAR PRODUCTO (CON VALIDACIÓN TOTAL DE INGREDIENTES) ---
+// --- GUARDAR PRODUCTO (VERSIÓN DEBUG PARA DETECTAR ERROR DE STOCK) ---
 window.guardarProducto = async function() {
-    const modalActivo = document.querySelector('#modal-producto.active');
-    if (!modalActivo) return alert("Error modal.");
+    console.log("🚀 Iniciando Guardado de Producto...");
 
-    const id = modalActivo.querySelector('#prod-id').value; // Si tiene ID, es EDICIÓN
+    const modalActivo = document.querySelector('#modal-producto.active');
+    if (!modalActivo) return alert("Error: No se detectó el modal activo.");
+
+    // Obtener valores
+    const id = modalActivo.querySelector('#prod-id').value; 
     const nombre = modalActivo.querySelector('#prod-nombre').value;
     const codigo = modalActivo.querySelector('#prod-codigo').value;
     const precio = modalActivo.querySelector('#prod-precio').value;
@@ -454,64 +464,73 @@ window.guardarProducto = async function() {
     const costo = modalActivo.querySelector('#prod-costo').value;
     const stockInput = modalActivo.querySelector('#prod-stock').value;
     const minimo = modalActivo.querySelector('#prod-minimo').value;
-    
+
     if(!nombre || !codigo || !precio) return alert("Faltan datos obligatorios.");
 
-    // --- Lógica de Stock ---
-    let stockIngresado = parseInt(stockInput) || 0;
-    
-    // Si estamos editando, buscamos el stock que ya tenía para calcular la diferencia
-    let stockAnterior = 0;
-    if (id) {
-        const prodOriginal = productosData.find(p => p.id == id);
-        if (prodOriginal) stockAnterior = prodOriginal.stock;
-    }
+    // --- Conversión de Datos ---
+    let stockIngresado = parseInt(stockInput);
+    if (isNaN(stockIngresado)) stockIngresado = 0;
 
-    // La cantidad que realmente vamos a "armar" ahora (solo si sube el stock)
-    const cantidadAArmar = (id) ? (stockIngresado - stockAnterior) : stockIngresado;
+    console.log(`📊 Datos: Tipo=${tipo}, StockDeseado=${stockIngresado}, ItemsEnReceta=${comboDetallesTemp.length}`);
 
-    // --- 🔥 VALIDACIÓN MATEMÁTICA 🔥 ---
-    // Solo validamos si estamos creando stock nuevo (cantidadAArmar > 0)
-    if (tipo === 'combo' && cantidadAArmar > 0) {
+    // --- 🔥 VALIDACIÓN DE STOCK (CON LOGS) 🔥 ---
+    if (tipo === 'combo' && stockIngresado > 0) {
         
-        if (comboDetallesTemp.length === 0) return alert("⚠️ La receta del combo está vacía. Cárgala o agrégale ingredientes.");
+        if (comboDetallesTemp.length === 0) return alert("⚠️ La receta del combo está vacía.");
 
         for (const itemReceta of comboDetallesTemp) {
-            // Buscamos el ingrediente en el almacén
-            const productoReal = productosData.find(p => p.id === itemReceta.id_producto);
+            // Forzamos conversión a número para evitar error de texto vs numero
+            const idIngrediente = parseInt(itemReceta.id_producto);
             
+            // Buscamos en la memoria
+            const productoReal = productosData.find(p => p.id === idIngrediente);
+
+            console.log(`🔍 Verificando Ingrediente: ${itemReceta.nombre} (ID: ${idIngrediente})`);
+
             if (productoReal) {
-                // Cuántos combos ADICIONALES puedo armar con el stock actual del ingrediente
-                const maximoAdicional = Math.floor(productoReal.stock / itemReceta.cantidad);
-                
-                if (cantidadAArmar > maximoAdicional) {
+                const totalNecesario = stockIngresado * itemReceta.cantidad;
+                const stockDisponible = parseInt(productoReal.stock);
+
+                console.log(`   👉 Necesito: ${totalNecesario} | Tengo: ${stockDisponible}`);
+
+                if (stockDisponible < totalNecesario) {
+                    console.error("❌ BLOQUEO POR STOCK INSUFICIENTE DETECTADO");
                     return alert(
-                        `❌ STOCK INSUFICIENTE PARA AUMENTAR\n\n` +
-                        `Estás intentando sumar +${cantidadAArmar} combos.\n` +
-                        `Pero el ingrediente "${itemReceta.nombre}" solo alcanza para +${maximoAdicional}.\n\n` +
-                        `📉 Stock actual ingrediente: ${productoReal.stock}`
+                        `❌ STOCK INSUFICIENTE\n\n` +
+                        `Ingrediente: ${itemReceta.nombre}\n` +
+                        `Necesitas: ${totalNecesario}\n` +
+                        `Tienes: ${stockDisponible}\n\n` +
+                        `No se puede guardar el combo.`
                     );
                 }
+            } else {
+                console.error(`❌ El ingrediente ID ${idIngrediente} no se encontró en productosData.`);
+                // Esto pasa si el ingrediente está inactivo o no cargó en la lista inicial
+                return alert(`Error crítico: El ingrediente "${itemReceta.nombre}" no aparece en el inventario activo.`);
             }
         }
+    } else {
+        console.log("ℹ️ Saltando validación estricta (No es combo o Stock es 0)");
     }
-    // ------------------------------------------------------------
 
-    // Inferir Línea de Negocio
+    // --- Preparar Objeto para Backend ---
     let lineaNegocioCalculada = 'CAFETERIA'; 
     const catUpper = categoria.toUpperCase();
     if (catUpper.includes('ENTRADA') || catUpper.includes('TICKET')) lineaNegocioCalculada = 'TAQUILLA';
-    else if (catUpper.includes('MERCH')) lineaNegocioCalculada = 'MERCH';
-    else if (catUpper.includes('EVENTO')) lineaNegocioCalculada = 'EVENTO';
+    else if (catUpper.includes('MERCH') || catUpper.includes('ROPA')) lineaNegocioCalculada = 'MERCH';
+
+    // Aseguramos que comboDetalles se envíe
+    const detallesEnviar = (tipo === 'combo') ? comboDetallesTemp : [];
+    console.log("📦 Enviando al Backend:", detallesEnviar);
 
     const formObj = {
         nombre, codigo, categoria, tipo, unidad, 
         precio: parseFloat(precio),
         costo: parseFloat(costo) || 0,
-        stock: stockIngresado, // Enviamos el stock final deseado
+        stock: stockIngresado, 
         stock_minimo: parseInt(minimo) || 0,
         imagen: getDefaultIcon(categoria),
-        comboDetalles: (tipo === 'combo') ? comboDetallesTemp : [],
+        comboDetalles: detallesEnviar, // <--- AQUÍ DEBE ESTAR LA RECETA
         lineaNegocio: lineaNegocioCalculada 
     };
 
@@ -531,14 +550,16 @@ window.guardarProducto = async function() {
         });
         
         const data = await res.json();
+        console.log("📩 Respuesta Server:", data);
+
         if(res.ok) {
             alert("✅ " + data.msg);
             cerrarModalProducto();
             await initInventario();
         } else {
-            alert("❌ Error: " + data.msg);
+            alert("❌ Error Backend: " + data.msg);
         }
-    } catch (error) { console.error(error); alert("Error conexión"); }
+    } catch (error) { console.error(error); alert("Error de conexión"); }
     finally { btnSave.innerText = txtOriginal; btnSave.disabled = false; }
 }
 

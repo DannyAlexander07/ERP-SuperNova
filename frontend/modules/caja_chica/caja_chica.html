@@ -1,0 +1,100 @@
+<div class="caja-chica-container fade-in">
+    
+    <div class="module-header">
+        <div>
+            <h2>💸 Caja Chica (Fondos Operativos)</h2>
+            <p>Control de dinero asignado a tienda para gastos menores.</p>
+        </div>
+        <div class="header-actions">
+            <select id="filtro-sede-chica" class="select-sede-admin" onchange="cargarCajaChica()" style="display:none;">
+                <option value="">Todas las Sedes</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="saldo-card-container">
+        <div class="saldo-card">
+            <div class="saldo-icon"><i class='bx bx-wallet'></i></div>
+            <div class="saldo-info">
+                <span>Saldo Disponible (Efectivo)</span>
+                <h1 id="lbl-saldo-chica">S/ 0.00</h1>
+            </div>
+        </div>
+        
+        <div class="actions-grid">
+            <button class="btn-action ingreso" onclick="abrirModalChica('INGRESO')">
+                <div class="icon-circle"><i class='bx bx-plus'></i></div>
+                <span>Ingresar Dinero</span>
+                <small>Reposición / Abono</small>
+            </button>
+            <button class="btn-action gasto" onclick="abrirModalChica('GASTO')">
+                <div class="icon-circle"><i class='bx bx-minus'></i></div>
+                <span>Registrar Gasto</span>
+                <small>Pasajes, Comida, etc.</small>
+            </button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header-flex">
+            <h3>📋 Últimos Movimientos</h3>
+            <button class="btn-small" onclick="cargarCajaChica()"><i class='bx bx-refresh'></i> Actualizar</button>
+        </div>
+        
+        <div class="table-responsive">
+            <table class="premium-table">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Tipo</th>
+                        <th>Categoría</th> <th>Descripción</th>
+                        <th>Monto</th>
+                        <th>Responsable</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-chica-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="modal-chica" class="modal-overlay">
+        <div class="modal-content center-modal">
+            <div class="modal-header">
+                <h3 id="modal-chica-titulo">Registrar</h3>
+                <button class="btn-close" onclick="cerrarModalChica()"><i class='bx bx-x'></i></button>
+            </div>
+
+            <div class="modal-body">
+                <form id="form-chica">
+                    <input type="hidden" id="chica-tipo">
+                    
+                    <div id="tipo-badge-container" style="margin-bottom: 20px; text-align:center;">
+                        <span id="badge-tipo-movimiento" class="badge-lg"></span>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Categoría</label>
+                        <select id="chica-categoria" required>
+                            </select>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Monto (S/)</label>
+                        <input type="number" id="chica-monto" step="0.01" required placeholder="0.00" style="font-size: 18px; font-weight: bold;">
+                    </div>
+
+                    <div class="input-group">
+                        <label>Descripción / Detalle</label>
+                        <textarea id="chica-desc" rows="2" required placeholder="Ej: Taxi a la sede central..."></textarea>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn-cancel" onclick="cerrarModalChica()">Cancelar</button>
+                        <button type="submit" class="btn-primary full-width">Guardar Movimiento</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+</div>

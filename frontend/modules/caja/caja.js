@@ -1,12 +1,12 @@
 // Ubicacion: SuperNova/frontend/modules/caja/caja.js
 
 (function() {
-    console.log("Modulo Caja Financiera Activo 💵");
+    console.log("Modulo Caja Financiera (Solo Lectura) Activo 💵");
 
     let cajaGlobal = [];
-    let listaParaExcel = [];
     let currentPage = 1;
     const ITEMS_PER_PAGE = 10;
+    let resumenGlobal = null;
     
     // Variable para guardar el filtro actual (vacío = todas o la del usuario)
     let filtroSedeActual = "";
@@ -19,7 +19,7 @@
         await cargarMovimientos();
     }
 
-    // --- 0. SEGURIDAD Y FILTROS (LÓGICA CORREGIDA) ---
+    // --- 0. SEGURIDAD Y FILTROS ---
     async function configurarFiltroAdmin() {
         const usuarioStr = localStorage.getItem('usuario') || localStorage.getItem('user');
         if (!usuarioStr) return;
@@ -27,29 +27,20 @@
         const usuario = JSON.parse(usuarioStr);
         const rol = (usuario.rol || '').toLowerCase();
         
-        // 🔥 CORRECCIÓN: Agregamos 'superadmin' y 'gerente' a la lista VIP
         const esAdmin = rol === 'superadmin' || rol === 'admin' || rol === 'administrador' || rol === 'gerente';
         
-        console.log("Rol detectado:", rol, "| Permiso Admin:", esAdmin);
-
         const select = document.getElementById('filtro-sede-caja');
-        if (!select) return; // Si no existe el HTML, salimos sin error
+        if (!select) return; 
 
         if (esAdmin) {
-            // MOSTRAR SELECTOR
             select.style.display = 'block'; 
-            
             try {
                 const token = localStorage.getItem('token');
-                // Cargamos las sedes desde la API
                 const res = await fetch('/api/sedes', { headers: { 'x-auth-token': token } });
                 
                 if (res.ok) {
                     const sedes = await res.json();
-                    
-                    // Limpiamos y ponemos la opción default
                     select.innerHTML = '<option value="">🏢 Todas las Sedes (Global)</option>';
-                    
                     sedes.forEach(s => {
                         const opt = document.createElement('option');
                         opt.value = s.id;
@@ -57,9 +48,8 @@
                         select.appendChild(opt);
                     });
                 }
-            } catch (e) { console.error("Error de red cargando sedes", e); }
+            } catch (e) { console.error("Error cargando sedes", e); }
         } else {
-            // Si NO es admin, ocultamos
             select.style.display = 'none';
         }
     }
@@ -67,18 +57,16 @@
     // Función global para el onchange del HTML
     window.filtrarCajaPorSede = function() {
         const select = document.getElementById('filtro-sede-caja');
-        filtroSedeActual = select.value; // Capturamos el ID (ej: "1" o "")
+        filtroSedeActual = select.value; 
         
-        console.log("Filtrando por sede:", filtroSedeActual);
-
         // Recargamos todo con el nuevo filtro
         currentPage = 1;
         cargarResumen();
         cargarMovimientos();
     }
 
-// EN CAJA.JS - Reemplaza cargarResumen
-
+    // --- 1. CARGAR KPIS Y RESUMEN ---
+// --- 1. CARGAR KPIS Y RESUMEN ---
     async function cargarResumen() {
         try {
             const token = localStorage.getItem('token');
@@ -88,8 +76,9 @@
             
             if(res.ok) {
                 const data = await res.json();
-                
-                // Pinta el Balance Grande (Neto)
+                resumenGlobal = data.desglose; 
+
+                // Pintar los cuadros de arriba (Total General)
                 const setKpi = (id, valor) => {
                     const el = document.getElementById(id);
                     if(!el) return;
@@ -98,64 +87,52 @@
                     el.style.color = val >= 0 ? '#1e293b' : '#dc2626'; 
                 };
 
-                // Pinta la Cajita Roja (Suma de Gasto + Merma)
-                const setPerdida = (id, gasto, merma) => {
-                    const el = document.getElementById(id);
-                    const badge = document.getElementById('badge-' + id);
-                    if(!el) return;
-                    
-                    const total = parseFloat(gasto || 0) + parseFloat(merma || 0);
-                    el.innerText = `S/ ${total.toFixed(2)}`;
-                    
-                    // Cambiamos el texto de "Merma" a "Egresos" si hay gastos, o lo dejamos genérico
-                    // Opcional: buscar el span hermano y cambiarle el texto a "Salidas"
-                    
-                    if (total > 0) {
-                        el.style.color = '#ef4444'; 
-                        if(badge) badge.style.opacity = "1";
-                    } else {
-                        el.style.color = '#94a3b8'; 
-                        if(badge) badge.style.opacity = "0.6"; 
-                    }
-                };
-
-                // 1. BALANCES
                 setKpi('kpi-dia', data.dia);
                 setKpi('kpi-semana', data.semana);
                 setKpi('kpi-mes', data.mes);
                 setKpi('kpi-anio', data.anio);
                 
-                // 2. SALIDAS (GASTOS DE CAJA + MERMAS DE INVENTARIO)
-                setPerdida('merma-dia', data.gastos.hoy, data.mermas.hoy);
-                setPerdida('merma-semana', data.gastos.semana, data.mermas.semana);
-                setPerdida('merma-mes', data.gastos.mes, data.mermas.mes);
-                setPerdida('merma-anio', data.gastos.anio, data.mermas.anio);
+                // ❌ AQUÍ BORRASTE TODO EL BLOQUE DE 'const setPerdida' y sus llamadas
 
-                // 3. SALDO TOTAL
-                const elSaldo = document.getElementById('kpi-saldo');
-                if(elSaldo) {
-                    const saldo = parseFloat(data.saldo || 0);
-                    elSaldo.innerText = `S/ ${saldo.toFixed(2)}`;
-                    elSaldo.style.color = '#1e293b'; 
-                }
+                actualizarVistaDesglose('hoy'); 
             }
         } catch (e) { console.error("Error KPIs:", e); }
     }
+    // --- FUNCIONES PARA LAS PESTAÑAS DE DESGLOSE ---
+    window.cambiarPeriodoDesglose = function(periodo, btn) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        if(btn) btn.classList.add('active');
+        actualizarVistaDesglose(periodo);
+    }
 
-    // 2. CARGAR TABLA
+    function actualizarVistaDesglose(periodo) {
+        if (!resumenGlobal || !resumenGlobal[periodo]) return;
+
+        const datos = resumenGlobal[periodo];
+        const updateVal = (id, val) => {
+            const el = document.getElementById(id);
+            if(el) el.innerText = `S/ ${parseFloat(val || 0).toFixed(2)}`;
+        };
+
+        updateVal('val-efectivo', datos.efectivo);
+        updateVal('val-yape', datos.yape);
+        updateVal('val-plin', datos.plin);
+        updateVal('val-transferencia', datos.transferencia);
+        updateVal('val-debito', datos.debito);
+        updateVal('val-credito', datos.credito);
+    }
+
+    // --- 2. CARGAR MOVIMIENTOS (TABLA) ---
     async function cargarMovimientos() {
         try {
             const token = localStorage.getItem('token');
-            const url = `/api/caja?sede=${filtroSedeActual}`; // El backend ya filtra por sede aquí
+            const url = `/api/caja?sede=${filtroSedeActual}`; 
 
             const res = await fetch(url, { headers: { 'x-auth-token': token } });
             
             if(res.ok) {
                 const data = await res.json();
-                // Guardamos TODO lo que trajo el servidor en cajaGlobal
                 cajaGlobal = Array.isArray(data) ? data : []; 
-                
-                // Reiniciamos a página 1 al cargar nuevos datos
                 currentPage = 1; 
                 renderizarTablaCaja();
             } else {
@@ -163,6 +140,8 @@
             }
         } catch (e) { console.error(e); }
     }
+
+    // --- RENDERIZAR TABLA ---
     function renderizarTablaCaja() {
         const tbody = document.getElementById('tabla-caja-body');
         if(!tbody) return;
@@ -187,25 +166,51 @@
             const horaStr = fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             
             const esIngreso = m.tipo_movimiento === 'INGRESO';
-            const claseBadge = esIngreso ? 'badge-ingreso' : 'badge-egreso';
             const colorMonto = esIngreso ? '#16a34a' : '#dc2626';
             const signo = esIngreso ? '+' : '-';
 
-            // Agregamos el nombre de la sede si existe
-            const sedeLabel = m.nombre_sede ? `<br><small style="color:#6366f1; font-weight:600">📍 ${m.nombre_sede}</small>` : '';
+            // 1. ORIGEN / DETALLE
+            let detalleHtml = `<strong>${m.origen || 'General'}</strong>`;
+            
+            if (m.origen === 'VENTA_POS') {
+                detalleHtml += `<br><small style="color:#666">${m.descripcion || ''}</small>`;
+                if (m.tipo_comprobante) {
+                    const esFactura = m.tipo_comprobante === 'Factura';
+                    const colorDoc = esFactura ? '#4338ca' : '#4b5563';
+                    const bgDoc = esFactura ? '#e0e7ff' : '#f3f4f6';
+                    const icono = esFactura ? '🏢' : '📄';
+                    
+                    detalleHtml += `<br><span style="font-size:10px; font-weight:700; color:${colorDoc}; background:${bgDoc}; padding:2px 6px; border-radius:4px; margin-top:3px; display:inline-block; border:1px solid ${esFactura ? '#c7d2fe' : '#e5e7eb'};">
+                        ${icono} ${m.tipo_comprobante.toUpperCase()}
+                    </span>`;
+                }
+            } else {
+                detalleHtml += `<br><small style="color:#666; font-style:italic;">${m.descripcion || ''}</small>`;
+            }
+            
+            if(m.nombre_sede) {
+                detalleHtml += `<br><small style="color:#6366f1; font-weight:600">📍 ${m.nombre_sede}</small>`;
+            }
+
+            // 2. MÉTODO DE PAGO
+            let metodoHtml = m.metodo_pago;
+            if (m.metodo_pago === 'Tarjeta' && m.tipo_tarjeta) {
+                const iconoCard = m.tipo_tarjeta === 'Credito' ? '🏦' : '💳';
+                metodoHtml += `<div style="font-size:10px; color:#666; margin-top:2px;">${iconoCard} ${m.tipo_tarjeta}</div>`;
+            } else if (m.metodo_pago === 'Yape') {
+                 metodoHtml = `<span style="color:#a855f7; font-weight:600;">📱 Yape</span>`;
+            } else if (m.metodo_pago === 'Plin') {
+                 metodoHtml = `<span style="color:#0ea5e9; font-weight:600;">📱 Plin</span>`;
+            }
 
             tr.innerHTML = `
                 <td>
                     <div style="font-weight:600">${fechaStr}</div>
                     <div style="font-size:12px; color:#666">${horaStr}</div>
                 </td>
-                <td><span class="${claseBadge}">${m.tipo_movimiento}</span></td>
-                <td>
-                    <strong>${m.origen || 'General'}</strong>
-                    <br><small style="color:#666">${m.descripcion || ''}</small>
-                    ${sedeLabel}
-                </td>
-                <td>${m.metodo_pago}</td>
+                <td><span class="badge ${esIngreso ? 'badge-soft-success' : 'badge-soft-danger'}">${m.tipo_movimiento}</span></td>
+                <td>${detalleHtml}</td>
+                <td>${metodoHtml}</td>
                 <td style="font-weight:bold; font-size:15px; color:${colorMonto}">${signo} S/ ${parseFloat(m.monto).toFixed(2)}</td>
                 <td style="font-size:12px">${m.usuario}</td>
             `;
@@ -246,70 +251,17 @@
         };
     }
 
-    // 3. REGISTRAR NUEVO MOVIMIENTO
-    const form = document.getElementById('form-caja');
-    if(form) {
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const data = {
-                tipo: document.getElementById('mov-tipo').value,
-                origen: document.getElementById('mov-origen').value,
-                monto: document.getElementById('mov-monto').value,
-                metodo: document.getElementById('mov-metodo').value,
-                descripcion: document.getElementById('mov-desc').value
-            };
-
-            try {
-                const token = localStorage.getItem('token');
-                const res = await fetch('/api/caja', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-                    body: JSON.stringify(data)
-                });
-
-                if(res.ok) {
-                    alert("✅ Movimiento registrado");
-                    cerrarModalCaja();
-                    cargarResumen();
-                    cargarMovimientos();
-                } else {
-                    alert("❌ Error al registrar");
-                }
-            } catch (e) { console.error(e); }
-        });
-    }
-
-    // MODALES
-    window.abrirModalMovimiento = function() {
-        const modal = document.getElementById('modal-caja');
-        if(modal) {
-            modal.classList.add('active');
-            if(document.getElementById('form-caja')) document.getElementById('form-caja').reset();
-        }
-    }
-    window.cerrarModalCaja = function() {
-        const modal = document.getElementById('modal-caja');
-        if(modal) modal.classList.remove('active');
-    }
-
-    // --- FUNCIÓN EXPORTAR A EXCEL (DATA COMPLETA Y FILTRADA) ---
+    // --- FUNCIÓN EXPORTAR A EXCEL ---
     window.exportarTablaCaja = function() {
-        // 1. Usamos cajaGlobal que contiene TODOS los datos traídos del servidor
         let dataParaExportar = cajaGlobal; 
 
-        // 2. Validar si hay datos
         if (!dataParaExportar || dataParaExportar.length === 0) {
             return alert("No hay datos cargados en la pantalla para exportar.");
         }
 
-        // --- APLICAR FILTRO DE TEXTO (BUSCADOR) ---
-        // (El filtro de Sede NO es necesario hacerlo aquí porque el Backend YA nos mandó la lista filtrada)
-        
-        const inputBuscador = document.getElementById('search-caja'); // O el ID que tenga tu buscador
+        const inputBuscador = document.getElementById('search-caja'); 
         if (inputBuscador && inputBuscador.value.trim() !== "") {
             const texto = inputBuscador.value.toLowerCase();
-            
             dataParaExportar = dataParaExportar.filter(mov => {
                 const descripcion = (mov.descripcion || "").toLowerCase();
                 const usuario = (mov.usuario || mov.usuario_nombre || "").toLowerCase();
@@ -323,29 +275,20 @@
             });
         }
 
-        // 3. Generar CSV
         let csvContent = [];
-        csvContent.push("sep=;"); // Truco para Excel
-        
-        // Encabezados
+        csvContent.push("sep=;"); 
         csvContent.push("FECHA;HORA;TIPO;ORIGEN;DESCRIPCION;METODO;MONTO;USUARIO;SEDE");
 
         dataParaExportar.forEach(mov => {
-            // A. Formatear Fecha y Hora
             const fechaObj = new Date(mov.fecha_registro);
             const fecha = fechaObj.toLocaleDateString('es-PE');
             const hora = fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             
-            // B. Limpiar Textos
             let desc = (mov.descripcion || "").replace(/(\r\n|\n|\r)/gm, " ").replace(/;/g, ",").replace(/"/g, '""');
             let origen = (mov.origen || "General").replace(/;/g, ",");
-
-            // C. Formatear Monto
             let monto = parseFloat(mov.monto).toFixed(2);
-            // Opcional: Si es egreso ponerle negativo visualmente
             if(mov.tipo_movimiento === 'EGRESO') monto = `-${monto}`;
 
-            // D. Nombres
             let nombreUsuario = mov.usuario || mov.usuario_nombre || "-";
             let nombreSede = mov.nombre_sede || mov.sede_id || "-";
 
@@ -360,11 +303,9 @@
                 `"${nombreUsuario}"`,
                 `"${nombreSede}"`
             ];
-
             csvContent.push(row.join(";"));
         });
 
-        // 4. Descargar
         let csvString = "\uFEFF" + csvContent.join("\n");
         let blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
         let link = document.createElement("a");
@@ -374,6 +315,7 @@
         link.click();
         document.body.removeChild(link);
     }
+
     // INICIO
     initCaja();
 

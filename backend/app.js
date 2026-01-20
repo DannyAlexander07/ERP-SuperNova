@@ -40,6 +40,7 @@ app.use('/api/caja', cajaRoutes);
 app.use('/api/analitica', analiticaRoutes);
 app.use('/api/sedes', sedesRoutes);
 app.use('/backend/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/api/caja-chica', require('./routes/cajaChicaRoutes'));
 
 // --- SERVIR FRONTEND ---
 app.use(express.static(path.join(__dirname, '../frontend')));

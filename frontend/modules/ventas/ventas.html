@@ -1,9 +1,7 @@
-<!-- Ubicacion: SuperNova/frontend/modules/ventas/ventas.html -->
 <div class="pos-container">
     
     <div class="pos-catalog">
         <div class="catalog-header">
-            <!-- Nueva barra de título -->
             <div class="catalog-title-bar">
                 <div>
                     <h2>Ventas en caja</h2>
@@ -19,7 +17,6 @@
                 </div>
             </div>
 
-            <!-- Buscador -->
             <div class="search-bar">
                 <i class='bx bx-search'></i>
                 <input 
@@ -30,7 +27,6 @@
                 >
             </div>
 
-            <!-- Tabs categorías -->
             <div class="category-tabs">
                 <button class="cat-btn active" onclick="filtrarCategoriaPOS('todos', this)">Todo</button>
                 <button class="cat-btn" onclick="filtrarCategoriaPOS('Cafeteria', this)">Cafetería</button>
@@ -82,92 +78,145 @@
 
     <div class="float-cart-btn" onclick="toggleCarritoMovil()">
         <i class='bx bx-cart'></i>
-        <span id="float-total">S/ 0.00</span>
+        <span id="float-total">S/ 0.00</span> 
     </div>
+</div> 
+<div id="modal-cobro" class="modal-overlay">
+    <div class="modal-content center-modal" style="max-width: 500px;"> 
+        <div class="modal-header">
+            <h3>Finalizar venta</h3>
+            <button class="btn-close" onclick="cerrarModalCobro()">
+                <i class='bx bx-x'></i>
+            </button>
+        </div>
+        
+        <div class="modal-body">
+            <h2 class="total-amount-display" id="modal-total-display" style="font-size: 32px; color: #6366f1; margin-bottom: 20px;">S/ 0.00</h2>
 
-    <div id="modal-cobro" class="modal-overlay">
-        <div class="modal-content center-modal" style="max-width: 400px;">
-            <div class="modal-header">
-                <h3>Finalizar venta</h3>
-                <button class="btn-close" onclick="cerrarModalCobro()">
-                    <i class='bx bx-x'></i>
-                </button>
-            </div>
-            <div class="modal-body">
-                <h2 class="total-amount-display" id="modal-total-display">S/ 0.00</h2>
-                <div class="assignment-section" style="background: #f8f9fa; padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e0e0e0;">
-                    
-                    <div style="margin-bottom: 15px;">
-                        <label style="display: block; font-size: 12px; font-weight: 700; color: #555; margin-bottom: 5px; text-transform: uppercase;">
-                            <i class='bx bx-user'></i> ¿Quién realizó la venta?
-                        </label>
-                        <select id="modal-vendedor" style="width: 100%; height: 45px; padding: 0 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px; background: white; color: #333; outline: none; cursor: pointer;">
-                            <option value="" selected>Caja General (Sin asignar)</option>
-                        </select>
-                    </div>
-
-                    <div style="margin-bottom: 15px;">
-                        <label style="display: block; font-size: 12px; font-weight: 700; color: #555; margin-bottom: 5px; text-transform: uppercase;">
-                            <i class='bx bx-tag'></i> Tipo de Precio
-                        </label>
-                        <select id="modal-tipo-venta" style="width: 100%; height: 45px; padding: 0 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px; background: white; color: #333; outline: none; cursor: pointer;">
-                            <option value="Unitaria">💰 Venta Unitaria (Precio Normal)</option>
-                            <option value="Mayorista">📦 Venta Mayorista (Por Volumen)</option>
-                        </select>
-                    </div>
-
+            <div class="assignment-section" style="background: #f8fafc; padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e2e8f0;">
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
                     <div>
-                        <label style="display: block; font-size: 12px; font-weight: 700; color: #555; margin-bottom: 5px; text-transform: uppercase;">
-                            <i class='bx bx-party'></i> Convenio / Descuento
-                        </label>
-                        <select id="modal-convenio" onchange="aplicarDescuentoConvenio()" style="width: 100%; height: 45px; padding: 0 12px; border: 2px solid #695CFE; border-radius: 8px; font-size: 14px; background: #f0f4ff; color: #333; outline: none; cursor: pointer;">
-                            <option value="0" selected>Ninguno (Precio Full)</option>
-                            <option value="0.50">Convenio: Empleados (50% Off)</option>
-                            <option value="0.20">Convenio: Socios (20% Off)</option>
-                            <option value="0.10">Promo: Cumpleañero (10% Off)</option>
-                            <option value="1.00">Cortesía Total (100% Off)</option>
+                        <label style="font-size: 11px; font-weight: 700; color: #64748b; display:block; margin-bottom:4px;">VENDEDOR</label>
+                        <select id="modal-vendedor" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                            <option value="" selected>Caja General</option>
                         </select>
                     </div>
-
-                </div>
-                <div class="payment-methods-grid">
-                    <label class="method-card">
-                        <input type="radio" name="pago" value="Efectivo" checked>
-                        <div class="card-content">
-                            <i class='bx bx-money'></i>
-                            Efectivo
-                        </div>
-                    </label>
-                    <label class="method-card">
-                        <input type="radio" name="pago" value="Yape">
-                        <div class="card-content">
-                            <i class='bx bx-qr-scan'></i>
-                            Yape/Plin
-                        </div>
-                    </label>
-                    <label class="method-card">
-                        <input type="radio" name="pago" value="Tarjeta">
-                        <div class="card-content">
-                            <i class='bx bx-credit-card'></i>
-                            Tarjeta
-                        </div>
-                    </label>
+                    <div>
+                        <label style="font-size: 11px; font-weight: 700; color: #64748b; display:block; margin-bottom:4px;">TIPO PRECIO</label>
+                        <select id="modal-tipo-venta" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                            <option value="Unitaria">Normal</option>
+                            <option value="Mayorista">Mayorista</option>
+                        </select>
+                    </div>
                 </div>
 
-                <div class="input-group" style="margin-top:25px;">
-                    <input type="text" id="cliente-dni" placeholder=" ">
-                    <label>DNI / RUC Cliente (Opcional)</label>
+                <div>
+                    <label style="font-size: 11px; font-weight: 700; color: #64748b; display:block; margin-bottom:4px;">DESCUENTO / CONVENIO</label>
+                    <select id="modal-convenio" onchange="aplicarDescuentoConvenio()" style="width: 100%; padding: 8px; border: 1px solid #818cf8; border-radius: 6px; background: #e0e7ff; color: #312e81; font-weight: 600;">
+                        <option value="0" selected>Ninguno (Precio Full)</option>
+                        <option value="0.50">Convenio: Empleados (50%)</option>
+                        <option value="0.20">Convenio: Socios (20%)</option>
+                        <option value="0.10">Promo: Cumpleaños (10%)</option>
+                        <option value="1.00">Cortesía Total (100%)</option>
+                    </select>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button 
-                    class="btn-primary full-width" 
-                    style="height: 50px; font-size: 18px; justify-content: center;" 
-                    onclick="procesarVenta()"
-                >
-                    Confirmar pago
-                </button>
+
+            <div style="margin-bottom: 20px;">
+                <label style="font-size: 12px; font-weight: 700; color: #333; margin-bottom: 8px; display: block;">TIPO DE COMPROBANTE</label>
+                <div style="display: flex; gap: 10px;">
+                    <label style="flex: 1; cursor: pointer;">
+                        <input type="radio" name="tipo_comprobante" value="Boleta" checked onchange="toggleCamposFactura()" style="display:none;">
+                        <div class="comprobante-btn" id="btn-boleta" style="text-align:center; padding: 10px; border: 2px solid #6366f1; background: #e0e7ff; color: #6366f1; border-radius: 8px; font-weight:bold;">
+                            📄 BOLETA
+                        </div>
+                    </label>
+                    <label style="flex: 1; cursor: pointer;">
+                        <input type="radio" name="tipo_comprobante" value="Factura" onchange="toggleCamposFactura()" style="display:none;">
+                        <div class="comprobante-btn" id="btn-factura" style="text-align:center; padding: 10px; border: 1px solid #ccc; background: #fff; color: #666; border-radius: 8px; font-weight:bold;">
+                            🏢 FACTURA
+                        </div>
+                    </label>
+                </div>
             </div>
+
+            <div id="container-datos-cliente" style="margin-bottom: 20px;">
+                <div id="campo-dni">
+                    <div class="input-group">
+                        <input type="text" id="cliente-dni" placeholder=" " maxlength="15">
+                        <label>DNI / Cliente Genérico (Opcional)</label>
+                    </div>
+                </div>
+
+                <div id="campos-factura" style="display: none; background: #fff1f2; padding: 10px; border-radius: 8px; border: 1px dashed #f43f5e;">
+                    <div class="input-group" style="margin-bottom: 10px;">
+                        <input type="text" id="cliente-ruc" placeholder=" ">
+                        <label style="color: #be123c;">RUC (Obligatorio)*</label>
+                    </div>
+                    <div class="input-group" style="margin-bottom: 10px;">
+                        <input type="text" id="cliente-razon" placeholder=" ">
+                        <label>Razón Social</label>
+                    </div>
+                    <div class="input-group">
+                        <input type="text" id="cliente-direccion" placeholder=" ">
+                        <label>Dirección Fiscal</label>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <label style="font-size: 12px; font-weight: 700; color: #333; margin-bottom: 8px; display: block;">MÉTODO DE PAGO</label>
+                <div class="payment-methods-grid" style="grid-template-columns: repeat(4, 1fr); gap: 8px;">
+                    <label class="method-card">
+                        <input type="radio" name="pago" value="Efectivo" checked onchange="toggleOpcionesTarjeta()">
+                        <div class="card-content" style="padding: 10px 5px; font-size: 11px;">
+                            <i class='bx bx-money' style="font-size: 20px; margin-bottom: 4px;"></i><br>Efectivo
+                        </div>
+                    </label>
+                    <label class="method-card">
+                        <input type="radio" name="pago" value="Yape" onchange="toggleOpcionesTarjeta()">
+                        <div class="card-content" style="padding: 10px 5px; font-size: 11px;">
+                            <i class='bx bx-qr' style="font-size: 20px; margin-bottom: 4px; color:#a08fff;"></i><br>Yape
+                        </div>
+                    </label>
+                    <label class="method-card">
+                        <input type="radio" name="pago" value="Plin" onchange="toggleOpcionesTarjeta()">
+                        <div class="card-content" style="padding: 10px 5px; font-size: 11px;">
+                            <i class='bx bx-mobile-alt' style="font-size: 20px; margin-bottom: 4px; color:#3fc8f4;"></i><br>Plin
+                        </div>
+                    </label>
+                    <label class="method-card">
+                        <input type="radio" name="pago" value="Tarjeta" onchange="toggleOpcionesTarjeta()">
+                        <div class="card-content" style="padding: 10px 5px; font-size: 11px;">
+                            <i class='bx bx-credit-card' style="font-size: 20px; margin-bottom: 4px;"></i><br>Tarjeta
+                        </div>
+                    </label>
+                </div>
+
+                <div id="opciones-tarjeta" style="display: none; margin-top: 10px; background: #f0fdf4; padding: 10px; border-radius: 8px; border: 1px solid #bbf7d0;">
+                    <label style="font-size: 11px; font-weight: bold; color: #166534; display:block; margin-bottom: 5px;">TIPO DE TARJETA:</label>
+                    <div style="display: flex; gap: 10px;">
+                        <label style="flex: 1; display: flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer;">
+                            <input type="radio" name="tipo_tarjeta" value="Debito" checked> 💳 Débito
+                        </label>
+                        <label style="flex: 1; display: flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer;">
+                            <input type="radio" name="tipo_tarjeta" value="Credito"> 🏦 Crédito
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        
+        <div class="modal-footer">
+            <button 
+                class="btn-primary full-width" 
+                style="height: 50px; font-size: 18px; justify-content: center;" 
+                onclick="procesarVenta()"
+            >
+                Confirmar e Imprimir
+            </button>
         </div>
     </div>
 </div>

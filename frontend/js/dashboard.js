@@ -35,7 +35,15 @@ const menuItems = [
     { id: 'calendario', icon: 'bx-calendar-event', text: 'Calendario', roles: ['superadmin', 'admin', 'colaborador', 'gerente'] },
     { id: 'ventas', icon: 'bx-cart-alt', text: 'Ventas', roles: ['superadmin', 'admin', 'colaborador', 'gerente'] },
     { id: 'historial', icon: 'bx-history', text: 'Historial Ventas', roles: ['superadmin', 'admin', 'gerente'] },
+    
+    // 💰 AQUÍ ESTÁ EL FLUJO DE CAJA GENERAL (EXISTENTE)
     { id: 'caja', icon: 'bx-wallet', text: 'Flujo de Caja', roles: ['superadmin', 'admin', 'gerente'] },
+
+    // 🔥 NUEVO: CAJA CHICA (FONDOS A RENDIR)
+    // Nota: El ID 'caja_chica' debe coincidir con el nombre de tu carpeta y archivos (caja_chica.html)
+    // He agregado 'colaborador' para que el Jefe de Tienda pueda entrar.
+    { id: 'caja_chica', icon: 'bx-wallet-alt', text: 'Caja Chica', roles: ['superadmin', 'admin', 'gerente', 'colaborador'] },
+
     { id: 'inventario', icon: 'bx-box', text: 'Inventario', roles: ['superadmin', 'admin', 'colaborador', 'logistica', 'gerente'] },
     { id: 'proveedores', icon: 'bx-store-alt', text: 'Proveedores', roles: ['superadmin', 'admin', 'logistica', 'gerente'] },
     { id: 'facturas', icon: 'bx-receipt', text: 'Facturas', roles: ['superadmin', 'admin', 'gerente'] },

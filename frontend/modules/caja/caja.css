@@ -254,3 +254,76 @@
     .form-row { display: flex; flex-direction: column; gap: 0; }
     .modal-content.center-modal { width: 95%; max-width: none; }
 }
+
+/* PANEL DE DESGLOSE */
+.desglose-container {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 25px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.04);
+    border: 1px solid #e2e8f0;
+}
+.desglose-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px; }
+.desglose-title { display: flex; align-items: center; gap: 12px; }
+.desglose-title i { font-size: 28px; color: #6366f1; background: #e0e7ff; padding: 8px; border-radius: 10px; }
+.desglose-title h3 { margin: 0; font-size: 18px; color: #1e293b; }
+.desglose-title small { color: #64748b; }
+
+/* TABS */
+.period-tabs { display: flex; background: #f1f5f9; padding: 4px; border-radius: 10px; }
+.tab-btn { border: none; background: transparent; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; color: #64748b; cursor: pointer; transition: all 0.2s; }
+.tab-btn:hover { color: #333; }
+.tab-btn.active { background: #ffffff; color: #6366f1; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+
+/* GRID TARJETAS */
+.cards-methods-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }
+.method-card-detail { display: flex; align-items: center; gap: 15px; padding: 15px; border-radius: 12px; border: 1px solid #f1f5f9; transition: transform 0.2s; background: #fff; }
+.method-card-detail:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.03); }
+.method-card-detail .icon-box { width: 45px; height: 45px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+.method-card-detail .method-info span { font-size: 12px; font-weight: 600; color: #64748b; display: block; margin-bottom: 2px; }
+.method-card-detail .method-info h3 { margin: 0; font-size: 18px; color: #334155; }
+
+/* COLORES POR TIPO */
+.cash { border-left: 4px solid #22c55e; } .cash .icon-box { background: #dcfce7; color: #16a34a; }
+.yape { border-left: 4px solid #a855f7; } .yape .icon-box { background: #f3e8ff; color: #9333ea; }
+.plin { border-left: 4px solid #0ea5e9; } .plin .icon-box { background: #e0f2fe; color: #0284c7; }
+.debit { border-left: 4px solid #3b82f6; } .debit .icon-box { background: #dbeafe; color: #2563eb; }
+.credit { border-left: 4px solid #f59e0b; } .credit .icon-box { background: #fef3c7; color: #d97706; }
+.transfer { background: #fcfcfc; border-left: 4px solid #06b6d4; }
+.transfer .icon-box { background: #cffafe; color: #0891b2; }
+
+@media (max-width: 600px) {
+    .desglose-header { flex-direction: column; align-items: flex-start; }
+    .period-tabs { width: 100%; justify-content: space-between; }
+    .tab-btn { flex: 1; text-align: center; }
+}
+
+/* 1. ESTILO BASE (Para PC / Pantallas grandes) */
+.cards-methods-grid {
+    display: grid;
+    /* En PC intenta poner todas las que quepan (normalmente las 6 en una fila o 2 filas de 3) */
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 15px;
+}
+
+/* 2. TABLET (iPad/Tablets - Hasta 1100px) */
+/* 🔥 AQUÍ ESTÁ EL ARREGLO: FORZAMOS 3 COLUMNAS */
+@media (max-width: 1100px) {
+    .cards-methods-grid {
+        grid-template-columns: repeat(3, 1fr) !important;
+    }
+}
+
+/* 3. MÓVIL (Celulares - Hasta 600px) */
+/* Aquí se ven mejor 2 por fila para que no se aplasten */
+@media (max-width: 600px) {
+    .cards-methods-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    
+    /* Ajuste de fuente para que quepa en celular */
+    .method-card-detail .method-info h3 {
+        font-size: 16px; 
+    }
+}

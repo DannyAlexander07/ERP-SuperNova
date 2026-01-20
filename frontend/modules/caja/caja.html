@@ -3,17 +3,13 @@
     <div class="module-header">
         <div class="header-titles">
             <h2>💰 Flujo de Caja</h2>
-            <p>Control de ingresos, egresos y mermas en tiempo real.</p>
+            <p>Control de ingresos y balance de ventas.</p>
         </div>
         
         <div class="header-actions">
             <select id="filtro-sede-caja" class="select-sede-admin" style="display:none;" onchange="filtrarCajaPorSede()">
                 <option value="">🏢 Todas las Sedes (Global)</option>
             </select>
-
-            <button class="btn-primary" onclick="abrirModalMovimiento()">
-                <i class='bx bx-plus-circle'></i> Registrar Movimiento
-            </button>
 
             <button onclick="exportarTablaCaja()" class="btn-success">
                 <i class='bx bxs-file-export'></i> Excel
@@ -28,13 +24,7 @@
                 <div class="kpi-icon" style="background: #eff6ff; color: #3b82f6;"><i class='bx bx-calendar'></i></div>
                 <span>HOY</span>
             </div>
-            
             <h3 id="kpi-dia" class="amount-big">S/ 0.00</h3>
-            
-            <div class="merma-badge" id="badge-merma-dia">
-                <div class="merma-label"><i class='bx bx-trending-down'></i> Egresos</div>
-                <div id="merma-dia" class="merma-value">S/ 0.00</div>
-            </div>
         </div>
 
         <div class="kpi-card" style="border-left: 5px solid #8b5cf6;">
@@ -42,13 +32,7 @@
                 <div class="kpi-icon" style="background: #f5f3ff; color: #8b5cf6;"><i class='bx bx-calendar-week'></i></div>
                 <span>SEMANA</span>
             </div>
-
             <h3 id="kpi-semana" class="amount-big">S/ 0.00</h3>
-            
-            <div class="merma-badge" id="badge-merma-semana">
-                <div class="merma-label"><i class='bx bx-trending-down'></i> Egresos</div>
-                <div id="merma-semana" class="merma-value">S/ 0.00</div>
-            </div>
         </div>
 
         <div class="kpi-card" style="border-left: 5px solid #10b981;">
@@ -56,13 +40,7 @@
                 <div class="kpi-icon" style="background: #ecfdf5; color: #10b981;"><i class='bx bx-calendar-event'></i></div>
                 <span>MES</span>
             </div>
-
             <h3 id="kpi-mes" class="amount-big">S/ 0.00</h3>
-            
-            <div class="merma-badge" id="badge-merma-mes">
-                <div class="merma-label"><i class='bx bx-trending-down'></i> Egresos</div>
-                <div id="merma-mes" class="merma-value">S/ 0.00</div>
-            </div>
         </div>
 
         <div class="kpi-card" style="border-left: 5px solid #f59e0b;">
@@ -70,32 +48,78 @@
                 <div class="kpi-icon" style="background: #fffbeb; color: #f59e0b;"><i class='bx bx-calendar-star'></i></div>
                 <span>AÑO</span>
             </div>
-
             <h3 id="kpi-anio" class="amount-big">S/ 0.00</h3>
-            
-            <div class="merma-badge" id="badge-merma-anio">
-                <div class="merma-label"><i class='bx bx-trending-down'></i> Egresos</div>
-                <div id="merma-anio" class="merma-value">S/ 0.00</div>
-            </div>
         </div>
     </div>
 
-    <div class="saldo-caja-container">
-        <div style="display:flex; align-items:center; gap: 20px;">
-            <div style="width: 60px; height: 60px; background: #dbeafe; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #2563eb; font-size: 30px;">
-                <i class='bx bx-wallet'></i>
+    <div class="desglose-container fade-in">
+            <div class="desglose-header">
+                <div class="desglose-title">
+                    <i class='bx bx-pie-chart-alt-2'></i>
+                    <div>
+                        <h3>Desglose por Medio de Pago</h3>
+                        <small>Balance neto de ventas</small>
+                    </div>
+                </div>
+                
+                <div class="period-tabs">
+                    <button class="tab-btn active" onclick="cambiarPeriodoDesglose('hoy', this)">Hoy</button>
+                    <button class="tab-btn" onclick="cambiarPeriodoDesglose('semana', this)">Semana</button>
+                    <button class="tab-btn" onclick="cambiarPeriodoDesglose('mes', this)">Mes</button>
+                    <button class="tab-btn" onclick="cambiarPeriodoDesglose('anio', this)">Año</button>
+                </div>
             </div>
-            <div>
-                <span style="font-size: 13px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Saldo Disponible en Caja</span>
-                <h2 id="kpi-saldo" style="margin: 0; font-size: 32px; color: #1e293b; font-weight:800;">S/ 0.00</h2>
+
+            <div class="cards-methods-grid">
+                <div class="method-card-detail cash">
+                    <div class="icon-box"><i class='bx bx-money'></i></div>
+                    <div class="method-info">
+                        <span>Efectivo (Caja)</span>
+                        <h3 id="val-efectivo">S/ 0.00</h3>
+                    </div>
+                </div>
+
+                <div class="method-card-detail yape">
+                    <div class="icon-box"><i class='bx bx-qr'></i></div>
+                    <div class="method-info">
+                        <span>Yape</span>
+                        <h3 id="val-yape">S/ 0.00</h3>
+                    </div>
+                </div>
+
+                <div class="method-card-detail plin">
+                    <div class="icon-box"><i class='bx bx-mobile-alt'></i></div>
+                    <div class="method-info">
+                        <span>Plin</span>
+                        <h3 id="val-plin">S/ 0.00</h3>
+                    </div>
+                </div>
+
+                <div class="method-card-detail debit">
+                    <div class="icon-box"><i class='bx bx-credit-card'></i></div>
+                    <div class="method-info">
+                        <span>T. Débito</span>
+                        <h3 id="val-debito">S/ 0.00</h3>
+                    </div>
+                </div>
+
+                <div class="method-card-detail credit">
+                    <div class="icon-box"><i class='bx bxs-bank'></i></div>
+                    <div class="method-info">
+                        <span>T. Crédito</span>
+                        <h3 id="val-credito">S/ 0.00</h3>
+                    </div>
+                </div>
+
+                <div class="method-card-detail transfer">
+                    <div class="icon-box"><i class='bx bx-transfer'></i></div>
+                    <div class="method-info">
+                        <span>Transferencia</span>
+                        <h3 id="val-transferencia">S/ 0.00</h3>
+                    </div>
+                </div>
             </div>
         </div>
-        <div style="text-align: right;">
-            <span style="font-size: 11px; color: #94a3b8; background:#f1f5f9; padding:5px 10px; border-radius:20px;">
-                <i class='bx bx-info-circle'></i> Efectivo acumulado histórico
-            </span>
-        </div>
-    </div>
 
     <div class="table-module-container">
         <div class="table-responsive">
@@ -114,63 +138,5 @@
             </table>
         </div>
         <div id="caja-paginacion" class="pagination-container" style="margin-top: 15px; display:flex; justify-content:flex-end;"></div>
-    </div>
-
-    <div id="modal-caja" class="modal-overlay">
-        <div class="modal-content center-modal">
-            <div class="modal-header">
-                <h3>Registrar Movimiento</h3>
-                <button class="btn-close" onclick="cerrarModalCaja()"><i class='bx bx-x'></i></button>
-            </div>
-
-            <div class="modal-body">
-                <form id="form-caja">
-                    <div class="input-group">
-                        <label class="static">Tipo de Movimiento</label>
-                        <select id="mov-tipo" required>
-                            <option value="INGRESO">🟢 Ingreso de Dinero</option>
-                            <option value="EGRESO">🔴 Salida de Dinero</option>
-                        </select>
-                    </div>
-
-                    <div class="input-group">
-                        <label class="static">Concepto</label>
-                        <select id="mov-origen">
-                            <option value="MANUAL">Ajuste Manual / Aporte</option>
-                            <option value="GASTO_CHICA">Gasto Caja Chica</option>
-                            <option value="VENTA_EXTRA">Venta Extraordinaria</option>
-                            <option value="OTROS">Otros</option>
-                        </select>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="input-group">
-                            <label>Monto (S/)</label>
-                            <input type="number" id="mov-monto" required placeholder="0.00" step="0.01">
-                        </div>
-
-                        <div class="input-group">
-                            <label class="static">Método de Pago</label>
-                            <select id="mov-metodo">
-                                <option value="EFECTIVO">Efectivo</option>
-                                <option value="YAPE">Yape / Plin</option>
-                                <option value="TRANSFERENCIA">Transferencia</option>
-                                <option value="TARJETA">Tarjeta</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="input-group">
-                        <label>Descripción</label>
-                        <input type="text" id="mov-desc" placeholder="Ej: Taxi, Almuerzo..." required>
-                    </div>
-
-                    <div class="modal-footer">
-                        <button type="button" class="btn-cancel" onclick="cerrarModalCaja()">Cancelar</button>
-                        <button type="submit" class="btn-primary">Guardar</button>
-                    </div>
-                </form>
-            </div>
-        </div>
     </div>
 </div>

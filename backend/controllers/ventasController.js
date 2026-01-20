@@ -2,9 +2,16 @@
 const pool = require('../db');
 
 // 1. REGISTRAR VENTA (ACTUALIZADO CON DESCUENTOS)
+// 1. REGISTRAR VENTA (ACTUALIZADO: Soporte para Factura, RUC y Tipo Tarjeta)
 exports.registrarVenta = async (req, res) => {
-    // 1. AÑADIDO: Recibimos 'descuento_factor' (ej: 0.20 para 20%, 0.50 para 50%)
-    const { clienteDni, metodoPago, carrito, vendedor_id, tipo_venta, observaciones, descuento_factor } = req.body;
+    // 1. DESESTRUCTURACIÓN ACTUALIZADA
+    const { 
+        clienteDni, metodoPago, carrito, vendedor_id, tipo_venta, 
+        observaciones, descuento_factor,
+        // Nuevos campos que llegan del Frontend
+        tipo_comprobante, cliente_razon_social, cliente_direccion, tipo_tarjeta
+    } = req.body;
+
     const usuarioId = req.usuario.id;
     const sedeId = req.usuario.sede_id;
 
@@ -16,10 +23,9 @@ exports.registrarVenta = async (req, res) => {
         }
 
         // Validación de seguridad para el descuento
-        const factor = parseFloat(descuento_factor) || 0; // Si no envían nada, es 0
+        const factor = parseFloat(descuento_factor) || 0; 
         if (factor < 0 || factor > 1) throw new Error("El porcentaje de descuento no es válido.");
 
-        // Si vendedor_id viene vacío, asumimos que el vendedor es el mismo cajero.
         const vendedorFinal = vendedor_id ? vendedor_id : usuarioId;
 
         await client.query('BEGIN');
@@ -36,7 +42,7 @@ exports.registrarVenta = async (req, res) => {
         const nuevoNumeroTicket = parseInt(maxTicketRes.rows[0].max_num) + 1;
         const codigoTicketVisual = `${prefijo}-${nuevoNumeroTicket.toString().padStart(4, '0')}`;
 
-        // C. PROCESAR TOTALES Y DETALLES (CON MATEMÁTICA DE DESCUENTO)
+        // C. PROCESAR TOTALES Y DETALLES
         let totalCalculado = 0;
         let detalleInsertar = [];
 
@@ -47,82 +53,96 @@ exports.registrarVenta = async (req, res) => {
             
             const prod = prodRes.rows[0];
 
-            // --- 2. AÑADIDO: APLICAR DESCUENTO AL PRECIO UNITARIO ---
-            // Precio Original * (1 - 0.50) = Precio con 50% descuento
+            // Aplicar descuento
             const precioConDescuento = prod.precio_venta * (1 - factor);
-            
             const subtotal = precioConDescuento * item.cantidad;
             totalCalculado += subtotal;
 
             detalleInsertar.push({
                 ...item,
                 nombre: prod.nombre,
-                precioReal: precioConDescuento, // Guardamos el precio YA descontado
+                precioReal: precioConDescuento,
                 costoReal: prod.costo_compra,
                 lineaProd: prod.linea_negocio,
-                subtotal // Subtotal con descuento
+                subtotal
             });
         }
 
-        // LIMPIEZA DE DECIMALES (Agrega esto para evitar errores de redondeo como 2.40000004)
         totalCalculado = Math.round(totalCalculado * 100) / 100;
 
         const subtotalFactura = totalCalculado / 1.18;
         const igvFactura = totalCalculado - subtotalFactura;
         const lineaPrincipal = detalleInsertar[0].lineaProd || 'GENERAL';
 
-        // --- 3. AÑADIDO: ACTUALIZAR OBSERVACIONES ---
-        // Si hubo descuento, lo anotamos automáticamente para que quede registro
+        // Actualizar Observaciones con datos extra si es necesario
         let obsFinal = observaciones || '';
         if (factor > 0) {
             const porcentaje = (factor * 100).toFixed(0);
-            obsFinal = `[Descuento Aplicado: ${porcentaje}%] ${obsFinal}`;
+            obsFinal = `[Descuento: ${porcentaje}%] ${obsFinal}`;
         }
 
-        // D. INSERTAR VENTA 
+        // D. INSERTAR VENTA (SQL ACTUALIZADO CON NUEVOS CAMPOS)
         const ventaRes = await client.query(
             `INSERT INTO ventas
-            (sede_id, usuario_id, vendedor_id, doc_cliente_temporal, metodo_pago, total_venta, subtotal, igv, linea_negocio, numero_ticket_sede, tipo_venta, observaciones)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+            (sede_id, usuario_id, vendedor_id, doc_cliente_temporal, metodo_pago, total_venta, subtotal, igv, linea_negocio, numero_ticket_sede, tipo_venta, observaciones,
+             tipo_comprobante, cliente_razon_social, cliente_direccion, tipo_tarjeta) -- 👈 Nuevas columnas
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) -- 👈 Nuevos parámetros
+             RETURNING id`,
             [
                 sedeId, 
                 usuarioId, 
                 vendedorFinal,
                 clienteDni || 'PUBLICO', 
                 metodoPago, 
-                totalCalculado, // Este total YA TIENE el descuento aplicado
+                totalCalculado, 
                 subtotalFactura, 
                 igvFactura, 
                 lineaPrincipal, 
                 nuevoNumeroTicket,
                 tipo_venta || 'Unitaria',
-                obsFinal // Observación actualizada
+                obsFinal,
+                // Nuevos valores para guardar
+                tipo_comprobante || 'Boleta',
+                cliente_razon_social || null,
+                cliente_direccion || null,
+                tipo_tarjeta || null
             ]
         );
         const ventaId = ventaRes.rows[0].id;
 
-        // E. GUARDAR DETALLES Y DESCONTAR STOCK (Igual que antes)
+        // E. GUARDAR DETALLES Y DESCONTAR STOCK (LÓGICA MIXTA CORREGIDA)
         for (const item of detalleInsertar) {
+            // 1. Guardar el detalle de la venta (siempre se hace)
             await client.query(
                 `INSERT INTO detalle_ventas (venta_id, producto_id, nombre_producto_historico, cantidad, precio_unitario, subtotal, costo_historico)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                 [ventaId, item.id, item.nombre, item.cantidad, item.precioReal, item.subtotal, item.costoReal]
             );
 
-            // Lógica de Combos vs Productos Simples
+            // 2. Verificar si es un Combo (tiene receta)
             const esCombo = await client.query('SELECT producto_hijo_id, cantidad FROM productos_combo WHERE producto_padre_id = $1', [item.id]);
             
             if (esCombo.rows.length > 0) {
+                // --- ES UN COMBO ---
+                
+                // A) Descontar los Ingredientes (HIJOS)
                 for (const hijo of esCombo.rows) {
                     const cantTotal = item.cantidad * hijo.cantidad;
-                    await descontarStock(client, hijo.producto_hijo_id, sedeId, cantTotal, usuarioId, codigoTicketVisual, `Combo ${item.nombre}`);
+                    // El motivo indica que fue por venta del combo padre
+                    await descontarStock(client, hijo.producto_hijo_id, sedeId, cantTotal, usuarioId, codigoTicketVisual, `Ingrediente de: ${item.nombre}`);
                 }
+
+                // B) Descontar el Combo Mismo (PADRE) - 🔥 ESTO FALTABA
+                // Esto es lo que hace que tu stock baje de 10 a 9, a 8...
+                await descontarStock(client, item.id, sedeId, item.cantidad, usuarioId, codigoTicketVisual, 'Venta de Combo');
+
             } else {
+                // --- ES UN PRODUCTO NORMAL ---
                 await descontarStock(client, item.id, sedeId, item.cantidad, usuarioId, codigoTicketVisual, 'Venta Directa');
             }
         }
 
-        // F. REGISTRAR EN CAJA (Si el total es > 0)
+        // F. REGISTRAR EN CAJA (Sin cambios)
         if (totalCalculado > 0) {
             await client.query(
                 `INSERT INTO movimientos_caja (sede_id, usuario_id, tipo_movimiento, categoria, descripcion, monto, metodo_pago, venta_id)
@@ -148,8 +168,8 @@ exports.registrarVenta = async (req, res) => {
         client.release();
     }
 };
-
 // 2. OBTENER HISTORIAL (CORREGIDO: AHORA INCLUYE OBSERVACIONES)
+// 2. OBTENER HISTORIAL (CORREGIDO: Ahora SÍ lee tipo_tarjeta y comprobante)
 exports.obtenerHistorialVentas = async (req, res) => {
     try {
         const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
@@ -165,20 +185,25 @@ exports.obtenerHistorialVentas = async (req, res) => {
                 v.metodo_pago, 
                 v.numero_ticket_sede,
                 v.tipo_venta,
-                v.observaciones,  -- 👈 ¡ESTA ES LA CLAVE! Agregamos este campo.
+                v.observaciones,
+                
+                -- 🔥 ESTO ES LO QUE FALTABA: LEER LOS CAMPOS NUEVOS
+                v.tipo_comprobante, 
+                v.tipo_tarjeta,     
+                
                 s.nombre AS nombre_sede,
                 s.prefijo_ticket,
                 
-                -- Datos del CAJERO (Quien usó el sistema)
+                -- Datos del CAJERO
                 u.nombres AS nombre_cajero,
                 
-                -- Datos del VENDEDOR (Quien hizo la venta)
+                -- Datos del VENDEDOR
                 vend.nombres AS nombre_vendedor,
                 vend.apellidos AS apellido_vendedor
 
             FROM ventas v
-            JOIN usuarios u ON v.usuario_id = u.id          -- Join para Cajero
-            LEFT JOIN usuarios vend ON v.vendedor_id = vend.id -- Join para Vendedor
+            JOIN usuarios u ON v.usuario_id = u.id          
+            LEFT JOIN usuarios vend ON v.vendedor_id = vend.id 
             JOIN sedes s ON v.sede_id = s.id
             WHERE 1=1
         `;
@@ -289,25 +314,44 @@ exports.obtenerVendedores = async (req, res) => {
 };
 
 // --- FUNCIONES AUXILIARES (STOCK) ---
-
 async function descontarStock(client, prodId, sedeId, cantidad, usuarioId, ticketCodigo, motivo) {
+    // Obtenemos datos del producto
     const prod = await client.query('SELECT controla_stock, tipo_item, nombre, costo_compra FROM productos WHERE id = $1', [prodId]);
+    
     if (prod.rows.length === 0) return;
+    
     const { controla_stock, tipo_item, costo_compra } = prod.rows[0];
     
-    if (tipo_item === 'servicio' || tipo_item === 'combo' || !controla_stock) return;
+    // 🔥 CORRECCIÓN AQUÍ:
+    // Antes tenías: if (tipo_item === 'combo') return;
+    // Ahora: Solo bloqueamos si es 'servicio' O si 'controla_stock' es falso.
+    // Si es 'combo' y tiene stock activado, PASARÁ y se descontará.
+    if (tipo_item === 'servicio' || !controla_stock) return;
 
+    // Verificar Stock Actual (Bloqueo pesimista para evitar ventas sin stock)
     const stockRes = await client.query('SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2 FOR UPDATE', [prodId, sedeId]);
     const stockActual = stockRes.rows.length > 0 ? stockRes.rows[0].cantidad : 0;
     
-    if (stockActual < cantidad) throw new Error(`Stock insuficiente: ${prod.rows[0].nombre}`);
+    if (stockActual < cantidad) {
+        throw new Error(`Stock insuficiente para: ${prod.rows[0].nombre} (Quedan: ${stockActual})`);
+    }
 
+    // Restar Stock Físico
     await client.query('UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3', [cantidad, prodId, sedeId]);
     
+    // Registrar en Kardex
     await client.query(
         `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
          VALUES ($1, $2, $3, 'salida_venta', $4, $5, $6, $7)`, 
-        [sedeId, prodId, usuarioId, -cantidad, (stockActual - cantidad), `Venta ${ticketCodigo} (${motivo})`, parseFloat(costo_compra) || 0]
+        [
+            sedeId, 
+            prodId, 
+            usuarioId, 
+            -cantidad, // Negativo
+            (stockActual - cantidad), 
+            `Venta ${ticketCodigo} (${motivo})`, 
+            parseFloat(costo_compra) || 0
+        ]
     );
 }
 
