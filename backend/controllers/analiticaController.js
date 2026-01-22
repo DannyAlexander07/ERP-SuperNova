@@ -1,8 +1,7 @@
 //Ubicación: SuperNova/backend/controllers/analiticaController.js
 const pool = require('../db');
 
-// 1. P&L Detallado (MODIFICADO: INCLUYE INGRESOS MANUALES DE CAJA)
-// 1. P&L Detallado (CORREGIDO: NETO SIN IGV)
+// 1. P&L Detallado (CORREGIDO: SEPARANDO CANJES DE MERMAS)
 exports.obtenerPyL = async (req, res) => {
     const rol = req.usuario ? req.usuario.rol.toLowerCase() : '';
     const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
@@ -17,9 +16,7 @@ exports.obtenerPyL = async (req, res) => {
     try {
         const query = `
             WITH Ingresos AS (
-                -- A. PAGOS DE EVENTOS (Aquí asumimos que el monto guardado en pagos_evento YA es neto o se maneja aparte)
-                -- Si pagos_evento también incluye IGV, deberíamos dividir entre 1.18.
-                -- Por ahora lo dejamos igual si no tienes columna 'subtotal' en esa tabla.
+                -- A. PAGOS DE EVENTOS
                 SELECT
                     e.sede_id, s.nombre AS nombre_sede, 'Eventos' AS categoria,
                     pe.monto AS ingreso, 0 AS egreso
@@ -31,7 +28,7 @@ exports.obtenerPyL = async (req, res) => {
 
                 UNION ALL
 
-                -- B. VENTAS POS (Tickets) - CORREGIDO PARA USAR NETO
+                -- B. VENTAS POS (Tickets)
                 SELECT
                     v.sede_id, s.nombre AS nombre_sede,
                     CASE 
@@ -40,8 +37,6 @@ exports.obtenerPyL = async (req, res) => {
                         WHEN UPPER(v.linea_negocio) LIKE '%MERCH%' THEN 'Merchandising'
                         ELSE 'Otros Ingresos'
                     END AS categoria,
-                    -- 🔥 CAMBIO CRÍTICO: Usamos 'subtotal' en lugar de 'total_venta'
-                    -- Esto nos da la Venta Neta (Sin IGV)
                     COALESCE(v.subtotal, v.total_venta / 1.18) AS ingreso, 
                     0 AS egreso
                 FROM ventas v
@@ -53,7 +48,6 @@ exports.obtenerPyL = async (req, res) => {
                 UNION ALL
 
                 -- C. INGRESOS MANUALES DE CAJA
-                -- Asumimos que estos ingresos manuales son directos y no desglosan IGV automáticamente
                 SELECT 
                     mc.sede_id, s.nombre AS nombre_sede, 'Ingresos Varios (Caja)' AS categoria,
                     mc.monto AS ingreso, 0 AS egreso
@@ -66,7 +60,7 @@ exports.obtenerPyL = async (req, res) => {
             ),
             
             Egresos AS (
-                -- D. MERMAS
+                -- D. MERMAS (Excluyendo Canjes)
                 SELECT
                     mi.sede_id, s.nombre AS nombre_sede, 'Mermas' AS categoria,
                     0 as ingreso, (ABS(mi.cantidad) * COALESCE(mi.costo_unitario_movimiento, 0)) as egreso
@@ -75,12 +69,25 @@ exports.obtenerPyL = async (req, res) => {
                 WHERE mi.cantidad < 0
                 AND mi.tipo_movimiento NOT ILIKE '%venta%'
                 AND mi.tipo_movimiento NOT ILIKE '%anulacion%'
+                AND mi.tipo_movimiento != 'salida_canje' -- 🔥 CAMBIO 1: EXCLUIMOS CANJES DE AQUÍ
                 AND mi.fecha >= $1::date AND mi.fecha < ($2::date + interval '1 day')
                 AND ($3::int IS NULL OR mi.sede_id = $3::int)
                 
                 UNION ALL
+
+                -- E. COSTO OPERATIVO POR CANJES (NUEVO)
+                SELECT
+                    mi.sede_id, s.nombre AS nombre_sede, 'Costo Operativo (Canjes)' AS categoria,
+                    0 as ingreso, (ABS(mi.cantidad) * COALESCE(mi.costo_unitario_movimiento, 0)) as egreso
+                FROM movimientos_inventario mi
+                JOIN sedes s ON mi.sede_id = s.id
+                WHERE mi.tipo_movimiento = 'salida_canje' -- 🔥 CAMBIO 2: CLASIFICAMOS AQUÍ
+                AND mi.fecha >= $1::date AND mi.fecha < ($2::date + interval '1 day')
+                AND ($3::int IS NULL OR mi.sede_id = $3::int)
+
+                UNION ALL
                 
-                -- E. GASTOS OPERATIVOS
+                -- F. GASTOS OPERATIVOS (Caja)
                 SELECT
                     mc.sede_id, s.nombre AS nombre_sede, 'Gastos Operativos' AS categoria,
                     0 AS ingreso, mc.monto AS egreso
@@ -95,7 +102,7 @@ exports.obtenerPyL = async (req, res) => {
 
             SELECT
                 nombre_sede, categoria,
-                ROUND(COALESCE(SUM(ingreso), 0)::numeric, 2) AS ingresos, -- Redondeamos a 2 decimales
+                ROUND(COALESCE(SUM(ingreso), 0)::numeric, 2) AS ingresos,
                 ROUND(COALESCE(SUM(egreso), 0)::numeric, 2) AS egresos,
                 ROUND((COALESCE(SUM(ingreso), 0) - COALESCE(SUM(egreso), 0))::numeric, 2) AS pnl
             FROM Todo

@@ -26,6 +26,7 @@ const ventasRoutes = require('./routes/ventasRoutes');
 const cajaRoutes = require('./routes/cajaRoutes');
 const analiticaRoutes = require('./routes/analiticaRoutes'); 
 const sedesRoutes = require('./routes/sedesRoutes');
+const tercerosRoutes = require('./routes/tercerosRoutes'); // <--- AGREGAR ESTO
 
 // --- DEFINIR ENDPOINTS API ---
 app.use('/api/auth', authRoutes);
@@ -41,6 +42,7 @@ app.use('/api/analitica', analiticaRoutes);
 app.use('/api/sedes', sedesRoutes);
 app.use('/backend/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/caja-chica', require('./routes/cajaChicaRoutes'));
+app.use('/api/terceros', tercerosRoutes); // <--- AGREGAR ESTO
 
 // --- SERVIR FRONTEND ---
 app.use(express.static(path.join(__dirname, '../frontend')));

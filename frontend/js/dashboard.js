@@ -17,9 +17,6 @@ if (userStr) {
     currentUser.name = `${nombreReal} ${apellidoReal}`.trim();
     currentUser.role = u.rol || "colaborador";
     
-    // 🚨 CORRECCIÓN CLAVE PARA LA FOTO:
-    // Si u.foto_url existe, lo usamos. Si no, usamos el default.
-    // Además, si la URL es relativa (empieza con /uploads), el navegador la encontrará.
     if (u.foto_url && u.foto_url !== "null") {
         currentUser.photoUrl = u.foto_url;
     } else {
@@ -34,14 +31,14 @@ const menuItems = [
     { id: 'inicio', icon: 'bx-grid-alt', text: 'Dashboard', roles: ['superadmin', 'admin', 'colaborador', 'gerente', 'logistica'] },
     { id: 'calendario', icon: 'bx-calendar-event', text: 'Calendario', roles: ['superadmin', 'admin', 'colaborador', 'gerente'] },
     { id: 'ventas', icon: 'bx-cart-alt', text: 'Ventas', roles: ['superadmin', 'admin', 'colaborador', 'gerente'] },
+    
+    // 🔥 NUEVO MÓDULO: CANJES / TERCEROS
+    // Lo ponemos visible para colaborador (cajeros) para que puedan validar en puerta
+    { id: 'terceros', icon: 'bx-qr-scan', text: 'Canjes / Terceros', roles: ['superadmin', 'admin', 'gerente', 'colaborador'] },
+
     { id: 'historial', icon: 'bx-history', text: 'Historial Ventas', roles: ['superadmin', 'admin', 'gerente'] },
     
-    // 💰 AQUÍ ESTÁ EL FLUJO DE CAJA GENERAL (EXISTENTE)
     { id: 'caja', icon: 'bx-wallet', text: 'Flujo de Caja', roles: ['superadmin', 'admin', 'gerente'] },
-
-    // 🔥 NUEVO: CAJA CHICA (FONDOS A RENDIR)
-    // Nota: El ID 'caja_chica' debe coincidir con el nombre de tu carpeta y archivos (caja_chica.html)
-    // He agregado 'colaborador' para que el Jefe de Tienda pueda entrar.
     { id: 'caja_chica', icon: 'bx-wallet-alt', text: 'Caja Chica', roles: ['superadmin', 'admin', 'gerente', 'colaborador'] },
 
     { id: 'inventario', icon: 'bx-box', text: 'Inventario', roles: ['superadmin', 'admin', 'colaborador', 'logistica', 'gerente'] },
@@ -57,8 +54,6 @@ const menuItems = [
 document.addEventListener('DOMContentLoaded', () => {
     initSidebar();
     renderMenu();
-    // Si estamos recargando y ya había un módulo activo, podríamos intentar recuperarlo, 
-    // pero por defecto vamos a inicio.
     loadModule('inicio'); 
 });
 
@@ -76,14 +71,11 @@ function initSidebar() {
     const profileRole = document.getElementById('sidebar-profile-role');
     const profileImg = document.getElementById('sidebar-profile-img');
 
-    // PINTAMOS DATOS
     if(profileName) profileName.innerText = currentUser.name;
     if(profileRole) profileRole.innerText = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
     
-    // AQUÍ SE ACTUALIZA LA FOTO DE LA BARRA LATERAL
     if(profileImg) {
         profileImg.src = currentUser.photoUrl;
-        // Si la imagen falla (ej: archivo borrado), ponemos default
         profileImg.onerror = function() {
             this.src = "https://cdn-icons-png.flaticon.com/512/3135/3135715.png";
         };
@@ -154,6 +146,7 @@ async function loadModule(moduleId) {
     contenedorDinamico.innerHTML = '<div style="text-align:center; padding:40px; color:#666;">Cargando...</div>';
 
     try {
+        // Carga dinámica basada en el ID (terceros -> modules/terceros/terceros.html)
         const htmlResponse = await fetch(`modules/${moduleId}/${moduleId}.html`);
         if (!htmlResponse.ok) throw new Error("Modulo no encontrado");
         
@@ -166,24 +159,30 @@ async function loadModule(moduleId) {
         currentModuleCss.href = `modules/${moduleId}/${moduleId}.css`;
         document.head.appendChild(currentModuleCss);
 
-        // Cargar JS con "cache-busting" (para forzar recarga)
+        // Cargar JS con "cache-busting"
         const jsResponse = await fetch(`modules/${moduleId}/${moduleId}.js?t=${Date.now()}`);
         if (jsResponse.ok) {
             currentModuleJs = document.createElement('script');
             currentModuleJs.src = `modules/${moduleId}/${moduleId}.js?t=${Date.now()}`;
             
-            // 🚨 NUEVA LÓGICA DE RECARGA AUTOMÁTICA
             currentModuleJs.onload = () => {
                 console.log(`Módulo ${moduleId} cargado.`);
                 
-                // Mapa de funciones de inicialización según el módulo
-                // Si el módulo expuso su función con window.initX, la llamamos aquí.
+                // 🔥 INICIALIZADORES POR MÓDULO
                 if (moduleId === 'facturas' && typeof window.initFacturas === 'function') window.initFacturas();
                 if (moduleId === 'clientes' && typeof window.initClientes === 'function') window.initClientes();
                 if (moduleId === 'analitica' && typeof window.obtenerReporteCompleto === 'function') window.obtenerReporteCompleto();
                 if (moduleId === 'historial' && typeof window.initHistorial === 'function') window.initHistorial();
                 if (moduleId === 'crm' && typeof window.initCRM === 'function') window.initCRM();
                 if (moduleId === 'inventario' && typeof window.initInventario === 'function') window.initInventario();
+                
+                // 👇 AQUÍ AGREGAMOS LA INICIALIZACIÓN DE TERCEROS
+                if (moduleId === 'terceros' && typeof window.initTerceros === 'function') {
+                    // initTerceros es interno en el IIFE, pero el script se ejecuta al cargar.
+                    // Si tu archivo terceros.js tiene el (function(){...})() al final, se ejecuta solo.
+                    // Pero si exportas funciones globales, está bien.
+                    // En el código que te pasé, terceros.js se auto-ejecuta.
+                }
             };
 
             document.body.appendChild(currentModuleJs);

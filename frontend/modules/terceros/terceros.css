@@ -1,0 +1,702 @@
+/* Ubicacion: frontend/modules/terceros/terceros.css */
+
+/* --- CONFIGURACIÓN GENERAL --- */
+.terceros-container {
+    padding: 20px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto; /* Permite scroll si el contenido es largo */
+}
+
+/* Efecto Fade In */
+.fade-in { animation: fadeIn 0.4s ease-in-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* --- ENCABEZADO --- */
+.module-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fff;
+    padding: 15px 20px;
+    border-radius: 12px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    flex-wrap: wrap; /* Para móviles */
+    gap: 15px;
+}
+
+.header-titles h2 { margin: 0; font-size: 1.5rem; color: #1e293b; }
+.header-titles p { margin: 5px 0 0; color: #64748b; font-size: 0.9rem; }
+
+/* --- TABS (PESTAÑAS) --- */
+.tabs-terceros {
+    display: flex;
+    background: #f1f5f9;
+    padding: 5px;
+    border-radius: 8px;
+    gap: 5px;
+}
+
+.tab-btn {
+    border: none;
+    background: transparent;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+}
+
+.tab-btn:hover { background: rgba(255,255,255,0.5); color: #334155; }
+
+.tab-btn.active {
+    background: #fff;
+    color: #2563eb; /* Azul corporativo */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+/* Contenido de las Pestañas */
+.tab-content { display: none; width: 100%; }
+.tab-content.active { display: block; }
+
+/* =========================================
+   VISTA 1: VALIDACIÓN (OPERATIVA)
+   ========================================= */
+.validation-wrapper {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr; /* Izquierda grande, Derecha historial */
+    gap: 25px;
+}
+
+/* Tarjeta del Escáner */
+.scanner-card {
+    background: #fff;
+    padding: 40px;
+    border-radius: 16px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 400px;
+}
+
+.scanner-card h3 { color: #1e293b; margin-bottom: 10px; font-size: 1.4rem; }
+.scanner-card p { color: #64748b; margin-bottom: 30px; }
+
+/* Input Gigante */
+.input-group-lg {
+    display: flex;
+    width: 100%;
+    max-width: 600px;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.input-group-lg input {
+    flex: 1;
+    font-size: 1.5rem;
+    padding: 15px;
+    border: 2px solid #e2e8f0;
+    border-radius: 10px;
+    text-align: center;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 700;
+    transition: border-color 0.3s;
+}
+
+.input-group-lg input:focus {
+    border-color: #3b82f6;
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+}
+
+.btn-lg {
+    padding: 0 30px;
+    font-size: 1rem;
+    font-weight: 700;
+    background: #1e293b;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s;
+}
+.btn-lg:hover { background: #0f172a; }
+
+/* Cajas de Resultado (Alertas) */
+.result-box {
+    margin-top: 20px;
+    padding: 20px;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 600px;
+    text-align: center;
+    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+@keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+.result-box.hidden { display: none; }
+
+.result-box.success {
+    background: #dcfce7;
+    border: 1px solid #86efac;
+    color: #166534;
+}
+
+.result-box.error {
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    color: #991b1b;
+}
+
+.result-title {
+    display: block;
+    font-size: 1.4rem;
+    font-weight: 800;
+    margin-bottom: 5px;
+}
+
+.result-product {
+    margin-top: 10px;
+    background: rgba(255,255,255, 0.7);
+    padding: 8px 15px;
+    border-radius: 50px;
+    display: inline-block;
+    font-size: 0.95rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+/* Historial Lateral */
+.history-card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    padding: 20px;
+    height: 100%;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.history-card h4 {
+    margin-top: 0;
+    color: #334155;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.history-card ul { list-style: none; padding: 0; margin: 0; }
+
+.history-card li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    margin-bottom: 8px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border-left: 4px solid #cbd5e1;
+    font-size: 0.85rem;
+}
+
+.history-card li.success { border-left-color: #22c55e; background: #f0fdf4; }
+.history-card li.error { border-left-color: #ef4444; background: #fef2f2; }
+
+/* =========================================
+   VISTA 2: GESTIÓN (ADMIN)
+   ========================================= */
+.gestion-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+}
+
+.panel-acuerdos, .panel-carga {
+    background: #fff;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+/* Tablas */
+.table-responsive { overflow-x: auto; }
+.simple-table { width: 100%; border-collapse: collapse; min-width: 500px; }
+.simple-table th { text-align: left; padding: 12px; background: #f8fafc; color: #64748b; font-size: 0.85rem; }
+.simple-table td { padding: 12px; border-bottom: 1px solid #f1f5f9; color: #334155; font-size: 0.9rem; }
+
+/* Formularios Gestión */
+.form-group { margin-bottom: 15px; }
+.form-group label { display: block; font-weight: 600; font-size: 0.85rem; color: #475569; margin-bottom: 5px; }
+.form-control {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+.form-control:focus { border-color: #3b82f6; outline: none; }
+
+textarea.form-control { font-family: monospace; resize: vertical; }
+
+.btn-success {
+    background: #10b981; color: white;
+    border: none; padding: 10px; border-radius: 6px;
+    width: 100%; cursor: pointer; font-weight: 600;
+    display: flex; justify-content: center; align-items: center; gap: 8px;
+}
+.btn-success:hover { background: #059669; }
+
+.btn-sm {
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid #e2e8f0;
+    background: white;
+}
+
+/* =========================================
+   MODALES (CORREGIDO PARA CENTRAR)
+   ========================================= */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px); /* Efecto borroso moderno */
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center; /* Centrado vertical y horizontal */
+    opacity: 0; visibility: hidden;
+    transition: all 0.3s;
+}
+
+.modal-overlay.active { opacity: 1; visibility: visible; }
+
+.modal-content {
+    background: #fff;
+    width: 90%;
+    max-width: 500px;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    transform: translateY(20px);
+    transition: transform 0.3s;
+    overflow: hidden;
+}
+
+.modal-overlay.active .modal-content { transform: translateY(0); }
+
+.modal-header {
+    padding: 20px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.modal-header h3 { margin: 0; font-size: 1.1rem; color: #1e293b; }
+
+.btn-close { background: none; border: none; font-size: 1.2rem; cursor: pointer; color: #94a3b8; }
+.btn-close:hover { color: #ef4444; }
+
+.modal-body { padding: 20px; max-height: 70vh; overflow-y: auto; }
+
+.row { display: flex; gap: 15px; }
+.col { flex: 1; }
+
+.modal-footer {
+    padding: 15px 20px;
+    border-top: 1px solid #e2e8f0;
+    text-align: right;
+}
+
+.btn-primary {
+    background: #2563eb; color: white;
+    border: none; padding: 10px 20px;
+    border-radius: 6px; cursor: pointer; font-weight: 600;
+}
+.btn-primary:hover { background: #1d4ed8; }
+
+/* =========================================
+   RESPONSIVE DESIGN (MÓVIL Y TABLET)
+   ========================================= */
+
+/* Tablet (hasta 1024px) */
+@media (max-width: 1024px) {
+    .validation-wrapper { grid-template-columns: 1fr; } /* Columna única */
+    .gestion-grid { grid-template-columns: 1fr; }
+    
+    .scanner-card { min-height: 300px; }
+}
+
+/* Móvil (hasta 768px) */
+@media (max-width: 768px) {
+    .terceros-container { padding: 10px; }
+    
+    /* Header Stack */
+    .module-header { flex-direction: column; align-items: flex-start; }
+    .header-actions { width: 100%; }
+    .tabs-terceros { width: 100%; overflow-x: auto; }
+    .tab-btn { white-space: nowrap; flex: 1; justify-content: center; }
+
+    /* Scanner */
+    .input-group-lg { flex-direction: column; }
+    .input-group-lg input { width: 100%; font-size: 1.2rem; }
+    .btn-lg { width: 100%; justify-content: center; padding: 15px; }
+
+    /* Modal */
+    .modal-content { width: 95%; margin: 10px; }
+    .row { flex-direction: column; gap: 0; }
+}
+
+/* --- MEJORAS VISUALES ADICIONALES --- */
+
+/* 1. Estilo para la Tabla de Acuerdos (Que no se vea vacía) */
+.panel-acuerdos {
+    min-height: 400px; /* Altura mínima para que no se vea aplastado */
+    display: flex;
+    flex-direction: column;
+}
+
+.simple-table thead th {
+    border-bottom: 2px solid #e2e8f0;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    color: #64748b;
+}
+
+.simple-table tbody tr:hover {
+    background-color: #f8fafc; /* Efecto hover en filas */
+}
+
+/* Si la tabla está vacía, mostramos un mensaje bonito */
+.empty-state-table {
+    text-align: center;
+    padding: 40px;
+    color: #94a3b8;
+    font-style: italic;
+}
+
+/* 2. Mejoras en el Panel de Carga (Derecha) */
+.panel-carga {
+    background: #f8fafc; /* Un fondo ligeramente diferente para distinguir */
+    border: 1px solid #e2e8f0;
+}
+
+.panel-carga h3 {
+    color: #334155;
+    font-size: 1.1rem;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+.panel-carga textarea {
+    background: #fff;
+    border: 2px dashed #cbd5e1; /* Borde punteado para indicar "zona de pegado" */
+    transition: border-color 0.3s;
+}
+
+.panel-carga textarea:focus {
+    border-color: #3b82f6;
+    background: #eff6ff;
+}
+
+/* 3. Botón de Nuevo Canal (+) */
+.btn-plus-canal {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    width: 35px;
+    height: 38px; /* Ajuste para igualar altura del select */
+    cursor: pointer;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+.btn-plus-canal:hover { background: #2563eb; }
+
+/* 4. Badges de Estado en Tabla */
+.badge-acuerdo {
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+.badge-acuerdo.pendiente { background: #fef3c7; color: #b45309; }
+.badge-acuerdo.activo { background: #dcfce7; color: #166534; }
+
+/* 5. Ajustes del Modal para que no se vea tan "estirado" */
+.modal-body .form-group label {
+    color: #1e293b;
+    font-weight: 600;
+}
+
+.modal-body input, .modal-body select {
+    background-color: #f8fafc;
+}
+
+/* --- CORRECCIÓN DE ESTRUCTURA DEL PANEL --- */
+.panel-acuerdos {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between; /* Empuja la paginación al final si hay espacio */
+    min-height: 500px; /* Altura mínima para que se vea uniforme con el panel derecho */
+    position: relative;
+    padding-bottom: 20px; /* Espacio extra abajo */
+}
+
+/* Asegurar que la tabla tenga scroll si es muy larga, pero no rompa el panel */
+.table-responsive {
+    flex: 1; /* Ocupa el espacio disponible */
+    overflow-x: auto;
+    margin-bottom: 15px;
+}
+
+/* --- ESTILOS DE LA PAGINACIÓN (INTEGRADO) --- */
+.pagination-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #f1f5f9; /* Línea sutil separadora */
+    margin-top: auto; /* Se asegura de estar al final del contenido */
+    width: 100%;
+}
+
+.pagination-controls button {
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    color: #475569;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.2s ease;
+}
+
+.pagination-controls button:hover:not(:disabled) {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+    color: #1e293b;
+}
+
+.pagination-controls button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #f8fafc;
+}
+
+.pagination-controls span#page-info {
+    font-size: 0.85rem;
+    color: #64748b;
+    font-weight: 600;
+    background: #f8fafc;
+    padding: 4px 10px;
+    border-radius: 4px;
+}
+
+/* =========================================
+   MODAL LISTA DE CÓDIGOS (ESTILOS MEJORADOS)
+   ========================================= */
+
+/* 1. Ajuste del Contenedor del Modal */
+#modal-lista-codigos .modal-content {
+    border-radius: 12px; /* Bordes más redondeados */
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15); /* Sombra elegante */
+    border: none;
+    overflow: hidden; /* Evita desbordes */
+}
+
+/* 2. Buscador Moderno */
+#filtro-codigo {
+    width: 100%;
+    padding: 10px 15px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+    background-color: #f8fafc;
+    margin-bottom: 15px; /* Espacio antes de la lista */
+    box-sizing: border-box; /* IMPORTANTE: Evita que el padding rompa el ancho */
+}
+
+#filtro-codigo:focus {
+    border-color: #3b82f6;
+    background-color: #fff;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* 3. Contenedor de la Lista (El Scroll) */
+.lista-scrollable {
+    max-height: 350px; /* Altura máxima */
+    overflow-y: auto;  /* Solo scroll vertical */
+    overflow-x: hidden; /* OCULTAR SCROLL HORIZONTAL */
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fff;
+}
+
+/* Scrollbar personalizada (más bonita y delgada) */
+.lista-scrollable::-webkit-scrollbar {
+    width: 6px;
+}
+.lista-scrollable::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+.lista-scrollable::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 10px;
+}
+
+/* 4. Tabla Ajustada */
+.lista-scrollable table {
+    width: 100%; /* Forzar ancho completo */
+    border-collapse: collapse;
+    table-layout: fixed; /* IMPORTANTE: Evita que las celdas empujen el ancho */
+}
+
+.lista-scrollable thead th {
+    background-color: #f1f5f9;
+    color: #475569;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    padding: 10px 15px;
+    position: sticky; /* Cabecera fija al hacer scroll */
+    top: 0;
+    z-index: 10;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.lista-scrollable tbody td {
+    padding: 10px 15px;
+    border-bottom: 1px solid #f8fafc;
+    color: #334155;
+    font-size: 0.9rem;
+    word-break: break-all; /* Si el código es muy largo, que baje de línea */
+}
+
+.lista-scrollable tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.lista-scrollable tbody tr:hover {
+    background-color: #f8fafc; /* Efecto hover en filas */
+}
+
+/* =========================================
+   ESTILOS GENERALES DE MODALES (BASE)
+   ========================================= */
+
+/* 1. El fondo oscuro (Oculto por defecto) */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5); /* Fondo semitransparente oscuro */
+    display: none; /* 🔥 IMPORTANTE: Oculto por defecto */
+    justify-content: center;
+    align-items: center;
+    z-index: 9999; /* Asegura que esté encima de todo */
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+/* 2. Cuando se activa (Se muestra) */
+.modal-overlay.active {
+    display: flex; /* 🔥 Se convierte en Flex para centrar */
+    opacity: 1;
+}
+
+/* 3. La caja blanca del contenido */
+.modal-content {
+    background: white;
+    padding: 25px;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    position: relative;
+    transform: translateY(-20px);
+    transition: transform 0.3s ease;
+    border: 1px solid #e2e8f0;
+}
+
+/* Animación de entrada suave */
+.modal-overlay.active .modal-content {
+    transform: translateY(0);
+}
+
+/* Cabecera del modal */
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: #1e293b;
+}
+
+/* Botón de cerrar (X) */
+.btn-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #94a3b8;
+    transition: color 0.2s;
+}
+
+.btn-close:hover {
+    color: #ef4444;
+}
+
+/* Footer del modal */
+.modal-footer {
+    margin-top: 20px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
