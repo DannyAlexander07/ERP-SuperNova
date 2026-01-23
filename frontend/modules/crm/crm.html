@@ -156,22 +156,28 @@
 
                     <div class="row-grid">
                         <div class="form-group">
-                            <label>Paquete Interés</label>
+                            <label>Combo / Paquete (Inventario)</label>
                             <div class="input-wrapper">
                                 <i class='bx bx-gift'></i>
-                                <select id="lead-paquete">
-                                    <option value="">Seleccionar...</option>
-                                    <option value="Basico">Paquete Básico</option>
-                                    <option value="Galactico">Paquete Galáctico</option>
-                                    <option value="SuperNova">Paquete SuperNova</option>
+                                <select id="lead-paquete" onchange="calcularTotalLead()">
+                                    <option value="">Cargando productos...</option>
                                 </select>
                             </div>
                         </div>
+                        
                         <div class="form-group">
-                            <label>Valor Estimado (S/)</label>
+                            <label>Cantidad de Niños</label>
+                            <div class="input-wrapper">
+                                <i class='bx bx-face'></i>
+                                <input type="number" id="lead-cantidad-ninos" value="15" min="1" onchange="calcularTotalLead()" onkeyup="calcularTotalLead()">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Total Estimado (S/)</label>
                             <div class="input-wrapper">
                                 <i class='bx bx-money'></i>
-                                <input type="number" id="lead-valor" placeholder="0.00" autocomplete="off">
+                                <input type="number" id="lead-valor" placeholder="0.00" readonly style="background-color: #f3f4f6; font-weight: bold;">
                             </div>
                         </div>
                     </div>

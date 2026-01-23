@@ -138,7 +138,7 @@ exports.cargarCodigos = async (req, res) => {
     }
 };
 
-// 5. 🔥 VALIDACIÓN EN PUERTA (PROTEGIENDO EL COSTO)
+// 5. 🔥 VALIDACIÓN EN PUERTA (CON FECHA Y HORA DE USO)
 exports.validarYCanjear = async (req, res) => {
     const { codigo } = req.body;
     const sedeId = req.usuario.sede_id;
@@ -149,14 +149,12 @@ exports.validarYCanjear = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // A. Traemos AMBOS precios:
-        // - p.costo_compra (S/ 5.00 -> Costo real del producto)
-        // - a.precio_unitario_acordado (S/ 30.00 -> Precio de venta del acuerdo)
+        // A. Buscar código
         const resCodigo = await client.query(
             `SELECT c.*, 
                     p.nombre as nombre_producto, 
                     p.id as prod_id, 
-                    p.costo_compra,  
+                    p.costo_compra,
                     a.precio_unitario_acordado 
              FROM codigos_externos c
              LEFT JOIN productos p ON c.producto_asociado_id = p.id
@@ -165,47 +163,54 @@ exports.validarYCanjear = async (req, res) => {
             [codigo]
         );
 
-        if (resCodigo.rows.length === 0) throw new Error("⛔ CÓDIGO NO EXISTE.");
+        if (resCodigo.rows.length === 0) throw new Error("⛔ CÓDIGO NO EXISTE en el sistema.");
         const infoCodigo = resCodigo.rows[0];
 
-        if (infoCodigo.estado === 'CANJEADO') throw new Error("⚠️ YA FUE USADO.");
-        if (infoCodigo.estado === 'ANULADO') throw new Error("⛔ ANULADO.");
+        // B. Validar Estado (AQUÍ ESTÁ EL CAMBIO 🔥)
+        if (infoCodigo.estado === 'CANJEADO') {
+            // 1. Obtener fecha original de la base de datos
+            const fechaDb = new Date(infoCodigo.fecha_canje);
+            
+            // 2. Formatear Fecha (Ej: 22/01/2026)
+            const fechaStr = fechaDb.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            
+            // 3. Formatear Hora (Ej: 04:30 pm)
+            const horaStr = fechaDb.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-        // B. Movimiento de Inventario
+            // 4. Lanzar el error con el detalle
+            throw new Error(`⚠️ YA FUE USADO<br>📅 El ${fechaStr} a las ${horaStr}`);
+        }
+
+        if (infoCodigo.estado === 'ANULADO') {
+            throw new Error("⛔ Este código fue anulado por administración.");
+        }
+
+        // C. Validar Stock y Mover Kardex
         if (infoCodigo.prod_id) {
-            // Verificar stock...
             const resStock = await client.query(
                 "SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2 FOR UPDATE",
                 [infoCodigo.prod_id, sedeId]
             );
             const stockActual = resStock.rows.length > 0 ? resStock.rows[0].cantidad : 0;
-            if (stockActual <= 0) throw new Error("❌ SIN STOCK FÍSICO.");
 
-            // Restar cantidad...
+            if (stockActual <= 0) {
+                throw new Error(`❌ CÓDIGO VÁLIDO PERO NO HAY STOCK FÍSICO DE "${infoCodigo.nombre_producto}".`);
+            }
+
             await client.query(
                 "UPDATE inventario_sedes SET cantidad = cantidad - 1 WHERE producto_id = $1 AND sede_id = $2",
                 [infoCodigo.prod_id, sedeId]
             );
 
-            // 🔥 AQUÍ ESTÁ LA CLAVE DE TU PREGUNTA:
-            // Usamos 'infoCodigo.costo_compra' (5.00) para el Kardex.
-            // NO usamos el precio de venta (30.00) aquí, para no romper la contabilidad.
             await client.query(
                 `INSERT INTO movimientos_inventario 
                 (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
                  VALUES ($1, $2, $3, 'salida_canje', -1, $4, $5, $6)`,
-                [
-                    sedeId, 
-                    infoCodigo.prod_id, 
-                    usuarioId, 
-                    stockActual - 1, 
-                    `Canje Externo (${codigo})`, 
-                    infoCodigo.costo_compra || 0 // <--- ESTO PROTEGE TU COSTO
-                ]
+                [sedeId, infoCodigo.prod_id, usuarioId, stockActual - 1, `Canje Externo: ${codigo}`, infoCodigo.costo_compra || 0]
             );
         }
 
-        // C. Marcar como usado
+        // D. Marcar código como USADO
         await client.query(
             `UPDATE codigos_externos 
              SET estado = 'CANJEADO', fecha_canje = NOW(), sede_canje_id = $1, usuario_canje_id = $2
@@ -218,8 +223,7 @@ exports.validarYCanjear = async (req, res) => {
         res.json({ 
             msg: "✅ CÓDIGO VÁLIDO - PUEDE INGRESAR", 
             producto: infoCodigo.nombre_producto,
-            // Enviamos el precio de venta solo para mostrarlo, no para guardarlo en kardex
-            valor_venta: infoCodigo.precio_unitario_acordado 
+            valor_canje: infoCodigo.precio_unitario_acordado
         });
 
     } catch (err) {
@@ -399,21 +403,77 @@ exports.pagarCuota = async (req, res) => {
 };
 
 
-// 13. EDITAR CUOTA (Para ajustar montos flexibles)
+// 13. EDITAR CUOTA (CON CREACIÓN AUTOMÁTICA DE SALDOS) 🧠
 exports.editarCuota = async (req, res) => {
     const { id } = req.params;
     const { nuevo_monto, nueva_fecha } = req.body;
     
+    const client = await pool.connect();
     try {
-        // Solo permitimos editar si está PENDIENTE
-        await pool.query(`
+        await client.query('BEGIN');
+
+        // A. Obtener datos de la cuota ACTUAL antes de editar
+        const resActual = await client.query("SELECT * FROM cuotas_acuerdos WHERE id = $1", [id]);
+        if(resActual.rows.length === 0) throw new Error("Cuota no encontrada");
+        
+        const cuotaActual = resActual.rows[0];
+        const montoAnterior = parseFloat(cuotaActual.monto);
+        const montoNuevoFloat = parseFloat(nuevo_monto);
+        
+        // Calculamos la diferencia
+        // Ej: Era 100, Ahora pone 60. Diferencia = +40 (Falta cobrar)
+        const diferencia = montoAnterior - montoNuevoFloat; 
+
+        // B. Actualizar la cuota ACTUAL con el nuevo monto reducido
+        await client.query(`
             UPDATE cuotas_acuerdos 
             SET monto = $1, fecha_vencimiento = $2
-            WHERE id = $3 AND estado = 'PENDIENTE'
-        `, [nuevo_monto, nueva_fecha, id]);
-        
-        res.json({ msg: "Cuota actualizada correctamente" });
+            WHERE id = $3
+        `, [montoNuevoFloat, nueva_fecha, id]);
+
+        // C. GESTIONAR LA DIFERENCIA (Saldos)
+        // Solo si sobra dinero (diferencia positiva > 0.01 centavos)
+        if (diferencia > 0.01) {
+            
+            // 1. Buscamos si existe una "Siguiente Cuota"
+            const resSiguiente = await client.query(`
+                SELECT id, monto FROM cuotas_acuerdos 
+                WHERE acuerdo_id = $1 AND numero_cuota > $2 AND estado = 'PENDIENTE'
+                ORDER BY numero_cuota ASC 
+                LIMIT 1
+            `, [cuotaActual.acuerdo_id, cuotaActual.numero_cuota]);
+
+            if (resSiguiente.rows.length > 0) {
+                // ESCENARIO 1: Existe una cuota después. Le sumamos la deuda.
+                const siguiente = resSiguiente.rows[0];
+                const nuevoMontoSiguiente = parseFloat(siguiente.monto) + diferencia;
+                
+                await client.query("UPDATE cuotas_acuerdos SET monto = $1 WHERE id = $2", [nuevoMontoSiguiente, siguiente.id]);
+                
+            } else {
+                // ESCENARIO 2: NO existe siguiente (Era la última). CREAMOS UNA NUEVA. 🔥
+                
+                // Calculamos nueva fecha (30 días después de la fecha editada)
+                const fechaBase = new Date(nueva_fecha);
+                fechaBase.setDate(fechaBase.getDate() + 30); // Sumar 30 días
+                
+                const siguienteNumero = parseInt(cuotaActual.numero_cuota) + 1;
+
+                await client.query(`
+                    INSERT INTO cuotas_acuerdos 
+                    (acuerdo_id, numero_cuota, monto, fecha_vencimiento, estado)
+                    VALUES ($1, $2, $3, $4, 'PENDIENTE')
+                `, [cuotaActual.acuerdo_id, siguienteNumero, diferencia, fechaBase]);
+            }
+        }
+
+        await client.query('COMMIT');
+        res.json({ msg: "Cuota actualizada. Se generó saldo pendiente si existía diferencia." });
+
     } catch (err) {
+        await client.query('ROLLBACK');
         res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
     }
 };

@@ -6,6 +6,7 @@
     let currentPage = 1;
     const itemsPerPage = 10; // Puedes cambiar esto a 15 o 20
     let leadsGlobales = []; 
+    let productosCache = [];
     let sedesCache = {}; // 🔥 NUEVO: Aquí guardaremos { 3: "Primavera", 4: "Molina" }
 
     // --- 1. INICIALIZAR ---
@@ -164,7 +165,7 @@ function renderTable(lista) {
     }
 
     // --- 5. LOGICA DEL MODAL ---
-    window.abrirModalLead = function() {
+    window.abrirModalLead = async function() {
         document.getElementById('form-lead').reset();
         document.getElementById('lead-id').value = '';
         document.getElementById('lead-estado').value = 'nuevo'; 
@@ -175,56 +176,83 @@ function renderTable(lista) {
         document.getElementById('lead-sede').value = "";
         document.getElementById('lead-sala').innerHTML = '<option value="">← Elige sede primero</option>';
         document.getElementById('lead-sala').disabled = true;
+        await cargarProductosEnSelect();
     }
 
     window.cerrarModalLead = function() {
         document.getElementById('modal-lead').classList.remove('active');
     }
 
-    // --- 6. EDITAR LEAD ---
+// --- 6. EDITAR LEAD (LECTURA INTELIGENTE) ---
     window.editarLead = async function(id) {
         const lead = leadsGlobales.find(l => l.id == id);
         if(!lead) return;
 
-        window.abrirModalLead();
+        await window.abrirModalLead();
         document.querySelector('.modal-header h3').innerText = "Editar Cliente";
         
-        // Llenar campos
+        // Datos básicos
         document.getElementById('lead-id').value = lead.id;
         document.getElementById('lead-nombre').value = lead.nombre_apoderado;
         document.getElementById('lead-telefono').value = lead.telefono;
         document.getElementById('lead-email').value = lead.email;
         document.getElementById('lead-canal').value = lead.canal_origen || 'WhatsApp';
         document.getElementById('lead-hijo').value = lead.nombre_hijo;
-        document.getElementById('lead-obs').value = lead.notas;
-        document.getElementById('lead-paquete').value = lead.paquete_interes;
+        
+        if (lead.paquete_interes) {
+            document.getElementById('lead-paquete').value = lead.paquete_interes;
+        }
+
+        // 🔥 LÓGICA DE EXTRACCIÓN (SEPARA NÚMERO DE TEXTO)
+        let cantidadNiños = 15; // Valor por defecto si no encuentra nada
+        let notasLimpias = lead.notas || '';
+
+        if (lead.notas) {
+            // Regex: Busca "Niños:" seguido de espacios, un número, opcionalmente un punto y espacio
+            const regex = /Niños:\s*(\d+)\.?\s*/i;
+            const match = lead.notas.match(regex);
+            
+            if (match) {
+                cantidadNiños = match[1]; // Captura el número (ej: 35)
+                // Elimina SOLO la parte de "Niños: 35. " del texto para mostrar el resto limpio
+                notasLimpias = lead.notas.replace(regex, '');
+            }
+        }
+
+        // Asignamos los valores separados a cada input
+        document.getElementById('lead-cantidad-ninos').value = cantidadNiños;
+        document.getElementById('lead-obs').value = notasLimpias.trim(); 
+
+        // Resto de campos
         document.getElementById('lead-valor').value = lead.valor_estimado;
         document.getElementById('lead-estado').value = lead.estado || 'nuevo'; 
 
-        // Fechas
         if(lead.fecha_tentativa) {
-            document.getElementById('lead-fecha').value = lead.fecha_tentativa.substring(0,10);
+            // Aseguramos formato fecha input
+            const fechaLimpia = new Date(lead.fecha_tentativa).toISOString().split('T')[0];
+            document.getElementById('lead-fecha').value = fechaLimpia;
         }
         document.getElementById('lead-hora-inicio').value = lead.hora_inicio || '16:00';
         document.getElementById('lead-hora-fin').value = lead.hora_fin || '19:00';
 
-        // Sede y Sala
         if(lead.sede_interes) {
             document.getElementById('lead-sede').value = lead.sede_interes;
-            await cargarSalasPorSede(); 
+            await cargarSalasPorSede();
             if(lead.salon_id) {
                 document.getElementById('lead-sala').value = lead.salon_id;
             }
         }
 
-        // Botón cobrar
         const btnCobrar = document.getElementById('btn-cobrar-saldo');
-        if(lead.estado !== 'ganado') { 
+        if(lead.estado !== 'ganado' && lead.estado !== 'perdido') { 
              btnCobrar.style.display = 'inline-block';
              btnCobrar.onclick = () => cobrarSaldoCliente(lead.id);
+        } else {
+             btnCobrar.style.display = 'none';
         }
     }
 
+// --- 7. GUARDAR LEAD (CORREGIDO: ENVÍA CANTIDAD) ---
     window.guardarLead = async function() {
         const id = document.getElementById('lead-id').value;
         const nombre = document.getElementById('lead-nombre').value;
@@ -237,6 +265,9 @@ function renderTable(lista) {
         const fechaInput = document.getElementById('lead-fecha').value; 
         const horaInicio = document.getElementById('lead-hora-inicio').value;
         const valorEstimado = document.getElementById('lead-valor').value;
+        
+        // 🔥 CAPTURAMOS LA CANTIDAD DE NIÑOS DEL INPUT
+        const cantidadNinosInput = document.getElementById('lead-cantidad-ninos').value;
 
         const dataLead = {
             nombre_apoderado: nombre,
@@ -249,8 +280,12 @@ function renderTable(lista) {
             hora_fin: document.getElementById('lead-hora-fin').value,
             sede_interes: document.getElementById('lead-sede').value ? parseInt(document.getElementById('lead-sede').value) : null,
             salon_id: document.getElementById('lead-sala').value ? parseInt(document.getElementById('lead-sala').value) : null,
-            paquete_interes: document.getElementById('lead-paquete').value,
+            
+            // 🔥 DATOS CLAVE PARA EL CÁLCULO
+            paquete_interes: document.getElementById('lead-paquete').value, 
+            cantidad_ninos: cantidadNinosInput, // Enviamos el número explícitamente
             valor_estimado: valorEstimado,
+            
             notas: document.getElementById('lead-obs').value,
             estado: estado || 'nuevo' 
         };
@@ -277,51 +312,20 @@ function renderTable(lista) {
                     });
                 }
 
-                alert("Guardado correctamente");
+                alert("✅ Guardado correctamente.");
                 cerrarModalLead();
-
-                // 🔥 CORRECCIÓN FINAL DE ACTUALIZACIÓN VISUAL
-                if (id) {
-                    const index = leadsGlobales.findIndex(l => l.id == id);
-                    if (index !== -1) {
-                        
-                        let fechaParaVisual = leadsGlobales[index].fecha_tentativa; // Mantener fecha vieja por defecto
-
-                        if (fechaInput && fechaInput !== "") {
-                            // ✅ FIX: Cortamos la hora a "10:00" para evitar "10:00:00:00"
-                            const horaClean = horaInicio ? horaInicio.substring(0, 5) : '00:00';
-                            fechaParaVisual = `${fechaInput}T${horaClean}:00`; 
-                        }
-
-                        // Actualizamos memoria
-                        leadsGlobales[index] = { 
-                            ...leadsGlobales[index], 
-                            ...dataLead,
-                            fecha_tentativa: fechaParaVisual, 
-                            id: parseInt(id)
-                        };
-                        
-                        // Re-aplicamos filtro para ver el cambio
-                        const texto = document.getElementById('crm-search').value.toLowerCase();
-                        if(texto) {
-                            window.filtrarCRM(); // Si hay búsqueda, filtra
-                        } else {
-                            renderTable(leadsGlobales); // Si no, pinta todo
-                        }
-
-                    } else {
-                        initCRM(); 
-                    }
-                } else {
-                    initCRM();
-                }
+                
+                // Recargar todo para ver los cambios limpios
+                initCRM(); 
 
             } else {
-                alert("Error al guardar");
+                const errorData = await res.json();
+                alert("Error al guardar: " + (errorData.msg || "Desconocido"));
             }
-        } catch(e) { console.error(e); }
+        } catch(e) { console.error(e); alert("Error de conexión"); }
     }
 
+    
     // --- 8. ELIMINAR LEAD ---
     window.eliminarLead = async function(id) {
         if(!confirm("¿Eliminar este cliente?")) return;
@@ -337,20 +341,33 @@ function renderTable(lista) {
         } catch(e) { console.error(e); }
     }
 
-    // --- 9. COBRAR SALDO ---
+    // --- 9. COBRAR SALDO (CON AJUSTE) ---
     window.cobrarSaldoCliente = async function(id) {
-        if(!confirm("¿Cobrar el 50% restante y cerrar venta?")) return;
+        // Pedir confirmación de niños
+        const cantReal = prompt("¿Cuántos niños asistieron finalmente? (Para ajustar saldo y stock)", "15");
+        if(cantReal === null) return; // Cancelar
+
+        if(!confirm(`Se recalculará el saldo para ${cantReal} niños y se descontará del inventario. ¿Proceder?`)) return;
+
         try {
              const token = localStorage.getItem('token');
              const res = await fetch(`/api/crm/${id}/cobrar`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-                body: JSON.stringify({ metodoPago: 'transferencia' })
+                body: JSON.stringify({ 
+                    metodoPago: 'transferencia',
+                    cantidad_ninos_final: cantReal // 🔥 Enviamos el dato nuevo
+                })
             });
+            
+            const json = await res.json();
+            
             if(res.ok) {
-                alert("Cobro exitoso. Venta Cerrada.");
+                alert(json.msg); // Muestra mensaje con el monto cobrado
                 cerrarModalLead();
                 initCRM();
+            } else {
+                alert("Error: " + json.msg);
             }
         } catch(e) { console.error(e); }
     }
@@ -407,6 +424,46 @@ function renderTable(lista) {
                 selectSala.disabled = false;
             }
         } catch(e) { console.error(e); }
+    }
+
+    async function cargarProductosEnSelect() {
+        try {
+            const res = await fetch('/api/inventario', { headers: { 'x-auth-token': localStorage.getItem('token') } });
+            if(res.ok) {
+                const data = await res.json();
+                // Filtramos solo lo que sea "combo" o lo que quieras vender
+                // Si no tienes categoría 'combo', usa todos.
+                productosCache = data.productos || []; 
+                
+                const select = document.getElementById('lead-paquete');
+                select.innerHTML = '<option value="">-- Seleccione Combo --</option>';
+                
+                productosCache.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.innerText = `${p.nombre} (S/ ${p.precio_venta})`;
+                    select.appendChild(opt);
+                });
+            }
+        } catch(e) { console.error(e); }
+    }
+
+    window.calcularTotalLead = function() {
+        const prodId = document.getElementById('lead-paquete').value;
+        const cantidad = document.getElementById('lead-cantidad-ninos').value || 0;
+        const inputTotal = document.getElementById('lead-valor');
+
+        if(!prodId) {
+            inputTotal.value = "0.00";
+            return;
+        }
+
+        const producto = productosCache.find(p => p.id == prodId);
+        if(producto) {
+            const precio = parseFloat(producto.precio_venta);
+            const total = precio * parseInt(cantidad);
+            inputTotal.value = total.toFixed(2);
+        }
     }
 
     // ARRANQUE

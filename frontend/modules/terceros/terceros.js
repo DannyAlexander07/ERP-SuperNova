@@ -163,6 +163,7 @@
     }
 
     // --- 4. GESTIÓN DE PAGOS Y CUOTAS (TU PEDIDO PRINCIPAL) ---
+// --- 4. GESTIÓN DE PAGOS Y CUOTAS (ACTUALIZADO) ---
     window.abrirModalPagos = async function(id, empresa) {
         const modal = document.getElementById('modal-pagos');
         const tbody = document.getElementById('tabla-cuotas-body');
@@ -184,7 +185,9 @@
             }
 
             cuotas.forEach(c => {
-                const fecha = new Date(c.fecha_vencimiento).toISOString().split('T')[0];
+                // Formatear fecha para que no de error en el input type="date"
+                const fechaInput = new Date(c.fecha_vencimiento).toISOString().split('T')[0];
+                const fechaVisual = new Date(c.fecha_vencimiento).toLocaleDateString();
                 const esPagado = c.estado === 'PAGADO';
                 
                 let accionesHtml = '';
@@ -192,16 +195,17 @@
                 if (esPagado) {
                     accionesHtml = `<span style="color:#16a34a; font-weight:bold;"><i class='bx bx-check-double'></i> Pagado</span>`;
                 } else {
-                    // Botón Cobrar (Verde)
-                    accionesHtml += `<button class="btn-sm" style="background:#10b981; color:white; border:none; margin-right:5px;" onclick="procesarPagoCuota(${c.id})" title="Cobrar"><i class='bx bx-dollar'></i></button>`;
-                    // Botón Editar (Gris) -> AQUÍ CAMBIAS LOS MONTOS (50, 35, 15)
-                    accionesHtml += `<button class="btn-sm" style="background:#64748b; color:white; border:none;" onclick="editarMontoCuota(${c.id}, ${c.monto}, '${fecha}')" title="Editar Monto"><i class='bx bx-pencil'></i></button>`;
+                    // Botón Cobrar (Verde) -> Abre Modal Confirmación
+                    accionesHtml += `<button class="btn-sm" style="background:#10b981; color:white; border:none; margin-right:5px;" onclick="abrirConfirmacionPago(${c.id}, ${c.monto})" title="Cobrar"><i class='bx bx-dollar'></i></button>`;
+                    
+                    // Botón Editar (Gris) -> Abre Modal Edición
+                    accionesHtml += `<button class="btn-sm" style="background:#64748b; color:white; border:none;" onclick="editarMontoCuota(${c.id}, ${c.monto}, '${fechaInput}')" title="Editar Monto/Fecha"><i class='bx bx-pencil'></i></button>`;
                 }
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${c.numero_cuota}</td>
-                    <td>${new Date(c.fecha_vencimiento).toLocaleDateString()}</td>
+                    <td>${fechaVisual}</td>
                     <td style="font-weight:bold;">S/ ${parseFloat(c.monto).toFixed(2)}</td>
                     <td><span class="${esPagado ? 'badge-success' : 'badge-warning'}" style="padding:2px 6px; border-radius:4px; font-size:0.75rem; background:${esPagado?'#dcfce7':'#fef9c3'}; color:${esPagado?'#166534':'#854d0e'};">${c.estado}</span></td>
                     <td>${accionesHtml}</td>
@@ -211,15 +215,20 @@
         } catch(e) { console.error(e); }
     }
 
-    // FUNCIÓN PARA EDITAR MONTOS (LO QUE PEDISTE)
-    window.editarMontoCuota = async function(id, montoActual, fechaActual) {
-        const nuevoMonto = prompt("Nuevo Monto para esta cuota:", montoActual);
-        if (nuevoMonto === null) return; 
-        
-        const nuevaFecha = prompt("Nueva Fecha de Vencimiento (YYYY-MM-DD):", fechaActual);
-        if (nuevaFecha === null) return;
+    // B. GUARDAR CAMBIOS DE EDICIÓN (Llamada al Backend)
+    window.guardarEdicionCuota = async function() {
+        const id = document.getElementById('edit-cuota-id').value;
+        const nuevoMonto = document.getElementById('edit-monto').value;
+        const nuevaFecha = document.getElementById('edit-fecha').value;
 
-        if(isNaN(nuevoMonto) || nuevoMonto <= 0) return alert("Monto inválido");
+        if(isNaN(nuevoMonto) || nuevoMonto <= 0) return alert("El monto debe ser mayor a 0.");
+        if(!nuevaFecha) return alert("La fecha es obligatoria.");
+
+        // Feedback visual en el botón
+        const btn = event.currentTarget;
+        const textoOriginal = btn.innerText;
+        btn.innerText = "Guardando...";
+        btn.disabled = true;
 
         try {
             const res = await fetch(`/api/terceros/cuotas/${id}`, {
@@ -229,12 +238,78 @@
             });
 
             if(res.ok) {
-                alert("✅ Cuota actualizada.");
-                document.getElementById('modal-pagos').classList.remove('active'); // Cerrar para recargar
+                // Cerrar modal edición
+                cerrarModalEdicion();
+                // Cerrar modal lista para obligar al usuario a recargar y ver el recalculo
+                cerrarModalPagos(); 
+                alert("✅ Cuota actualizada. El saldo restante se ha redistribuido a la siguiente cuota.");
             } else {
-                alert("Error al actualizar.");
+                const data = await res.json();
+                alert("Error: " + (data.error || "No se pudo actualizar"));
             }
-        } catch(e) { alert("Error de conexión"); }
+        } catch(e) { 
+            console.error(e); 
+            alert("Error de conexión"); 
+        } finally {
+            btn.innerText = textoOriginal;
+            btn.disabled = false;
+        }
+    }
+
+    window.cerrarModalEdicion = function() {
+        document.getElementById('modal-editar-cuota').classList.remove('active');
+    }
+
+    // C. ABRIR CONFIRMACIÓN DE PAGO
+    window.abrirConfirmacionPago = function(id, monto) {
+        document.getElementById('conf-cuota-id').value = id;
+        // Mostrar el monto bonito en el modal
+        document.getElementById('conf-monto').innerHTML = "S/ " + parseFloat(monto).toFixed(2);
+        document.getElementById('modal-confirmar-pago').classList.add('active');
+    }
+    // D. EJECUTAR EL PAGO REAL
+    window.ejecutarPago = async function() {
+        const cuotaId = document.getElementById('conf-cuota-id').value;
+        const btn = event.currentTarget;
+        btn.disabled = true;
+        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Procesando...";
+
+        try {
+            const res = await fetch(`/api/terceros/cuotas/${cuotaId}/pagar`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('token') },
+                body: JSON.stringify({ metodo_pago: 'TRANSFERENCIA' }) 
+            });
+            if(res.ok) {
+                cerrarModalConfirmacion();
+                cerrarModalPagos(); // Cerramos todo para refrescar la vista
+                alert("✅ Pago registrado exitosamente en Caja.");
+            } else {
+                alert("Error al registrar pago.");
+            }
+        } catch(e) { console.error(e); alert("Error de conexión"); } 
+        finally {
+            btn.disabled = false;
+            btn.innerHTML = "Sí, Cobrar";
+        }
+    }
+
+    window.cerrarModalConfirmacion = function() {
+        document.getElementById('modal-confirmar-pago').classList.remove('active');
+    }
+
+    // FUNCIÓN PARA EDITAR MONTOS (LO QUE PEDISTE)
+    window.editarMontoCuota = function(id, montoActual, fechaActual) {
+        // 1. Llenar los inputs del modal con los datos actuales
+        document.getElementById('edit-cuota-id').value = id;
+        document.getElementById('edit-monto').value = parseFloat(montoActual).toFixed(2);
+        
+        // La fecha viene en formato ISO o Locale, aseguramos formato YYYY-MM-DD para el input date
+        // Si fechaActual es "2026-02-20", perfecto. Si no, habría que formatear.
+        document.getElementById('edit-fecha').value = fechaActual; 
+        
+        // 2. Mostrar el modal
+        document.getElementById('modal-editar-cuota').classList.add('active');
     }
 
     window.procesarPagoCuota = async function(cuotaId) {

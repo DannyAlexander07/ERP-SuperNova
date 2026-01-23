@@ -33,7 +33,7 @@
                 <small>Presiona ENTER después de escanear.</small>
 
                 <div id="resultado-validacion" class="result-box hidden">
-                    </div>
+                </div>
             </div>
 
             <div class="history-card">
@@ -60,12 +60,13 @@
                     <table class="simple-table" id="tabla-acuerdos">
                         <thead>
                             <tr>
-                                <th>ID</th>
+                                <th>#</th>
                                 <th>Empresa</th>
                                 <th>Descripción</th>
                                 <th>Entradas</th>
                                 <th>Total</th>
-                                <th>Acciones</th> </tr>
+                                <th>Acciones</th>
+                            </tr>
                         </thead>
                         <tbody id="tabla-acuerdos-body">
                             </tbody>
@@ -95,7 +96,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label>3. Pegar Códigos (Excel/Txt):</label>
+                    <label>2. Pegar Códigos (Excel/Txt):</label>
                     <textarea id="txt-codigos-masivos" rows="8" placeholder="CUP-001&#10;CUP-002&#10;CUP-003..."></textarea>
                 </div>
 
@@ -106,57 +107,6 @@
         </div>
     </div>
 
-</div>
-
-<div id="modal-acuerdo" class="modal-overlay">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3>Nuevo Acuerdo Comercial</h3>
-            <button class="btn-close" onclick="cerrarModalAcuerdo()"><i class='bx bx-x'></i></button>
-        </div>
-        <div class="modal-body">
-            <form id="form-acuerdo">
-                <div class="form-group">
-                    <label>Canal / Socio:</label>
-                    <div style="display:flex; gap:5px;" id="div-select-canal">
-                        <select id="new-canal" class="form-control" required></select>
-                        <button type="button" class="btn-plus-canal" onclick="toggleInputCanal()" title="Crear Nuevo">+</button>
-                    </div>
-                    <div id="div-input-canal" style="display:none; gap:5px;">
-                        <input type="text" id="input-new-canal-nombre" class="form-control" placeholder="Nombre (Ej: Groupon)">
-                        <button type="button" class="btn-sm" style="background:#10b981; color:white; border:none;" onclick="guardarCanalInline()">OK</button>
-                        <button type="button" class="btn-sm" style="background:#ef4444; color:white; border:none;" onclick="toggleInputCanal()">X</button>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Descripción del Paquete:</label>
-                    <input type="text" id="new-desc" class="form-control" placeholder="Ej: Lote Febrero 2026" required>
-                </div>
-
-                <div class="row">
-                    <div class="col">
-                        <label>Cantidad Entradas:</label>
-                        <input type="number" id="new-cant" step="0.0" class="form-control" required>
-                    </div>
-                    <div class="col">
-                        <label style="color:#166534; font-weight:bold;">Precio Venta Unit. (S/):</label>
-                        <input type="number" id="new-precio" class="form-control" step="0.01" placeholder="Ej: 30.00" required>
-                    </div>
-                </div>
-                <br>
-                <div class="form-group">
-                    <label>Producto a Descontar (Inventario):</label>
-                    <select id="new-producto" class="form-control" required></select>
-                    <small style="font-size:10px; color:#64748b;">Se respetará el Costo Promedio (Kardex) de este producto al salir.</small>
-                </div>
-                
-                <div class="modal-footer">
-                    <button type="submit" class="btn-primary">Guardar Acuerdo</button>
-                </div>
-            </form>
-        </div>
-    </div>
 </div>
 
 <div id="modal-acuerdo" class="modal-overlay">
@@ -220,7 +170,7 @@
                 <div class="modal-footer">
                     <button type="submit" class="btn-primary">Guardar Acuerdo</button>
                 </div>
-            </form> 
+            </form>
         </div>
     </div>
 </div>
@@ -245,7 +195,7 @@
                         </tr>
                     </thead>
                     <tbody id="tabla-codigos-lista">
-                        </tbody>
+                    </tbody>
                 </table>
             </div>
 
@@ -273,7 +223,7 @@
                 <p>⚠️ <strong>Duplicados (Ignorados):</strong> <span id="res-duplicados">0</span></p>
             </div>
 
-            <p style="font-size: 0.8rem; color: #64748b;">La carga ha finalizado. Los códigos duplicados ya existían en el sistema y no se volvieron a subir.</p>
+            <p style="font-size: 0.8rem; color: #64748b;">La carga ha finalizado. Los códigos duplicados ya existían en el sistema.</p>
         </div>
         <div class="modal-footer" style="justify-content: center;">
             <button class="btn-primary" onclick="cerrarModalResultado()">Entendido</button>
@@ -302,7 +252,7 @@
                         </tr>
                     </thead>
                     <tbody id="tabla-cuotas-body">
-                        </tbody>
+                    </tbody>
                 </table>
             </div>
         </div>
@@ -344,8 +294,58 @@
                 <input type="text" id="view-producto" class="form-control" readonly style="background:#f1f5f9;">
             </div>
         </div>
+    </div>
+</div>
+
+<div id="modal-editar-cuota" class="modal-overlay">
+    <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+            <h3>✏️ Editar Cuota</h3>
+            <button class="btn-close" onclick="cerrarModalEdicion()"><i class='bx bx-x'></i></button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-cuota-id">
+            
+            <div class="form-group">
+                <label>Nuevo Monto (S/):</label>
+                <input type="number" id="edit-monto" class="form-control" step="0.01">
+                <small style="color:#d97706; font-size:0.75rem;">
+                    <i class='bx bx-info-circle'></i> La diferencia se sumará a la siguiente cuota.
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label>Nueva Fecha Vencimiento:</label>
+                <input type="date" id="edit-fecha" class="form-control">
+            </div>
+        </div>
         <div class="modal-footer">
-            <button class="btn-secondary" onclick="cerrarModalDetalle()">Cerrar</button>
+            <button class="btn-secondary" onclick="cerrarModalEdicion()">Cancelar</button>
+            <button class="btn-primary" onclick="guardarEdicionCuota()">Guardar Cambios</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-confirmar-pago" class="modal-overlay">
+    <div class="modal-content" style="max-width: 400px; text-align: center;">
+        <div class="modal-body" style="padding: 30px;">
+            <div class="payment-icon-container">
+                <i class='bx bx-dollar'></i>
+            </div>
+            
+            <h3 style="margin-bottom:10px; color:#1e293b;">¿Confirmar Pago?</h3>
+            
+            <p class="confirm-text">
+                Se registrará un ingreso de dinero en tu caja actual.
+                <span id="conf-monto" class="amount-highlight">S/ 0.00</span>
+            </p>
+            
+            <input type="hidden" id="conf-cuota-id">
+            
+            <div style="display:flex; gap:15px; justify-content:center;">
+                <button class="btn-secondary" onclick="cerrarModalConfirmacion()">Cancelar</button>
+                <button class="btn-confirm-pay" onclick="ejecutarPago()">Sí, Cobrar</button>
+            </div>
         </div>
     </div>
 </div>
