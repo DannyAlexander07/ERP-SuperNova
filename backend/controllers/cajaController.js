@@ -90,6 +90,7 @@ exports.registrarMovimiento = async (req, res) => {
 };
 
 // 3. OBTENER RESUMEN (KPIs + DESGLOSE DETALLADO INCLUYENDO TRANSFERENCIA)
+// 3. OBTENER RESUMEN (CORREGIDO PARA LEER CRM Y VENTAS)
 exports.obtenerResumenCaja = async (req, res) => {
     try {
         if (!req.usuario) return res.status(401).json({msg: "Sin sesión"});
@@ -103,59 +104,67 @@ exports.obtenerResumenCaja = async (req, res) => {
         if (esAdmin && filtroSedeId) sedeConsulta = filtroSedeId; 
         else if (!esAdmin) sedeConsulta = usuarioSedeId; 
 
-        // CONSULTA MAESTRA
+        // CONSULTA MAESTRA CORREGIDA
+        // Ahora normalizamos el texto del método de pago para que sume todo correctamente
         const query = `
-            WITH MovimientosConDetalle AS (
+            WITH MovimientosNormalizados AS (
                 SELECT 
                     mc.fecha_registro,
                     mc.tipo_movimiento,
                     mc.monto,
-                    mc.metodo_pago,
-                    v.tipo_tarjeta 
+                    -- Normalizamos el método de pago a un estándar común
+                    CASE 
+                        WHEN mc.metodo_pago ILIKE '%efectivo%' THEN 'EFECTIVO'
+                        WHEN mc.metodo_pago ILIKE '%yape%' THEN 'YAPE'
+                        WHEN mc.metodo_pago ILIKE '%plin%' THEN 'PLIN'
+                        WHEN mc.metodo_pago ILIKE '%transferencia%' THEN 'TRANSFERENCIA'
+                        WHEN mc.metodo_pago ILIKE '%debito%' OR mc.metodo_pago ILIKE '%débito%' THEN 'DEBITO'
+                        WHEN mc.metodo_pago ILIKE '%credito%' OR mc.metodo_pago ILIKE '%crédito%' THEN 'CREDITO'
+                        ELSE 'OTROS'
+                    END AS metodo_normalizado
                 FROM movimientos_caja mc
-                LEFT JOIN ventas v ON mc.venta_id = v.id
                 WHERE ($1::int IS NULL OR mc.sede_id = $1::int)
             )
             SELECT 
-                -- 1. TOTALES GENERALES (Ingreso - Egreso)
+                -- 1. TOTALES GENERALES
                 SUM(CASE WHEN fecha_registro::date = CURRENT_DATE THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS neto_hoy,
                 SUM(CASE WHEN EXTRACT(WEEK FROM fecha_registro) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS neto_semana,
                 SUM(CASE WHEN EXTRACT(MONTH FROM fecha_registro) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS neto_mes,
                 SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS neto_anio,
 
-                -- 2. DESGLOSE POR MÉTODO (HOY)
-                SUM(CASE WHEN fecha_registro::date = CURRENT_DATE AND UPPER(metodo_pago) = 'EFECTIVO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS efec_hoy,
-                SUM(CASE WHEN fecha_registro::date = CURRENT_DATE AND UPPER(metodo_pago) = 'YAPE' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS yape_hoy,
-                SUM(CASE WHEN fecha_registro::date = CURRENT_DATE AND UPPER(metodo_pago) = 'PLIN' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS plin_hoy,
-                SUM(CASE WHEN fecha_registro::date = CURRENT_DATE AND UPPER(metodo_pago) = 'TRANSFERENCIA' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS transf_hoy, -- 🔥 NUEVO
-                SUM(CASE WHEN fecha_registro::date = CURRENT_DATE AND UPPER(metodo_pago) = 'TARJETA' AND tipo_tarjeta = 'Debito' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS debito_hoy,
-                SUM(CASE WHEN fecha_registro::date = CURRENT_DATE AND UPPER(metodo_pago) = 'TARJETA' AND tipo_tarjeta = 'Credito' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS credito_hoy,
+                -- 2. DESGLOSE POR MÉTODO (HOY) - Usamos la columna normalizada
+                SUM(CASE WHEN fecha_registro::date = CURRENT_DATE AND metodo_normalizado = 'EFECTIVO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS efec_hoy,
+                SUM(CASE WHEN fecha_registro::date = CURRENT_DATE AND metodo_normalizado = 'YAPE' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS yape_hoy,
+                SUM(CASE WHEN fecha_registro::date = CURRENT_DATE AND metodo_normalizado = 'PLIN' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS plin_hoy,
+                SUM(CASE WHEN fecha_registro::date = CURRENT_DATE AND metodo_normalizado = 'TRANSFERENCIA' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS transf_hoy,
+                SUM(CASE WHEN fecha_registro::date = CURRENT_DATE AND metodo_normalizado = 'DEBITO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS debito_hoy,
+                SUM(CASE WHEN fecha_registro::date = CURRENT_DATE AND metodo_normalizado = 'CREDITO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS credito_hoy,
 
                 -- SEMANA
-                SUM(CASE WHEN EXTRACT(WEEK FROM fecha_registro) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'EFECTIVO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS efec_semana,
-                SUM(CASE WHEN EXTRACT(WEEK FROM fecha_registro) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'YAPE' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS yape_semana,
-                SUM(CASE WHEN EXTRACT(WEEK FROM fecha_registro) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'PLIN' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS plin_semana,
-                SUM(CASE WHEN EXTRACT(WEEK FROM fecha_registro) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'TRANSFERENCIA' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS transf_semana, -- 🔥 NUEVO
-                SUM(CASE WHEN EXTRACT(WEEK FROM fecha_registro) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'TARJETA' AND tipo_tarjeta = 'Debito' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS debito_semana,
-                SUM(CASE WHEN EXTRACT(WEEK FROM fecha_registro) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'TARJETA' AND tipo_tarjeta = 'Credito' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS credito_semana,
+                SUM(CASE WHEN EXTRACT(WEEK FROM fecha_registro) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'EFECTIVO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS efec_semana,
+                SUM(CASE WHEN EXTRACT(WEEK FROM fecha_registro) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'YAPE' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS yape_semana,
+                SUM(CASE WHEN EXTRACT(WEEK FROM fecha_registro) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'PLIN' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS plin_semana,
+                SUM(CASE WHEN EXTRACT(WEEK FROM fecha_registro) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'TRANSFERENCIA' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS transf_semana,
+                SUM(CASE WHEN EXTRACT(WEEK FROM fecha_registro) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'DEBITO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS debito_semana,
+                SUM(CASE WHEN EXTRACT(WEEK FROM fecha_registro) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'CREDITO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS credito_semana,
 
                 -- MES
-                SUM(CASE WHEN EXTRACT(MONTH FROM fecha_registro) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'EFECTIVO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS efec_mes,
-                SUM(CASE WHEN EXTRACT(MONTH FROM fecha_registro) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'YAPE' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS yape_mes,
-                SUM(CASE WHEN EXTRACT(MONTH FROM fecha_registro) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'PLIN' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS plin_mes,
-                SUM(CASE WHEN EXTRACT(MONTH FROM fecha_registro) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'TRANSFERENCIA' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS transf_mes, -- 🔥 NUEVO
-                SUM(CASE WHEN EXTRACT(MONTH FROM fecha_registro) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'TARJETA' AND tipo_tarjeta = 'Debito' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS debito_mes,
-                SUM(CASE WHEN EXTRACT(MONTH FROM fecha_registro) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'TARJETA' AND tipo_tarjeta = 'Credito' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS credito_mes,
+                SUM(CASE WHEN EXTRACT(MONTH FROM fecha_registro) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'EFECTIVO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS efec_mes,
+                SUM(CASE WHEN EXTRACT(MONTH FROM fecha_registro) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'YAPE' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS yape_mes,
+                SUM(CASE WHEN EXTRACT(MONTH FROM fecha_registro) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'PLIN' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS plin_mes,
+                SUM(CASE WHEN EXTRACT(MONTH FROM fecha_registro) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'TRANSFERENCIA' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS transf_mes,
+                SUM(CASE WHEN EXTRACT(MONTH FROM fecha_registro) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'DEBITO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS debito_mes,
+                SUM(CASE WHEN EXTRACT(MONTH FROM fecha_registro) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'CREDITO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS credito_mes,
 
                 -- AÑO
-                SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'EFECTIVO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS efec_anio,
-                SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'YAPE' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS yape_anio,
-                SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'PLIN' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS plin_anio,
-                SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'TRANSFERENCIA' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS transf_anio, -- 🔥 NUEVO
-                SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'TARJETA' AND tipo_tarjeta = 'Debito' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS debito_anio,
-                SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND UPPER(metodo_pago) = 'TARJETA' AND tipo_tarjeta = 'Credito' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS credito_anio
+                SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'EFECTIVO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS efec_anio,
+                SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'YAPE' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS yape_anio,
+                SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'PLIN' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS plin_anio,
+                SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'TRANSFERENCIA' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS transf_anio,
+                SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'DEBITO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS debito_anio,
+                SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'CREDITO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS credito_anio
 
-            FROM MovimientosConDetalle
+            FROM MovimientosNormalizados
         `;
 
         const queryMerma = `SELECT 
@@ -180,7 +189,7 @@ exports.obtenerResumenCaja = async (req, res) => {
             mes: parseFloat(c.neto_mes || 0),
             anio: parseFloat(c.neto_anio || 0),
             
-            // DESGLOSE DETALLADO (Objeto organizado)
+            // DESGLOSE DETALLADO
             desglose: {
                 hoy: {
                     efectivo: c.efec_hoy || 0, yape: c.yape_hoy || 0, plin: c.plin_hoy || 0, transferencia: c.transf_hoy || 0, debito: c.debito_hoy || 0, credito: c.credito_hoy || 0

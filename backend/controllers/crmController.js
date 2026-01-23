@@ -11,17 +11,17 @@ exports.obtenerLeads = async (req, res) => {
     } 
 };
 
-// Crear nuevo lead + evento + señal + movimiento caja (VERSIÓN DEBUG + FIX FECHAS)
+// Crear Lead + Venta (CORREGIDO: Vendedor y Formato de Pago)
 exports.crearLead = async (req, res) => {
     console.log("📥 [DEBUG] Iniciando crearLead...");
     const { 
         nombre_apoderado, telefono, email, canal_origen, nombre_hijo, 
         fecha_tentativa, sede_interes, notas, 
-        salon_id, 
-        paquete_interes, 
-        cantidad_ninos,  
-        valor_estimado,
-        hora_inicio, hora_fin
+        salon_id, paquete_interes, cantidad_ninos, valor_estimado,
+        hora_inicio, hora_fin,
+        metodo_pago,    
+        nro_operacion,
+        vendedor_id // 🔥 NUEVO CAMPO RECIBIDO
     } = req.body;
     
     const usuarioId = req.usuario ? req.usuario.id : null; 
@@ -34,6 +34,18 @@ exports.crearLead = async (req, res) => {
 
         const sedeId = sede_interes || sedeUsuarioId;
         const cantidadPax = parseInt(cantidad_ninos) || 0; 
+        
+        // 🔧 ARREGLO DE LA SUMA EN CAJA: Formatear texto (ej: "yape" -> "Yape")
+        // Esto asegura que tu dashboard reconozca el texto exacto.
+        let metodoPagoReal = metodo_pago || 'Transferencia';
+        // Convertir primera letra a mayúscula y el resto minúscula
+        metodoPagoReal = metodoPagoReal.charAt(0).toUpperCase() + metodoPagoReal.slice(1).toLowerCase();
+        
+        const operacionReal = nro_operacion || 'SEÑAL_AUTOMATICA';
+        
+        // 🔥 LÓGICA DE VENDEDOR
+        // Si eligieron alguien en el select, usamos ese ID. Si no, usamos al usuario logueado.
+        const vendedorRealId = vendedor_id ? parseInt(vendedor_id) : usuarioId;
 
         // 1. Calcular Precios
         let precioUnitario = 0;
@@ -56,34 +68,24 @@ exports.crearLead = async (req, res) => {
         }
         const montoSenal = valorTotal * 0.50; 
 
-        // 2. Preparar Fechas (FIX: Usamos objetos Date reales)
+        // 2. Preparar Fechas
         const fechaInicioStr = `${fecha_tentativa} ${hora_inicio}:00`;
         const fechaFinStr = `${fecha_tentativa} ${hora_fin}:00`;
-        
-        // 🔥 FIX CRÍTICO: Convertimos a objetos Date de JS
         const fechaInicioObj = new Date(fechaInicioStr);
         const fechaFinObj = new Date(fechaFinStr);
 
-        console.log(`🕒 [DEBUG] Validando horario: ${fechaInicioStr} - ${fechaFinStr}`);
-
-        // 3. VALIDACIÓN DE CHOQUE (Depurado)
-        console.log("🔍 [DEBUG] Ejecutando Query de Choque...");
+        // 3. Validación Choque
         const choque = await client.query(
             `SELECT id FROM eventos 
-             WHERE sede_id = $1 
-             AND salon_id = $2 
-             AND estado != 'cancelado'
-             AND (fecha_inicio < $3 AND fecha_fin > $4)`, // Ya no necesitamos ::timestamp si pasamos objetos Date
+             WHERE sede_id = $1 AND salon_id = $2 AND estado != 'cancelado'
+             AND (fecha_inicio < $3 AND fecha_fin > $4)`, 
             [sedeId, salon_id, fechaFinObj, fechaInicioObj] 
         );
-
         if (choque.rows.length > 0) throw new Error(`⚠️ El salón ya está ocupado en ese horario.`);
 
         // 4. CLIENTE
-        console.log("👤 [DEBUG] Buscando/Creando Cliente...");
         let clienteId;
         const clienteCheck = await client.query('SELECT id FROM clientes WHERE telefono = $1', [telefono]);
-        
         if (clienteCheck.rows.length > 0) {
             clienteId = clienteCheck.rows[0].id;
         } else {
@@ -96,9 +98,6 @@ exports.crearLead = async (req, res) => {
         }
 
         // 5. EVENTO
-        console.log("📅 [DEBUG] Creando Evento...");
-        
-        // Obtenemos nombre salón para guardar texto
         const salonRes = await client.query('SELECT nombre FROM salones WHERE id = $1', [salon_id]);
         const nombreSalon = salonRes.rows.length > 0 ? salonRes.rows[0].nombre : 'Sala Desconocida';
         const tituloEvento = `Cumpleaños: ${nombre_hijo} (${cantidadPax} niños)`;
@@ -110,42 +109,62 @@ exports.crearLead = async (req, res) => {
                 paquete_id, usuario_creacion_id
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'reservado', $8, $9, $10, $11, $12) RETURNING id`,
             [
-                clienteId, sedeId, tituloEvento,
-                fechaInicioObj, fechaFinObj, // Pasamos Date Objects
-                salon_id, nombreSalon, 
-                valorTotal, montoSenal, (valorTotal - montoSenal), 
+                clienteId, sedeId, tituloEvento, fechaInicioObj, fechaFinObj, 
+                salon_id, nombreSalon, valorTotal, montoSenal, (valorTotal - montoSenal), 
                 paqueteId, usuarioId
             ]
         );
         const eventoId = eventoRes.rows[0].id;
 
-        // 6. CAJA
+        // 6. FLUJO FINANCIERO
         if (montoSenal > 0) {
-            console.log("💰 [DEBUG] Registrando Pago en Caja...");
+            console.log(`💰 [DEBUG] Registrando Venta y Pago (${metodoPagoReal})...`);
+            
+            // A. Registrar en PAGOS_EVENTO
             const pagoRes = await client.query(
                 `INSERT INTO pagos_evento (evento_id, usuario_id, monto, metodo_pago, nro_operacion)
-                 VALUES ($1, $2, $3, 'transferencia', 'SEÑAL_AUTOMATICA') RETURNING id`,
-                [eventoId, usuarioId, montoSenal]
+                 VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+                [eventoId, usuarioId, montoSenal, metodoPagoReal, operacionReal]
             );
             
-            // 🔥 CORRECCIÓN AQUÍ TAMBIÉN: Usamos parámetros explícitos para evitar error de tipos
+            // B. 🔥 REGISTRAR EN TABLA VENTAS CON VENDEDOR 🔥
+            // Usamos 'vendedor_id' que vimos en tu captura de base de datos
+            await client.query(
+                `INSERT INTO ventas (
+                    sede_id, usuario_id, cliente_id, 
+                    total_venta, metodo_pago, fecha_venta, 
+                    tipo_comprobante, estado, 
+                    tipo_venta, linea_negocio,
+                    vendedor_id  -- ✅ Aquí insertamos al vendedor
+                ) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, 'ticket', 'completado', 'Evento', 'EVENTOS', $6)`,
+                [
+                    sedeId, 
+                    usuarioId, // Usuario que creó el registro (sistema)
+                    clienteId, 
+                    montoSenal, 
+                    metodoPagoReal, // Texto formateado ("Yape", "Efectivo")
+                    vendedorRealId  // $6: El vendedor comisionista
+                ]
+            );
+
+            // C. Registrar en MOVIMIENTOS_CAJA
             await client.query(
                 `INSERT INTO movimientos_caja (
                     sede_id, usuario_id, tipo_movimiento, categoria, 
                     descripcion, monto, metodo_pago, pago_evento_id
-                ) VALUES ($1, $2, 'INGRESO', 'EVENTO_SEÑAL', $3, $4, 'transferencia', $5)`,
+                ) VALUES ($1, $2, 'INGRESO', 'EVENTO_SEÑAL', $3, $4, $5, $6)`,
                 [
                     sedeId, 
                     usuarioId, 
-                    `Señal: ${nombre_apoderado} (${cantidadPax} niños)`, // $3: Texto construido en JS
-                    montoSenal, // $4
-                    pagoRes.rows[0].id // $5
+                    `Señal: ${nombre_apoderado} - ${metodoPagoReal}`, 
+                    montoSenal, 
+                    metodoPagoReal, 
+                    pagoRes.rows[0].id 
                 ]
             );
         }
 
         // 7. LEAD
-        console.log("📝 [DEBUG] Creando Lead final...");
         const leadRes = await client.query(
             `INSERT INTO leads (
                 nombre_apoderado, telefono, email, canal_origen, nombre_hijo, 
@@ -157,28 +176,24 @@ exports.crearLead = async (req, res) => {
             RETURNING *`,
             [
                 nombre_apoderado, telefono, email, canal_origen, nombre_hijo,
-                fechaInicioObj, // Guardamos fecha real
-                sede_interes, salon_id, 
+                fechaInicioObj, sede_interes, salon_id, 
                 `Niños: ${cantidadPax}. ${notas || ''}`, 
-                paqueteId, 
-                valorTotal, hora_inicio, hora_fin,
+                paqueteId, valorTotal, hora_inicio, hora_fin,
                 usuarioId, clienteId, montoSenal, nombreSalon 
             ]
         );
 
         await client.query('COMMIT');
-        console.log("✅ [DEBUG] Transacción Exitosa.");
-        res.json({ msg: 'Reserva exitosa', lead: leadRes.rows[0] });
+        res.json({ msg: 'Reserva registrada. Venta asignada al vendedor.', lead: leadRes.rows[0] });
 
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error("❌ [ERROR CRÍTICO SQL]:", err.message);
-        res.status(400).json({ msg: `Error en base de datos: ${err.message}` });
+        console.error("❌ ERROR:", err.message);
+        res.status(400).json({ msg: `Error: ${err.message}` });
     } finally {
         client.release();
     }
 };
-
 
 // EDITAR LEAD (CORREGIDO COMPLETO: TABLAS Y NIÑOS)
 exports.actualizarLead = async (req, res) => {
@@ -498,12 +513,30 @@ exports.eliminarLead = async (req, res) => {
         if (leadRes.rows.length === 0) throw new Error('Lead no encontrado.');
         const lead = leadRes.rows[0];
 
-        // 2. Si tiene un cliente/evento asociado, procedemos a borrar el rastro financiero
+        // 2. Si tiene un cliente asociado, procedemos a borrar todo el rastro financiero y operativo
         if (lead.cliente_asociado_id) {
             const clienteId = lead.cliente_asociado_id;
 
-            // Buscar el evento asociado a este cliente (que no esté cancelado o sea el activo)
-            // Nota: Buscamos por cliente y fecha aproximada o simplemente el último evento activo
+            // --- A. LIMPIEZA DEL HISTORIAL DE VENTAS (NUEVO) ---
+            // Buscamos la venta más reciente de este cliente que coincida con el monto inicial del Lead
+            // Esto elimina la fila del módulo "Historial de Ventas"
+            if (lead.pago_inicial > 0) {
+                await client.query(
+                    `DELETE FROM ventas
+                     WHERE id IN (
+                         SELECT id FROM ventas
+                         WHERE cliente_id = $1 
+                         AND total_venta = $2 -- Coincidir monto exacto
+                         ORDER BY id DESC     -- Borrar la más reciente
+                         LIMIT 1
+                     )`,
+                    [clienteId, lead.pago_inicial]
+                );
+                // Si la columna se llama 'monto_total' en vez de 'total_venta', cámbialo arriba.
+            }
+
+            // --- B. BUSCAR Y ELIMINAR EVENTO ---
+            // Buscar el evento asociado a este cliente
             const eventoRes = await client.query(
                 `SELECT id FROM eventos WHERE cliente_id = $1 ORDER BY id DESC LIMIT 1`,
                 [clienteId]
@@ -512,46 +545,44 @@ exports.eliminarLead = async (req, res) => {
             if (eventoRes.rows.length > 0) {
                 const eventoId = eventoRes.rows[0].id;
 
-                // --- A. LIMPIEZA FINANCIERA (CAJA Y PAGOS) ---
+                // --- C. LIMPIEZA DE CAJA Y PAGOS ---
                 
                 // Obtenemos los IDs de los pagos registrados para este evento
                 const pagosRes = await client.query('SELECT id FROM pagos_evento WHERE evento_id = $1', [eventoId]);
                 const pagosIds = pagosRes.rows.map(p => p.id);
 
                 if (pagosIds.length > 0) {
-                    // 1. Borrar movimientos de CAJA vinculados a estos pagos
-                    // Usamos = ANY($1) para borrar varios de un golpe
+                    // 1. Borrar movimientos de CAJA vinculados a estos pagos (Módulo Flujo de Caja)
                     await client.query(
                         `DELETE FROM movimientos_caja WHERE pago_evento_id = ANY($1::int[])`,
                         [pagosIds]
                     );
 
-                    // 2. Borrar los PAGOS en sí
+                    // 2. Borrar los PAGOS internos del evento
                     await client.query(
                         `DELETE FROM pagos_evento WHERE evento_id = $1`,
                         [eventoId]
                     );
                 }
 
-                // --- B. LIMPIEZA OPERATIVA (EVENTO) ---
-                // Borramos el evento físico (ya que fue un error)
+                // --- D. BORRAR EL EVENTO (Calendario) ---
                 await client.query('DELETE FROM eventos WHERE id = $1', [eventoId]);
             }
         }
 
-        // 3. Finalmente borrar el Lead
+        // 3. Finalmente borrar el Lead (CRM)
         await client.query('DELETE FROM leads WHERE id = $1', [id]);
 
-        // 4. Auditoría
+        // 4. Auditoría (Registro de seguridad)
         await client.query(
             `INSERT INTO auditoria (usuario_id, accion, modulo, registro_id, detalle) 
              VALUES ($1, 'ELIMINAR', 'CRM', $2, $3)`,
-            [usuarioId, id, `Eliminó Lead ${lead.nombre_apoderado} y revirtió sus movimientos de caja.`]
+            [usuarioId, id, `Eliminó Lead ${lead.nombre_apoderado}, venta de S/${lead.pago_inicial} y revirtió caja.`]
         );
 
         await client.query('COMMIT');
         
-        res.json({ msg: 'Lead eliminado y registros financieros revertidos.' });
+        res.json({ msg: 'Lead eliminado. Se borraron ventas, caja, pagos y evento asociado.' });
         
     } catch (err) {
         await client.query('ROLLBACK');

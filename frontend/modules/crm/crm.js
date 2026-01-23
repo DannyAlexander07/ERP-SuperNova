@@ -177,6 +177,7 @@ function renderTable(lista) {
         document.getElementById('lead-sala').innerHTML = '<option value="">← Elige sede primero</option>';
         document.getElementById('lead-sala').disabled = true;
         await cargarProductosEnSelect();
+        await cargarVendedores()
     }
 
     window.cerrarModalLead = function() {
@@ -252,78 +253,92 @@ function renderTable(lista) {
         }
     }
 
-// --- 7. GUARDAR LEAD (CORREGIDO: ENVÍA CANTIDAD) ---
-    window.guardarLead = async function() {
-        const id = document.getElementById('lead-id').value;
-        const nombre = document.getElementById('lead-nombre').value;
-        const telefono = document.getElementById('lead-telefono').value;
-        const estado = document.getElementById('lead-estado').value; 
+// --- 7. GUARDAR LEAD (SOPORTA MÉTODO DE PAGO Y NIÑOS) ---
+window.guardarLead = async function() {
+    const id = document.getElementById('lead-id').value;
+    const nombre = document.getElementById('lead-nombre').value;
+    const telefono = document.getElementById('lead-telefono').value;
+    const estado = document.getElementById('lead-estado').value; 
 
-        if(!nombre || !telefono) return alert("Nombre y Teléfono requeridos");
+    if(!nombre || !telefono) return alert("Nombre y Teléfono son obligatorios");
 
-        // Capturamos inputs
-        const fechaInput = document.getElementById('lead-fecha').value; 
-        const horaInicio = document.getElementById('lead-hora-inicio').value;
-        const valorEstimado = document.getElementById('lead-valor').value;
+    // Capturamos inputs básicos
+    const fechaInput = document.getElementById('lead-fecha').value; 
+    const horaInicio = document.getElementById('lead-hora-inicio').value;
+    const valorEstimado = document.getElementById('lead-valor').value;
+    const cantidadNinosInput = document.getElementById('lead-cantidad-ninos').value;
+
+    // 🔥 NUEVO: CAPTURAMOS LOS DATOS DE PAGO (Si existen en el formulario)
+    const metodoPagoInput = document.getElementById('lead-metodo-pago').value;
+    const nroOperacionInput = document.getElementById('lead-nro-operacion').value;
+
+    const vendedorInput = document.getElementById('lead-vendedor').value;
+
+    const dataLead = {
+        nombre_apoderado: nombre,
+        telefono: telefono,
+        email: document.getElementById('lead-email').value,
+        canal_origen: document.getElementById('lead-canal').value,
+        nombre_hijo: document.getElementById('lead-hijo').value,
+        fecha_tentativa: fechaInput || null,
+        hora_inicio: horaInicio,
+        hora_fin: document.getElementById('lead-hora-fin').value,
+        sede_interes: document.getElementById('lead-sede').value ? parseInt(document.getElementById('lead-sede').value) : null,
+        salon_id: document.getElementById('lead-sala').value ? parseInt(document.getElementById('lead-sala').value) : null,
         
-        // 🔥 CAPTURAMOS LA CANTIDAD DE NIÑOS DEL INPUT
-        const cantidadNinosInput = document.getElementById('lead-cantidad-ninos').value;
+        // Datos Clave
+        paquete_interes: document.getElementById('lead-paquete').value, 
+        cantidad_ninos: cantidadNinosInput, 
+        valor_estimado: valorEstimado,
+        
+        // 🔥 ENVIAMOS LA FORMA DE PAGO AL BACKEND
+        metodo_pago: metodoPagoInput,
+        nro_operacion: nroOperacionInput,
+        vendedor_id: vendedorInput ? parseInt(vendedorInput) : null,
 
-        const dataLead = {
-            nombre_apoderado: nombre,
-            telefono: telefono,
-            email: document.getElementById('lead-email').value,
-            canal_origen: document.getElementById('lead-canal').value,
-            nombre_hijo: document.getElementById('lead-hijo').value,
-            fecha_tentativa: fechaInput || null,
-            hora_inicio: horaInicio,
-            hora_fin: document.getElementById('lead-hora-fin').value,
-            sede_interes: document.getElementById('lead-sede').value ? parseInt(document.getElementById('lead-sede').value) : null,
-            salon_id: document.getElementById('lead-sala').value ? parseInt(document.getElementById('lead-sala').value) : null,
-            
-            // 🔥 DATOS CLAVE PARA EL CÁLCULO
-            paquete_interes: document.getElementById('lead-paquete').value, 
-            cantidad_ninos: cantidadNinosInput, // Enviamos el número explícitamente
-            valor_estimado: valorEstimado,
-            
-            notas: document.getElementById('lead-obs').value,
-            estado: estado || 'nuevo' 
-        };
+        notas: document.getElementById('lead-obs').value,
+        estado: estado || 'nuevo' 
+    };
 
-        try {
-            const token = localStorage.getItem('token');
-            let url = '/api/crm';
-            let method = 'POST';
-            if(id) { url = `/api/crm/${id}`; method = 'PUT'; }
+    try {
+        const token = localStorage.getItem('token');
+        let url = '/api/crm';
+        let method = 'POST';
+        
+        // Si hay ID, es una EDICIÓN (PUT)
+        if(id) { 
+            url = `/api/crm/${id}`; 
+            method = 'PUT'; 
+        }
 
-            const res = await fetch(url, {
-                method: method,
-                headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-                body: JSON.stringify(dataLead)
-            });
+        const res = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
+            body: JSON.stringify(dataLead)
+        });
 
-            if(res.ok) {
-                // Actualizar estado si es edición y cambió
-                if(id && estado) {
-                     await fetch(`/api/crm/${id}/estado`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-                        body: JSON.stringify({ nuevoEstado: estado })
-                    });
-                }
-
-                alert("✅ Guardado correctamente.");
-                cerrarModalLead();
-                
-                // Recargar todo para ver los cambios limpios
-                initCRM(); 
-
-            } else {
-                const errorData = await res.json();
-                alert("Error al guardar: " + (errorData.msg || "Desconocido"));
+        if(res.ok) {
+            // Actualizar estado si es edición y cambió el select de estado
+            if(id && estado) {
+                 await fetch(`/api/crm/${id}/estado`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
+                    body: JSON.stringify({ nuevoEstado: estado })
+                });
             }
-        } catch(e) { console.error(e); alert("Error de conexión"); }
-    }
+
+            alert("✅ Guardado correctamente.");
+            cerrarModalLead();
+            
+            // Recargar tabla para ver cambios
+            initCRM(); 
+
+        } else {
+            const errorData = await res.json();
+            alert("Error al guardar: " + (errorData.msg || "Error desconocido"));
+        }
+    } catch(e) { console.error(e); alert("Error de conexión"); }
+}
 
     
     // --- 8. ELIMINAR LEAD ---
@@ -340,6 +355,43 @@ function renderTable(lista) {
             }
         } catch(e) { console.error(e); }
     }
+
+async function cargarVendedores() {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        const res = await fetch('/api/usuarios', {
+            headers: { 'x-auth-token': token }
+        });
+
+        if (!res.ok) return console.error("Error cargando vendedores");
+
+        const data = await res.json();
+        const listaUsuarios = data.usuarios ? data.usuarios : data;
+
+        const select = document.getElementById('lead-vendedor');
+        select.innerHTML = '<option value="">-- Selecciona Vendedor --</option>';
+
+        if (Array.isArray(listaUsuarios)) {
+            listaUsuarios.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.id;
+
+                // ✅ CORRECCIÓN: Unimos Nombres + Apellidos según tu base de datos
+                // Usamos `${}` para juntarlos con un espacio en medio
+                const nombreCompleto = `${user.nombres} ${user.apellidos}`;
+                
+                option.textContent = nombreCompleto;
+                select.appendChild(option);
+            });
+        }
+
+    } catch (e) {
+        console.error("Error al cargar lista de vendedores:", e);
+    }
+}
+
 
     // --- 9. COBRAR SALDO (CON AJUSTE) ---
     window.cobrarSaldoCliente = async function(id) {

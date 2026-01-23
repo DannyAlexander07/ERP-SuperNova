@@ -1,5 +1,3 @@
-// Ubicacion: SuperNova/frontend/modules/analitica/analitica.js
-
 (function() {
     console.log("Modulo Analítica Avanzada Cargado 🚀");
 
@@ -8,7 +6,7 @@
     let paginaActual = 1;
     const FILAS_POR_PAGINA = 8;
     
-    // Variables para Gráficos
+    // Variables para Gráficos Básicos (P&L)
     let chartBarras = null;
     let chartDona = null;
     let chartMix = null;
@@ -31,7 +29,7 @@
 
     // --- 1. FUNCIONES DE RENDERIZADO (DEFINIR PRIMERO) ---
     
-function renderizarTabla() {
+    function renderizarTabla() {
         const tbody = document.getElementById('pyl-detalle-body');
         if(!tbody) return;
         tbody.innerHTML = '';
@@ -101,13 +99,11 @@ function renderizarTabla() {
         
         const totalPaginas = Math.ceil(datosGlobalesPyL.length / FILAS_POR_PAGINA);
         
-        // Si no hay datos o solo hay 1 página, limpiamos y salimos
         if (totalPaginas <= 1) { 
             contenedor.innerHTML = ''; 
             return; 
         }
 
-        // Renderizamos la "Cápsula" de navegación
         contenedor.innerHTML = `
             <div class="pagination-wrapper">
                 <span class="page-info">
@@ -129,7 +125,6 @@ function renderizarTabla() {
     function renderizarGraficos(datos) {
         if (typeof Chart === 'undefined') return;
 
-        // Verificar si existen los canvas
         const ctxMix = document.getElementById('chart-mix-ventas');
         const ctxGastos = document.getElementById('chart-gastos-mermas');
         const ctxUtilidad = document.getElementById('chart-utilidad');
@@ -235,7 +230,7 @@ function renderizarTabla() {
         }
     }
 
-// --- FUNCIÓN ACTUALIZADA: OBTENER TODOS LOS DATOS ---
+    // --- FUNCIÓN ACTUALIZADA: OBTENER TODOS LOS DATOS ---
     async function obtenerReporteCompleto() {
         const token = localStorage.getItem('token');
         if (!token) return;
@@ -271,7 +266,7 @@ function renderizarTabla() {
 
             if (resGraficos.ok) {
                 const dataGraficos = await resGraficos.json();
-                // 🔥 AQUÍ SE DIBUJAN LOS NUEVOS
+                // 🔥 AQUÍ SE DIBUJAN LOS NUEVOS, INCLUIDO RANKING
                 renderizarGraficosAvanzados(dataGraficos); 
             }
 
@@ -347,13 +342,25 @@ function renderizarTabla() {
         }
     }
 
-    // --- NUEVA FUNCIÓN: RENDERIZAR GRÁFICOS AVANZADOS ---
-    let chartEvo=null, chartTop=null, chartPagos=null, chartHoras=null; // Variables globales para instancias
+// --- VARIABLES GLOBALES PARA LOS GRÁFICOS (Pegar esto antes de la función) ---
+    let chartEvo=null, chartTop=null, chartPagos=null, chartHoras=null, chartVendedores=null;
 
+    // --- FUNCIÓN AUXILIAR: GENERAR COLORES DINÁMICOS ---
+    // (Necesaria para productos donde hay muchos ítems)
+    function generarColores(cantidad) {
+        const colores = [];
+        for (let i = 0; i < cantidad; i++) {
+            const hue = Math.floor((360 / cantidad) * i); 
+            colores.push(`hsl(${hue}, 70%, 60%)`);
+        }
+        return colores;
+    }
+
+    // --- FUNCIÓN PRINCIPAL DE RENDERIZADO ---
     function renderizarGraficosAvanzados(data) {
         if (typeof Chart === 'undefined') return;
 
-        // 1. EVOLUCIÓN (Línea)
+        // 1. EVOLUCIÓN (Línea de Tiempo)
         const ctxEvo = document.getElementById('chart-evolucion');
         if (ctxEvo) {
             if (chartEvo) chartEvo.destroy();
@@ -373,36 +380,62 @@ function renderizarTabla() {
             });
         }
 
-        // 2. TOP PRODUCTOS (Barra Horizontal)
+        // 2. TODOS LOS PRODUCTOS (Barra Horizontal)
         const ctxTop = document.getElementById('chart-top');
         if (ctxTop) {
             if (chartTop) chartTop.destroy();
+            
+            // Colores dinámicos para diferenciar todos los productos
+            const coloresProd = generarColores(data.top.length);
+
             chartTop = new Chart(ctxTop, {
                 type: 'bar',
-                indexAxis: 'y', // Hace las barras horizontales
+                indexAxis: 'y',
                 data: {
                     labels: data.top.map(d => d.producto),
                     datasets: [{
                         label: 'Cantidad Vendida',
                         data: data.top.map(d => parseInt(d.cantidad)),
-                        backgroundColor: '#10b981'
+                        backgroundColor: coloresProd,
+                        borderRadius: 6, // Bordes redondeados en las barras
+                        maxBarThickness: 35, // 🔥 ESTO EVITA QUE SE VEAN COMO BLOQUES GIGANTES
                     }]
                 },
-                options: { responsive: true, maintainAspectRatio: false }
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } } 
+                }
             });
         }
 
-        // 3. MÉTODOS DE PAGO (Dona)
+        // 3. MÉTODOS DE PAGO (Dona con Colores Fijos + Transferencia)
         const ctxPagos = document.getElementById('chart-pagos');
         if (ctxPagos) {
             if (chartPagos) chartPagos.destroy();
+            
+            // 🔥 MAPA DE COLORES FIJOS DEFINITIVO
+            const colorMap = {
+                'Efectivo': '#3b82f6',          // Azul brillante
+                'Yape': '#8b5cf6',              // Violeta (Brand Yape)
+                'Plin': '#06b6d4',              // Cian/Turquesa (Brand Plin)
+                'Tarjeta de Crédito': '#f59e0b',// Naranja
+                'Tarjeta de Débito': '#ec4899', // Rosa
+                'Transferencia': '#64748b',     // Gris Azulado (Profesional)
+                'Otros': '#9ca3af'              // Gris claro
+            };
+
+            // Asignamos el color según la etiqueta exacta que viene del backend
+            const backgroundColors = data.pagos.map(d => colorMap[d.metodo_pago] || '#10b981');
+
             chartPagos = new Chart(ctxPagos, {
                 type: 'doughnut',
                 data: {
                     labels: data.pagos.map(d => d.metodo_pago),
                     datasets: [{
                         data: data.pagos.map(d => parseFloat(d.total)),
-                        backgroundColor: ['#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6']
+                        backgroundColor: backgroundColors,
+                        borderWidth: 2
                     }]
                 },
                 options: { responsive: true, maintainAspectRatio: false }
@@ -413,7 +446,6 @@ function renderizarTabla() {
         const ctxHoras = document.getElementById('chart-horas');
         if (ctxHoras) {
             if (chartHoras) chartHoras.destroy();
-            // Preparamos datos para las 24 horas (rellenar huecos con 0)
             const horasMap = new Array(24).fill(0);
             data.horas.forEach(h => horasMap[parseInt(h.hora)] = parseInt(h.cantidad));
             
@@ -424,10 +456,45 @@ function renderizarTabla() {
                     datasets: [{
                         label: 'Tickets Emitidos',
                         data: horasMap,
-                        backgroundColor: '#f97316'
+                        backgroundColor: '#f97316',
+                        borderRadius: 4
                     }]
                 },
                 options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        // 5. RANKING VENDEDORES (Barra Horizontal - Todos)
+        const ctxVendedores = document.getElementById('chart-vendedores');
+        if (ctxVendedores && data.vendedores) {
+            if (chartVendedores) chartVendedores.destroy();
+            
+            chartVendedores = new Chart(ctxVendedores, {
+                type: 'bar',
+                indexAxis: 'y', // Horizontal
+                data: {
+                    labels: data.vendedores.map(d => d.vendedor),
+                    datasets: [{
+                        label: 'Total Vendido (S/)',
+                        data: data.vendedores.map(d => parseFloat(d.total_vendido)),
+                        backgroundColor: '#8b5cf6', // Violeta uniforme
+                        borderRadius: 4
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `S/ ${context.raw.toFixed(2)}`;
+                                }
+                            }
+                        }
+                    }
+                }
             });
         }
     }
