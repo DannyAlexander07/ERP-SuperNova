@@ -43,6 +43,7 @@ app.use('/api/sedes', sedesRoutes);
 app.use('/backend/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/caja-chica', require('./routes/cajaChicaRoutes'));
 app.use('/api/terceros', tercerosRoutes); // <--- AGREGAR ESTO
+app.use('/api/facturacion', require('./routes/facturacionRoutes'));
 
 // --- SERVIR FRONTEND ---
 app.use(express.static(path.join(__dirname, '../frontend')));

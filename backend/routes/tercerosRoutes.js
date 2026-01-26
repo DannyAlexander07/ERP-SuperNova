@@ -3,13 +3,8 @@
 const express = require('express');
 const router = express.Router();
 const tercerosController = require('../controllers/tercerosController');
-
-// Aquí mantengo tu estilo "{ checkAuth }" por si acaso, pero revisa si te da error 500.
 const { checkAuth } = require('../middleware/auth'); 
-// Si te da error de "checkAuth is not a function", cambia la línea anterior por:
-// const auth = require('../middleware/auth'); y reemplaza 'checkAuth' por 'auth' abajo.
 
-// Prefijo: /api/terceros
 
 // 1. Gestión de Canales
 router.get('/canales', checkAuth, tercerosController.obtenerCanales);
@@ -23,6 +18,8 @@ router.delete('/acuerdos/:id', checkAuth, tercerosController.eliminarAcuerdo); /
 router.post('/codigos/carga-masiva', checkAuth, tercerosController.cargarCodigos);
 router.get('/acuerdos/:id/detalle', checkAuth, tercerosController.obtenerDetalleAcuerdo);
 router.get('/acuerdos/:id/codigos', checkAuth, tercerosController.listarCodigosPorAcuerdo);
+
+router.post('/codigos/generar', checkAuth, tercerosController.generarCodigosAutomaticos);
 
 router.get('/acuerdos/:id/cuotas', checkAuth, tercerosController.obtenerCuotasAcuerdo);
 router.post('/cuotas/:id/pagar', checkAuth, tercerosController.pagarCuota);

@@ -610,3 +610,72 @@ exports.obtenerHistorialTotal = async (req, res) => {
         res.status(500).json({ error: "Error al obtener historial" });
     }
 };
+
+// 15. 🔥 GENERAR CÓDIGOS AUTOMÁTICOS (NUEVO)
+exports.generarCodigosAutomaticos = async (req, res) => {
+    const { acuerdo_id, cantidad, prefijo } = req.body;
+    
+    // Validaciones básicas
+    if (!acuerdo_id || !cantidad || cantidad <= 0) {
+        return res.status(400).json({ error: "Datos inválidos (Falta acuerdo o cantidad)." });
+    }
+    
+    const PREFIJO = (prefijo || "GEN").toUpperCase().trim();
+    const CANTIDAD = parseInt(cantidad);
+    
+    // Límite de seguridad para no colgar el servidor
+    if (CANTIDAD > 5000) return res.status(400).json({ error: "Máximo 5000 códigos por lote." });
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 1. Obtener datos del acuerdo para saber qué producto es
+        const resAcuerdo = await client.query('SELECT producto_asociado_id, canal_id FROM acuerdos_comerciales WHERE id = $1', [acuerdo_id]);
+        
+        if (resAcuerdo.rows.length === 0) throw new Error("Acuerdo no encontrado.");
+        
+        const { producto_asociado_id, canal_id } = resAcuerdo.rows[0];
+
+        // 2. Generar Array de Códigos en Memoria
+        // Usamos Set para garantizar unicidad en memoria antes de intentar insertar
+        const codigosGenerados = new Set();
+        
+        while (codigosGenerados.size < CANTIDAD) {
+            // Generamos parte aleatoria: 4 letras + 4 números (Ej: A7X2-9M1P)
+            const randomPart = Math.random().toString(36).substring(2, 10).toUpperCase();
+            const codigoFinal = `${PREFIJO}-${randomPart}`;
+            codigosGenerados.add(codigoFinal);
+        }
+
+        // 3. Insertar en Base de Datos (Bulk Insert optimizado)
+        let insertados = 0;
+        
+        for (const codigo of codigosGenerados) {
+            // Intentamos insertar. Si existe (colisión rara), simplemente lo ignoramos.
+            const resInsert = await client.query(
+                `INSERT INTO codigos_externos (canal_id, acuerdo_id, codigo_unico, producto_asociado_id, estado)
+                 VALUES ($1, $2, $3, $4, 'DISPONIBLE') 
+                 ON CONFLICT (codigo_unico) DO NOTHING RETURNING id`,
+                [canal_id, acuerdo_id, codigo, producto_asociado_id]
+            );
+            
+            if (resInsert.rows.length > 0) insertados++;
+        }
+
+        await client.query('COMMIT');
+        
+        res.json({ 
+            msg: "Generación completada", 
+            solicitados: CANTIDAD, 
+            generados_reales: insertados 
+        });
+
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error(err);
+        res.status(500).json({ error: "Error generando códigos: " + err.message });
+    } finally {
+        client.release();
+    }
+};

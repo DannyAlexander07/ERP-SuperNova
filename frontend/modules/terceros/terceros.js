@@ -791,6 +791,65 @@
         }
     }
 
+    
+    window.toggleModoCarga = function(modo) {
+        // Estilos botones
+        document.getElementById('tab-carga-manual').className = modo === 'manual' ? 'btn-xs active' : 'btn-xs';
+        document.getElementById('tab-carga-auto').className = modo === 'auto' ? 'btn-xs active' : 'btn-xs';
+        
+        // Visibilidad bloques
+        document.getElementById('bloque-carga-manual').style.display = modo === 'manual' ? 'block' : 'none';
+        document.getElementById('bloque-carga-auto').style.display = modo === 'auto' ? 'block' : 'none';
+    }
+
+    window.procesarGeneracionAutomatica = async function() {
+        const acuerdoId = document.getElementById('select-acuerdo-carga').value;
+        const cantidad = document.getElementById('gen-cantidad').value;
+        const prefijo = document.getElementById('gen-prefijo').value;
+
+        if (!acuerdoId) return alert("Selecciona un acuerdo primero.");
+        if (!cantidad || cantidad <= 0) return alert("Ingresa una cantidad válida.");
+
+        if (!confirm(`¿Generar ${cantidad} códigos nuevos para este acuerdo?`)) return;
+
+        const btn = event.currentTarget;
+        const txtOriginal = btn.innerHTML;
+        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Generando...";
+        btn.disabled = true;
+
+        try {
+            const res = await fetch('/api/terceros/codigos/generar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('token') },
+                body: JSON.stringify({ 
+                    acuerdo_id: acuerdoId, 
+                    cantidad: cantidad, 
+                    prefijo: prefijo || 'GEN' 
+                })
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                alert(`✅ Éxito: Se generaron ${data.generados_reales} códigos.`);
+                cargarAcuerdos(); // Refrescar contadores
+                
+                // Limpiar inputs
+                document.getElementById('gen-cantidad').value = "";
+                document.getElementById('gen-prefijo').value = "";
+            } else {
+                alert("Error: " + data.error);
+            }
+
+        } catch (e) {
+            console.error(e);
+            alert("Error de conexión");
+        } finally {
+            btn.innerHTML = txtOriginal;
+            btn.disabled = false;
+        }
+    }
+
     async function cargarCanales() {
         try {
             const res = await fetch('/api/terceros/canales', { headers: {'x-auth-token': localStorage.getItem('token')} });

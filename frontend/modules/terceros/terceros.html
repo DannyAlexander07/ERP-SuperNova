@@ -97,24 +97,48 @@
             </div>
             
             <div class="panel-carga">
-                <h3>📥 Cargar Códigos</h3>
-                <p>Sube los códigos para un acuerdo existente.</p>
+                <h3>📥 Gestión de Códigos</h3>
                 
+                <div class="tabs-mini-bar">
+                    <button class="btn-xs active" id="tab-carga-manual" onclick="toggleModoCarga('manual')">Pegar Manual</button>
+                    <button class="btn-xs" id="tab-carga-auto" onclick="toggleModoCarga('auto')">✨ Generar Automático</button>
+                </div>
+
                 <div class="form-group">
-                    <label>1. Seleccionar Acuerdo:</label>
+                    <label>Seleccionar Acuerdo:</label>
                     <select id="select-acuerdo-carga" class="form-control">
                         <option value="">-- Seleccione --</option>
                     </select>
                 </div>
 
-                <div class="form-group">
-                    <label>2. Pegar Códigos (Excel/Txt):</label>
-                    <textarea id="txt-codigos-masivos" rows="8" placeholder="CUP-001&#10;CUP-002&#10;CUP-003..."></textarea>
+                <div id="bloque-carga-manual">
+                    <div class="form-group">
+                        <label>Pegar Códigos (Excel/Txt):</label>
+                        <textarea id="txt-codigos-masivos" rows="6" placeholder="CUP-001&#10;CUP-002..."></textarea>
+                    </div>
+                    <button class="btn-success full-width" onclick="procesarCargaMasiva()">
+                        <i class='bx bx-upload'></i> Cargar Lista
+                    </button>
                 </div>
 
-                <button class="btn-success full-width" onclick="procesarCargaMasiva()">
-                    <i class='bx bx-upload'></i> Cargar a Lista Blanca
-                </button>
+                <div id="bloque-carga-auto" style="display:none;">
+                    <div class="row">
+                        <div class="col">
+                            <label>Cantidad:</label>
+                            <input type="number" id="gen-cantidad" class="form-control" placeholder="Ej: 100">
+                        </div>
+                        <div class="col">
+                            <label>Prefijo:</label>
+                            <input type="text" id="gen-prefijo" class="form-control" placeholder="Ej: BCP">
+                        </div>
+                    </div>
+                    <p style="font-size:0.8rem; color:#666; margin:10px 0;">
+                        Se generarán códigos únicos tipo: <strong>BCP-X7Z9-1M2P</strong>
+                    </p>
+                    <button class="btn-primary full-width" onclick="procesarGeneracionAutomatica()">
+                        <i class='bx bx-cog'></i> Generar Códigos
+                    </button>
+                </div>
             </div>
         </div>
     </div>
