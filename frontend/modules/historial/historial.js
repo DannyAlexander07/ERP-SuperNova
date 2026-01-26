@@ -94,6 +94,7 @@
     }
 
     // --- 2. RENDERIZAR TABLA (ACTUALIZADA CON SEDE Y NUEVOS CAMPOS) ---
+   // --- 2. RENDERIZAR TABLA (ACTUALIZADA CON LÓGICA DE DETALLE B2B) ---
     function renderizarTablaHistorial(datos) {
         const tbody = document.getElementById('tabla-historial-body');
         if (!tbody) return;
@@ -139,6 +140,9 @@
             let tipoDocHtml = '';
             if (v.tipo_comprobante === 'Factura') {
                 tipoDocHtml = `<span class="badge" style="background:#e0e7ff; color:#4338ca; border:1px solid #c7d2fe;">🏢 FACTURA</span>`;
+            } else if (v.tipo_comprobante === 'Recibo Interno') {
+                 // Estilo especial para B2B
+                tipoDocHtml = `<span class="badge" style="background:#fff7ed; color:#c2410c; border:1px solid #fdba74;">📋 RECIBO</span>`;
             } else {
                 // Por defecto Boleta
                 tipoDocHtml = `<span class="badge" style="background:#f3f4f6; color:#4b5563; border:1px solid #e5e7eb;">📄 BOLETA</span>`;
@@ -152,15 +156,37 @@
                 metodoHtml += `<div style="font-size:10px; color:#666; margin-top:2px;">${iconoTarjeta} ${v.tipo_tarjeta}</div>`;
             
             } else if (v.metodo_pago === 'Yape') {
-                 // Usamos la nueva clase .badge-yape
                  metodoHtml = `<span class="badge-pago badge-yape"><i class='bx bx-qr'></i> Yape</span>`;
             
             } else if (v.metodo_pago === 'Plin') {
-                 // Usamos la nueva clase .badge-plin
                  metodoHtml = `<span class="badge-pago badge-plin"><i class='bx bx-mobile-alt'></i> Plin</span>`;
             }
 
-            const btnDeleteHtml = `<button class="btn-icon delete" title="Anular Venta" onclick="eliminarVenta(${v.id})" style="color:#ef4444;"><i class='bx bx-block'></i></button>`;
+            // 🔥 F. LÓGICA BOTONES (VER DETALLE vs INFO)
+            let btnVerDetalle = '';
+            
+            // Si es VENTA_POS (origen real), mostramos el ojo normal
+            if (v.origen === 'VENTA_POS' || !v.origen) { // !v.origen por compatibilidad con datos viejos
+                btnVerDetalle = `
+                    <button class="btn-icon" title="Ver Detalle" onclick="verDetallesVenta(${v.id})" style="color:#4f46e5; margin-right:5px;">
+                        <i class='bx bx-show'></i>
+                    </button>`;
+            } else {
+                // Si es COBRO B2B, mostramos un info tooltip (porque no hay productos que desglosar)
+                btnVerDetalle = `
+                    <button class="btn-icon" title="${v.observaciones || 'Cobro Administrativo'}" style="color:#059669; margin-right:5px; cursor:help;">
+                        <i class='bx bx-info-circle'></i>
+                    </button>`;
+            }
+
+            // Solo permitir anular si es VENTA_POS (B2B se gestiona en su módulo)
+            let btnDeleteHtml = '';
+            if (v.origen === 'VENTA_POS' || !v.origen) {
+                 btnDeleteHtml = `<button class="btn-icon delete" title="Anular Venta" onclick="eliminarVenta(${v.id})" style="color:#ef4444;"><i class='bx bx-block'></i></button>`;
+            } else {
+                 // Botón deshabilitado visualmente para B2B
+                 btnDeleteHtml = `<button class="btn-icon" title="Gestionar en Módulo Terceros" style="color:#cbd5e1; cursor:not-allowed;"><i class='bx bx-block'></i></button>`;
+            }
             
             tr.innerHTML = `
                 <td>
@@ -201,9 +227,7 @@
                 </td>
 
                 <td>
-                    <button class="btn-icon" title="Ver Detalle" onclick="verDetallesVenta(${v.id})" style="color:#4f46e5; margin-right:5px;">
-                        <i class='bx bx-show'></i>
-                    </button>
+                    ${btnVerDetalle}
                     ${btnDeleteHtml}
                 </td>
             `;

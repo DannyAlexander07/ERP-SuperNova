@@ -27,7 +27,6 @@
 }
 
 /* --- 2. GRID DE KPIs (NUEVO DISEÑO TEMPORAL) --- */
-/* Sistema de Grid Responsivo Automático */
 .kpi-grid-temporal {
     display: grid;
     /* Desktop: 4 columnas | Tablet: 2 columnas | Móvil: 1 columna */
@@ -41,7 +40,7 @@
     background: white;
     padding: 20px;
     border-radius: 16px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.04); /* Sombra suave */
+    box-shadow: 0 4px 20px rgba(0,0,0,0.04);
     transition: transform 0.3s ease, box-shadow 0.3s ease;
     border: 1px solid #f1f5f9;
     position: relative;
@@ -49,7 +48,7 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    height: 100%; /* Para que todas tengan la misma altura */
+    height: 100%;
 }
 
 .kpi-card:hover {
@@ -57,7 +56,7 @@
     box-shadow: 0 15px 30px rgba(0,0,0,0.08);
 }
 
-/* Icono y Título (Header de la tarjeta) */
+/* Header de la tarjeta */
 .card-header-flex {
     display: flex;
     align-items: center;
@@ -80,42 +79,13 @@
     letter-spacing: 0.5px;
 }
 
-/* Monto Grande (Balance) */
+/* Monto Grande */
 .amount-big {
     font-size: 26px;
     font-weight: 800;
     color: #1e293b;
     margin: 0 0 15px 0;
     letter-spacing: -0.5px;
-}
-
-/* Badge de Merma (Cajita Roja) */
-.merma-badge {
-    background: #fff1f2;
-    border: 1px solid #ffe4e6;
-    border-radius: 8px;
-    padding: 6px 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    box-sizing: border-box;
-    transition: opacity 0.3s;
-}
-
-.merma-label {
-    font-size: 11px;
-    color: #9f1239;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-}
-
-.merma-value {
-    font-size: 13px;
-    font-weight: 800;
-    color: #e11d48;
 }
 
 /* --- 3. TARJETA DE SALDO GRANDE --- */
@@ -162,11 +132,10 @@
 
 .premium-table tr:last-child td { border-bottom: none; }
 
-/* Badges de Tabla */
 .badge-ingreso { background: #dcfce7; color: #16a34a; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 11px; display: inline-block; }
 .badge-egreso { background: #fee2e2; color: #ef4444; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 11px; display: inline-block; }
 
-/* --- 5. MODALES --- */
+/* --- 5. MODALES (ESTANDAR) --- */
 .modal-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(5px);
@@ -234,28 +203,7 @@
     font-size: 13px; font-weight: 600; color: #334155;
 }
 
-/* --- 7. RESPONSIVE DESIGN (MÓVIL Y TABLET) --- */
-@media (max-width: 900px) {
-    /* Tablet: Grid de 2 columnas */
-    .kpi-grid-temporal { grid-template-columns: 1fr 1fr; }
-}
-
-@media (max-width: 600px) {
-    /* Móvil: Todo a 1 columna */
-    .module-header { flex-direction: column; align-items: flex-start; gap: 15px; }
-    .header-actions { width: 100%; flex-direction: column; align-items: stretch; }
-    .btn-primary, .btn-success, .select-sede-admin { width: 100%; justify-content: center; }
-    
-    .kpi-grid-temporal { grid-template-columns: 1fr; }
-    
-    .saldo-caja-container { flex-direction: column; align-items: flex-start; gap: 15px; }
-    .saldo-caja-container div { text-align: left !important; }
-    
-    .form-row { display: flex; flex-direction: column; gap: 0; }
-    .modal-content.center-modal { width: 95%; max-width: none; }
-}
-
-/* PANEL DE DESGLOSE */
+/* --- 7. PANEL DE DESGLOSE --- */
 .desglose-container {
     background: #ffffff;
     border-radius: 16px;
@@ -276,8 +224,15 @@
 .tab-btn:hover { color: #333; }
 .tab-btn.active { background: #ffffff; color: #6366f1; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
 
-/* GRID TARJETAS */
-.cards-methods-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }
+/* --- 8. GRID TARJETAS (ESTILO BASE - PC) --- */
+.cards-methods-grid {
+    display: grid;
+    /* Intenta poner todas las que quepan */
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 15px;
+}
+
+/* Diseño de tarjeta de método */
 .method-card-detail { display: flex; align-items: center; gap: 15px; padding: 15px; border-radius: 12px; border: 1px solid #f1f5f9; transition: transform 0.2s; background: #fff; }
 .method-card-detail:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.03); }
 .method-card-detail .icon-box { width: 45px; height: 45px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
@@ -290,40 +245,201 @@
 .plin { border-left: 4px solid #0ea5e9; } .plin .icon-box { background: #e0f2fe; color: #0284c7; }
 .debit { border-left: 4px solid #3b82f6; } .debit .icon-box { background: #dbeafe; color: #2563eb; }
 .credit { border-left: 4px solid #f59e0b; } .credit .icon-box { background: #fef3c7; color: #d97706; }
-.transfer { background: #fcfcfc; border-left: 4px solid #06b6d4; }
-.transfer .icon-box { background: #cffafe; color: #0891b2; }
+.transfer { background: #fcfcfc; border-left: 4px solid #06b6d4; } .transfer .icon-box { background: #cffafe; color: #0891b2; }
 
-@media (max-width: 600px) {
-    .desglose-header { flex-direction: column; align-items: flex-start; }
-    .period-tabs { width: 100%; justify-content: space-between; }
-    .tab-btn { flex: 1; text-align: center; }
+/* --- 9. ALERTA DE ARQUEO (NUEVO) --- */
+@keyframes parpadeoRojo {
+    0% { background-color: rgba(220, 38, 38, 0.9); }
+    50% { background-color: rgba(185, 28, 28, 0.95); }
+    100% { background-color: rgba(220, 38, 38, 0.9); }
 }
 
-/* 1. ESTILO BASE (Para PC / Pantallas grandes) */
-.cards-methods-grid {
-    display: grid;
-    /* En PC intenta poner todas las que quepan (normalmente las 6 en una fila o 2 filas de 3) */
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 15px;
+.alerta-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 9999; /* Mayor que cualquier modal normal */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    animation: parpadeoRojo 1s infinite;
 }
 
-/* 2. TABLET (iPad/Tablets - Hasta 1100px) */
-/* 🔥 AQUÍ ESTÁ EL ARREGLO: FORZAMOS 3 COLUMNAS */
+.alerta-content {
+    text-align: center;
+    color: white;
+    padding: 20px;
+}
+
+.alerta-content h1 { font-size: 3rem; margin: 10px 0; text-transform: uppercase; letter-spacing: 2px; font-weight: 800; }
+.alerta-content p { font-size: 1.5rem; margin-bottom: 20px; }
+
+.btn-autorizar {
+    background: white;
+    color: #dc2626;
+    border: none;
+    padding: 15px 30px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    transition: transform 0.2s;
+}
+.btn-autorizar:hover { transform: scale(1.05); }
+
+/* --- 10. RESPONSIVE DESIGN (MEDIA QUERIES) --- */
+
+/* TABLET (Hasta 1100px) */
 @media (max-width: 1100px) {
+    /* Forzamos 3 columnas en la grilla de métodos */
     .cards-methods-grid {
         grid-template-columns: repeat(3, 1fr) !important;
     }
 }
 
-/* 3. MÓVIL (Celulares - Hasta 600px) */
-/* Aquí se ven mejor 2 por fila para que no se aplasten */
+/* TABLET PEQUEÑA / MOVIL (Hasta 900px) */
+@media (max-width: 900px) {
+    .kpi-grid-temporal { grid-template-columns: 1fr 1fr; }
+}
+
+/* MÓVIL (Hasta 600px) */
 @media (max-width: 600px) {
-    .cards-methods-grid {
-        grid-template-columns: repeat(2, 1fr) !important;
-    }
+    /* Header vertical */
+    .module-header { flex-direction: column; align-items: flex-start; gap: 15px; }
+    .header-actions { width: 100%; flex-direction: column; align-items: stretch; }
+    .btn-primary, .btn-success, .select-sede-admin { width: 100%; justify-content: center; }
     
-    /* Ajuste de fuente para que quepa en celular */
-    .method-card-detail .method-info h3 {
-        font-size: 16px; 
-    }
+    /* Grids a 1 o 2 columnas */
+    .kpi-grid-temporal { grid-template-columns: 1fr; }
+    .cards-methods-grid { grid-template-columns: repeat(2, 1fr) !important; }
+    
+    /* Ajustes generales */
+    .saldo-caja-container { flex-direction: column; align-items: flex-start; gap: 15px; }
+    .modal-content.center-modal { width: 95%; max-width: none; }
+    
+    .desglose-header { flex-direction: column; align-items: flex-start; }
+    .period-tabs { width: 100%; justify-content: space-between; }
+    .tab-btn { flex: 1; text-align: center; }
+
+    /* Ajuste texto en tarjetas */
+    .method-card-detail .method-info h3 { font-size: 16px; }
+
+    /* 🔥 AJUSTE CRÍTICO PARA LA ALERTA EN MÓVIL */
+    .alerta-content h1 { font-size: 1.8rem; }
+    .alerta-content p { font-size: 1rem; }
+    .alerta-content i { font-size: 50px !important; } /* Reducir icono */
+}
+
+/* --- CORRECCIÓN DE CAPAS (Z-INDEX) --- */
+/* Esto asegura que el modal de autorización se ponga ENCIMA de la alerta roja */
+#modal-autorizar-tope {
+    z-index: 10001 !important; /* Debe ser mayor que el 9999 de la alerta */
+}
+
+/* --- 11. ESTILOS ESPECÍFICOS PARA EL MODAL DE AUTORIZACIÓN (SOLUCIÓN FINAL) --- */
+
+/* 1. Aseguramos que este modal esté SIEMPRE encima de la alerta roja (9999) */
+#modal-autorizar-tope {
+    z-index: 10001 !important; 
+    background: rgba(0, 0, 0, 0.5); /* Fondo oscuro semitransparente para enfoque */
+    backdrop-filter: blur(2px);      /* Efecto borroso elegante detrás */
+}
+
+/* 2. Diseño de la tarjeta del modal */
+#modal-autorizar-tope .modal-content {
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4); /* Sombra fuerte para profundidad */
+    border: none;
+    overflow: hidden; /* Para que la cabecera roja no se salga de las esquinas */
+    animation: slideUp 0.3s ease-out; /* Pequeña animación de entrada */
+}
+
+/* Animación de entrada suave */
+@keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+/* 3. Cabecera Roja del Modal */
+#modal-autorizar-tope .modal-header {
+    background: #dc2626 !important; /* Rojo alerta */
+    color: white;
+    padding: 15px 20px;
+    border-bottom: 1px solid #b91c1c;
+}
+
+#modal-autorizar-tope .modal-header h3 {
+    color: white !important;
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Botón de cerrar (X) en blanco */
+#modal-autorizar-tope .btn-close {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    transition: background 0.2s;
+}
+#modal-autorizar-tope .btn-close:hover {
+    background: rgba(255, 255, 255, 0.4);
+    color: #fff;
+}
+
+/* 4. Cuerpo del Modal */
+#modal-autorizar-tope .modal-body {
+    padding: 30px 25px;
+    text-align: center;
+    font-size: 15px;
+    color: #334155;
+}
+
+#modal-autorizar-tope .modal-body strong {
+    color: #1e293b;
+    font-size: 18px;
+}
+
+/* 5. Botón de Confirmación (Gigante y Azul/Morado) */
+#modal-autorizar-tope .btn-primary {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    width: 100%;
+    justify-content: center;
+    padding: 14px;
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 15px;
+    box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);
+}
+
+#modal-autorizar-tope .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(79, 70, 229, 0.5);
+}
+
+/* --- ESTILO BOTÓN VOLVER AL INICIO (EN ALERTA ROJA) --- */
+.btn-volver-inicio {
+    background: transparent;
+    border: 2px solid rgba(255, 255, 255, 0.6);
+    color: white;
+    padding: 10px 25px;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 50px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    margin-top: 10px;
+}
+
+.btn-volver-inicio:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: white;
+    transform: translateY(-2px);
 }

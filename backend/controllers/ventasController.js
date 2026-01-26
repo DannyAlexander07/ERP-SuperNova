@@ -168,8 +168,8 @@ exports.registrarVenta = async (req, res) => {
         client.release();
     }
 };
-// 2. OBTENER HISTORIAL (CORREGIDO: AHORA INCLUYE OBSERVACIONES)
-// 2. OBTENER HISTORIAL (CORREGIDO: Ahora SÍ lee tipo_tarjeta y comprobante)
+
+// 2. OBTENER HISTORIAL UNIFICADO (CORREGIDO: ALIAS DE PREFIJO)
 exports.obtenerHistorialVentas = async (req, res) => {
     try {
         const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
@@ -177,66 +177,101 @@ exports.obtenerHistorialVentas = async (req, res) => {
         const usuarioSedeId = req.usuario.sede_id;
         const filtroSedeId = req.query.sede;
 
-        let query = `
-            SELECT 
-                v.id, 
-                v.fecha_venta, 
-                v.total_venta, 
-                v.metodo_pago, 
-                v.numero_ticket_sede,
-                v.tipo_venta,
-                v.observaciones,
-                
-                -- 🔥 ESTO ES LO QUE FALTABA: LEER LOS CAMPOS NUEVOS
-                v.tipo_comprobante, 
-                v.tipo_tarjeta,     
-                
-                s.nombre AS nombre_sede,
-                s.prefijo_ticket,
-                
-                -- Datos del CAJERO
-                u.nombres AS nombre_cajero,
-                
-                -- Datos del VENDEDOR
-                vend.nombres AS nombre_vendedor,
-                vend.apellidos AS apellido_vendedor
-
-            FROM ventas v
-            JOIN usuarios u ON v.usuario_id = u.id          
-            LEFT JOIN usuarios vend ON v.vendedor_id = vend.id 
-            JOIN sedes s ON v.sede_id = s.id
-            WHERE 1=1
-        `;
-
+        // Determinamos qué sede filtrar
+        let sedeFiltro = esSuperAdmin ? (filtroSedeId || null) : usuarioSedeId;
+        
+        // Parámetros para la query ($1 = sede_id si existe)
         const params = [];
-        let paramIndex = 1;
-
-        if (esSuperAdmin) {
-            if (filtroSedeId) {
-                query += ` AND v.sede_id = $${paramIndex}`;
-                params.push(filtroSedeId);
-                paramIndex++;
-            }
-        } else {
-            query += ` AND v.sede_id = $${paramIndex}`;
-            params.push(usuarioSedeId);
-            paramIndex++;
+        let sedeCondition = "";
+        
+        if (sedeFiltro) {
+            sedeCondition = "AND v.sede_id = $1"; // Para Ventas
+            params.push(sedeFiltro);
         }
 
-        query += ` ORDER BY v.fecha_venta DESC LIMIT 100`;
+        // 🔥 LA MAGIA: UNION ALL ENTRE VENTAS Y COBROS DE CAJA
+        const query = `
+            WITH HistorialUnificado AS (
+                -- A. VENTAS DEL POS (Boletas/Facturas)
+                SELECT 
+                    v.id,
+                    v.fecha_venta, 
+                    v.total_venta, 
+                    v.metodo_pago, 
+                    -- 👇 CORRECCIÓN AQUÍ: s.prefijo_ticket (tabla sedes), no v.prefijo_ticket
+                    COALESCE(s.prefijo_ticket || '-' || LPAD(v.numero_ticket_sede::text, 4, '0'), 'TICKET-' || v.id) as codigo_visual,
+                    v.tipo_venta,
+                    v.observaciones,
+                    v.tipo_comprobante, 
+                    v.tipo_tarjeta,
+                    s.nombre AS nombre_sede,
+                    u.nombres AS nombre_usuario, -- El Cajero
+                    vend.nombres || ' ' || COALESCE(vend.apellidos, '') AS nombre_vendedor,
+                    v.doc_cliente_temporal,
+                    v.nombre_cliente_temporal,
+                    'VENTA_POS' as origen
+                FROM ventas v
+                JOIN usuarios u ON v.usuario_id = u.id          
+                LEFT JOIN usuarios vend ON v.vendedor_id = vend.id 
+                JOIN sedes s ON v.sede_id = s.id
+                WHERE 1=1 ${sedeCondition}
+
+                UNION ALL
+
+                -- B. COBROS B2B (Ingresos directos a Caja desde módulo Terceros)
+                SELECT 
+                    mc.id + 900000, -- ID ficticio alto para evitar conflictos visuales
+                    mc.fecha_registro as fecha_venta,
+                    mc.monto as total_venta,
+                    mc.metodo_pago,
+                    'B2B-' || mc.id as codigo_visual, -- Código especial para identificar
+                    'Cobro Terceros' as tipo_venta,
+                    mc.descripcion as observaciones,
+                    'Recibo Interno' as tipo_comprobante,
+                    NULL as tipo_tarjeta,
+                    s.nombre as nombre_sede,
+                    u.nombres as nombre_usuario, -- El Cajero
+                    'Acuerdo Comercial' as nombre_vendedor, -- Vendedor genérico
+                    'CORPORATIVO' as doc_cliente_temporal,
+                    'Cliente Corporativo' as nombre_cliente_temporal,
+                    'COBRO_CAJA' as origen
+                FROM movimientos_caja mc
+                JOIN usuarios u ON mc.usuario_id = u.id
+                JOIN sedes s ON mc.sede_id = s.id
+                WHERE mc.tipo_movimiento = 'INGRESO' 
+                AND mc.categoria = 'Ingresos Varios (Caja)' 
+                ${sedeFiltro ? "AND mc.sede_id = $1" : ""}
+            )
+            SELECT * FROM HistorialUnificado
+            ORDER BY fecha_venta DESC
+            LIMIT 100
+        `;
 
         const result = await pool.query(query, params);
         
         const ventasFormateadas = result.rows.map(v => ({
-            ...v,
-            codigo_visual: `${v.prefijo_ticket || 'GEN'}-${(v.numero_ticket_sede || v.id).toString().padStart(4, '0')}`,
-            vendedor_final: v.nombre_vendedor ? `${v.nombre_vendedor} ${v.apellido_vendedor || ''}` : 'Caja General'
+            id: v.id,
+            fecha_venta: v.fecha_venta,
+            total_venta: v.total_venta,
+            metodo_pago: v.metodo_pago,
+            codigo_visual: v.codigo_visual,
+            tipo_venta: v.tipo_venta,
+            observaciones: v.observaciones,
+            tipo_comprobante: v.tipo_comprobante,
+            tipo_tarjeta: v.tipo_tarjeta,
+            nombre_sede: v.nombre_sede,
+            nombre_usuario: v.nombre_usuario, 
+            nombre_vendedor: v.nombre_vendedor,
+            nombre_cajero: v.nombre_usuario, 
+            doc_cliente_temporal: v.doc_cliente_temporal,
+            nombre_cliente_temporal: v.nombre_cliente_temporal,
+            origen: v.origen 
         }));
 
         res.json(ventasFormateadas);
 
     } catch (err) {
-        console.error("Error historial ventas:", err.message);
+        console.error("Error historial unificado:", err.message);
         res.status(500).send('Error al cargar historial.');
     }
 };
@@ -253,44 +288,77 @@ exports.obtenerDetalleVenta = async (req, res) => {
     }
 };
 
-// 4. ANULAR VENTA
+// 4. ANULAR VENTA (SEGURIDAD TOTAL BASADA EN TU BASE DE DATOS REAL)
 exports.eliminarVenta = async (req, res) => {
     const { id } = req.params;
     const usuarioId = req.usuario.id;
-    const sedeId = req.usuario.sede_id;
-    const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
-    const esSuperAdmin = rol === 'superadmin' || rol === 'gerente';
+    
+    // 1. NORMALIZACIÓN DE ROL
+    // Convierte "Super Admin" -> "super admin" y "ADMIN" -> "admin"
+    const rolRaw = req.usuario.rol || '';
+    const rolUsuario = rolRaw.toLowerCase().trim();
+    
+    // 🔒 LISTA BLANCA DE PERMISOS (VIP)
+    // Solo estos roles exactos pueden anular.
+    const rolesPermitidos = [
+        'superadmin',   // (Alexander) - Visto en tu BD
+        'admin',        // (Danny, Cristian) - Visto en tu BD
+        'administrador',// (Por si el sistema cambia y guarda el nombre completo)
+        'super admin',  // (Por si acaso se guarda con espacio)
+        'gerente'       // (Futuro rol de alto nivel)
+    ];
 
     const client = await pool.connect();
     try {
+        // 2. BLOQUEO DE SEGURIDAD
+        // Si entra Pedro (colaborador) o alguien de Logística, el sistema los expulsa aquí.
+        if (!rolesPermitidos.includes(rolUsuario)) {
+            console.log(`⛔ Bloqueo: Usuario ${req.usuario.nombres} (${rolUsuario}) intentó anular venta #${id}`);
+            throw new Error('⛔ ACCESO DENEGADO: Tu perfil no tiene permisos para anular ventas. Contacta a un Admin.');
+        }
+
         await client.query('BEGIN');
+        
+        // 3. Verificar venta y sede
         const ventaRes = await client.query('SELECT * FROM ventas WHERE id = $1', [id]);
         if (ventaRes.rows.length === 0) throw new Error('Venta no encontrada.');
         const venta = ventaRes.rows[0];
 
-        if (venta.sede_id !== sedeId && !esSuperAdmin) throw new Error('No tienes permiso para anular ventas de otra sede.');
-
+        // 4. RECUPERAR STOCK (Lógica de Combos corregida)
         const detallesRes = await client.query('SELECT producto_id, cantidad, nombre_producto_historico FROM detalle_ventas WHERE venta_id = $1', [id]);
+        
         for (const item of detallesRes.rows) {
+            // Verificamos si es combo
             const esCombo = await client.query('SELECT producto_hijo_id, cantidad FROM productos_combo WHERE producto_padre_id = $1', [item.producto_id]);
+            
             if (esCombo.rows.length > 0) {
+                // A. Reponer Ingredientes
                 for (const hijo of esCombo.rows) {
-                    await reponerStock(client, hijo.producto_hijo_id, venta.sede_id, item.cantidad * hijo.cantidad, usuarioId, id, `Anulación Combo`);
+                    await reponerStock(client, hijo.producto_hijo_id, venta.sede_id, item.cantidad * hijo.cantidad, usuarioId, id, `Anulación Ingrediente Combo`);
                 }
+                // 🔥 B. Reponer Combo Principal
+                await reponerStock(client, item.producto_id, venta.sede_id, item.cantidad, usuarioId, id, `Anulación Venta (Combo)`);
             } else {
+                // Producto Normal
                 await reponerStock(client, item.producto_id, venta.sede_id, item.cantidad, usuarioId, id, `Anulación Venta`);
             }
         }
 
+        // 5. Eliminar Registros
         await client.query('DELETE FROM movimientos_caja WHERE venta_id = $1', [id]);
         await client.query('DELETE FROM detalle_ventas WHERE venta_id = $1', [id]);
         await client.query('DELETE FROM ventas WHERE id = $1', [id]);
+        
         await client.query('COMMIT');
-        res.json({ msg: `Venta anulada.` });
+        
+        console.log(`⚠️ ALERTA: Venta #${id} ANULADA por ${rolUsuario} (ID: ${usuarioId})`);
+        res.json({ msg: `Venta anulada correctamente.` });
 
     } catch (err) {
         await client.query('ROLLBACK');
-        res.status(400).json({ msg: err.message });
+        // Si el error es de permisos, retornamos 403 (Prohibido)
+        const status = err.message.includes('ACCESO DENEGADO') ? 403 : 400;
+        res.status(status).json({ msg: err.message });
     } finally {
         client.release();
     }

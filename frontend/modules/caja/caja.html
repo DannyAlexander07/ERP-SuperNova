@@ -139,4 +139,43 @@
         </div>
         <div id="caja-paginacion" class="pagination-container" style="margin-top: 15px; display:flex; justify-content:flex-end;"></div>
     </div>
+
+    <div id="alerta-arqueo" class="alerta-overlay" style="display:none;">
+        <div class="alerta-content">
+            <i class='bx bxs-error-alt bx-tada' style="font-size: 80px; color: #fff;"></i>
+            <h1>¡ALERTA DE EFECTIVO!</h1>
+            <p id="mensaje-alerta-arqueo">La caja ha superado el límite.</p>
+            <p>Se requiere arqueo parcial o autorización de administrador.</p>
+            
+            <div style="display: flex; flex-direction: column; gap: 15px; align-items: center;">
+                <button onclick="abrirModalAutorizacion()" class="btn-autorizar">
+                    <i class='bx bxs-lock-open'></i> Autorizar Nivel Superior
+                </button>
+
+                <button onclick="salirAlInicio()" class="btn-volver-inicio">
+                    <i class='bx bx-home-alt'></i> Volver al Inicio
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
+
+<div id="modal-autorizar-tope" class="modal-overlay">
+    <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header" style="background: #dc2626; color: white;">
+            <h3>🛡️ Autorización Requerida</h3>
+            <button class="btn-close" onclick="cerrarModalAutorizacion()" style="color:white;"><i class='bx bx-x'></i></button>
+        </div>
+        <div class="modal-body" style="text-align: center;">
+            <p>El efectivo actual es <strong id="monto-actual-alerta"></strong>.</p>
+            <p>¿Deseas autorizar que la caja siga operando hasta <strong id="nuevo-tope-propuesto"></strong>?</p>
+            <br>
+            <button class="btn-primary" onclick="confirmarAutorizacionTope()" style="width: 100%; justify-content: center;">
+                ✅ SÍ, AUTORIZAR AHORA
+            </button>
+        </div>
+    </div>
+</div>
+
+</div>
+

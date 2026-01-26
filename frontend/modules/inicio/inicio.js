@@ -3,20 +3,27 @@
 (function() {
     console.log("🚀 Módulo Inicio cargado.");
 
+    // Variables globales del módulo
+    let userRole = 'colaborador'; // Por defecto restrictivo
+
     async function initDashboard() {
-        // 1. Saludo Personalizado
+        // 1. Obtener usuario y rol
         const userStr = localStorage.getItem('user');
         if (userStr) {
             const u = JSON.parse(userStr);
             const nombreReal = u.nombre || u.nombres || "Usuario";
+            // Normalizar rol a minúsculas para comparaciones fáciles
+            userRole = (u.rol || 'colaborador').toLowerCase();
+
+            // Saludo
             const welcomeElement = document.getElementById('welcome-user');
-            if (welcomeElement) {
-                // Solo primer nombre para que no sea muy largo
-                welcomeElement.innerText = nombreReal.split(' ')[0]; 
-            }
+            if (welcomeElement) welcomeElement.innerText = nombreReal.split(' ')[0];
         }
 
-        // 2. Fecha Actual
+        // 2. Configurar Interfaz según Rol (Seguridad Visual)
+        configurarPermisosVisuales();
+
+        // 3. Fecha Actual
         const dateEl = document.getElementById('current-date');
         if(dateEl) {
             const options = { weekday: 'long', day: 'numeric', month: 'long' };
@@ -24,8 +31,50 @@
             dateEl.innerText = fecha.charAt(0).toUpperCase() + fecha.slice(1);
         }
 
-        // 3. 🚨 CARGAR DATOS REALES DEL BACKEND
-        await cargarResumenDia();
+        // 4. Cargar Datos Reales (Solo si tiene permisos)
+        if (['superadmin', 'admin', 'gerente'].includes(userRole)) {
+            await cargarResumenDia();
+        } else {
+            // Si es colaborador/logística, ocultar montos sensibles
+            ocultarMontosSensibles();
+        }
+    }
+
+    // --- SEGURIDAD VISUAL POR ROLES ---
+    function configurarPermisosVisuales() {
+        // A. Ocultar accesos directos según rol
+        const accesos = document.querySelectorAll('.shortcut-item');
+        
+        // Mapa de permisos para los atajos (Indices del 0 al 3 en tu HTML)
+        // 0: Calendario, 1: Caja, 2: Stock, 3: Gastos
+        
+        // Logística: Solo Stock
+        if (userRole === 'logistica') {
+            if(accesos[0]) accesos[0].style.display = 'none'; // Calendario
+            if(accesos[1]) accesos[1].style.display = 'none'; // Caja
+            if(accesos[3]) accesos[3].style.display = 'none'; // Gastos
+        }
+
+        // Colaborador: No ver Caja ni Gastos (Solo Calendario y Stock para consultas)
+        if (userRole === 'colaborador') {
+            if(accesos[1]) accesos[1].style.display = 'none'; // Caja
+            if(accesos[3]) accesos[3].style.display = 'none'; // Gastos
+        }
+
+        // B. Ocultar tarjetas de acción (Nueva Venta / Reserva) para Logística
+        if (userRole === 'logistica') {
+            const actionCards = document.querySelectorAll('.action-card-modern');
+            actionCards.forEach(card => card.style.display = 'none');
+        }
+    }
+
+    function ocultarMontosSensibles() {
+        const divVentas = document.getElementById('dash-ventas-hoy');
+        if (divVentas) {
+            divVentas.innerText = "****";
+            divVentas.style.color = "#ccc";
+            divVentas.title = "No tienes permisos para ver montos.";
+        }
     }
 
     async function cargarResumenDia() {
@@ -33,7 +82,6 @@
             const token = localStorage.getItem('token');
             if (!token) return;
 
-            // Llamamos al endpoint que creamos en analiticaController
             const res = await fetch('/api/analitica/resumen-dia', { 
                 headers: { 'x-auth-token': token } 
             });
@@ -41,23 +89,23 @@
             if (res.ok) {
                 const data = await res.json();
                 
-                // Actualizar HTML con animación simple
                 const divVentas = document.getElementById('dash-ventas-hoy');
                 const divEventos = document.getElementById('dash-eventos-hoy');
 
-                if(divVentas) divVentas.innerText = `S/ ${parseFloat(data.ventasHoy).toFixed(2)}`;
+                if(divVentas) {
+                    // Animación de conteo simple
+                    divVentas.innerText = `S/ ${parseFloat(data.ventasHoy).toFixed(2)}`;
+                }
                 if(divEventos) divEventos.innerText = data.eventosHoy;
-
-                console.log("Datos de inicio actualizados:", data);
             }
         } catch (error) {
             console.error("Error cargando dashboard:", error);
         }
     }
 
-    // Exponer para recarga automática
+    // Exponer para que dashboard.js pueda llamarlo al recargar módulo
     window.initDashboard = initDashboard;
     
-    // Arrancar
+    // Ejecutar al cargar
     initDashboard();
 })();

@@ -138,7 +138,7 @@ exports.cargarCodigos = async (req, res) => {
     }
 };
 
-// 5. 🔥 VALIDACIÓN EN PUERTA (CON FECHA Y HORA DE USO)
+// 5. 🔥 VALIDACIÓN EN PUERTA (MODIFICADO: STATUS 200 SIEMPRE)
 exports.validarYCanjear = async (req, res) => {
     const { codigo } = req.body;
     const sedeId = req.usuario.sede_id;
@@ -166,18 +166,11 @@ exports.validarYCanjear = async (req, res) => {
         if (resCodigo.rows.length === 0) throw new Error("⛔ CÓDIGO NO EXISTE en el sistema.");
         const infoCodigo = resCodigo.rows[0];
 
-        // B. Validar Estado (AQUÍ ESTÁ EL CAMBIO 🔥)
+        // B. Validar Estado
         if (infoCodigo.estado === 'CANJEADO') {
-            // 1. Obtener fecha original de la base de datos
             const fechaDb = new Date(infoCodigo.fecha_canje);
-            
-            // 2. Formatear Fecha (Ej: 22/01/2026)
             const fechaStr = fechaDb.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            
-            // 3. Formatear Hora (Ej: 04:30 pm)
             const horaStr = fechaDb.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true });
-
-            // 4. Lanzar el error con el detalle
             throw new Error(`⚠️ YA FUE USADO<br>📅 El ${fechaStr} a las ${horaStr}`);
         }
 
@@ -220,7 +213,9 @@ exports.validarYCanjear = async (req, res) => {
 
         await client.query('COMMIT');
         
+        // ✅ RESPUESTA ÉXITOSA (Status 200 + success: true)
         res.json({ 
+            success: true, 
             msg: "✅ CÓDIGO VÁLIDO - PUEDE INGRESAR", 
             producto: infoCodigo.nombre_producto,
             valor_canje: infoCodigo.precio_unitario_acordado
@@ -228,7 +223,13 @@ exports.validarYCanjear = async (req, res) => {
 
     } catch (err) {
         await client.query('ROLLBACK');
-        res.status(400).json({ msg: err.message });
+        
+        // 🚨 RESPUESTA DE "ERROR LÓGICO" (Status 200 + success: false)
+        // Esto evita el mensaje rojo en la consola del navegador
+        res.json({ 
+            success: false, 
+            msg: err.message 
+        });
     } finally {
         client.release();
     }
@@ -353,50 +354,62 @@ exports.obtenerCuotasAcuerdo = async (req, res) => {
     }
 };
 
-// 12. REGISTRAR PAGO DE CUOTA (Impacta en Caja) 💰
+// 12. REGISTRAR PAGO DE CUOTA (SOLUCIÓN FINAL: SIN COLUMNA 'ESTADO') 💰
 exports.pagarCuota = async (req, res) => {
     const { id } = req.params; 
-    const { metodo_pago } = req.body;
+    const { metodo_pago, sede_destino } = req.body; 
+    
     const usuarioId = req.usuario.id;
-    const sedeId = req.usuario.sede_id;
+    // Si el frontend no manda sede, usamos la del usuario actual
+    const sedeId = sede_destino || req.usuario.sede_id; 
 
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
 
-        // Verificar cuota
+        // 1. Verificar Cuota + Acuerdo + Canal (JOIN TRIPLE CORRECTO)
         const resCuota = await client.query(`
-            SELECT c.*, a.empresa, a.descripcion 
+            SELECT 
+                c.*, 
+                ce.nombre as empresa,  -- Nombre de la empresa (Canal)
+                a.descripcion 
             FROM cuotas_acuerdos c
             JOIN acuerdos_comerciales a ON c.acuerdo_id = a.id
+            JOIN canales_externos ce ON a.canal_id = ce.id
             WHERE c.id = $1
         `, [id]);
 
         if (resCuota.rows.length === 0) throw new Error("Cuota no encontrada");
         const cuota = resCuota.rows[0];
 
-        if (cuota.estado === 'PAGADO') throw new Error("Ya está pagada.");
+        if (cuota.estado === 'PAGADO') throw new Error("Esta cuota ya está pagada.");
 
-        // Registrar en CAJA (Esto arregla tu reporte financiero)
-        const desc = `Pago Cuota #${cuota.numero_cuota} - ${cuota.empresa} (${cuota.descripcion})`;
+        // 2. Definir Método de Pago
+        const metodoFinal = metodo_pago || 'TRANSFERENCIA';
+
+        // 3. Registrar en CAJA (CORREGIDO: SIN COLUMNA 'ESTADO')
+        const desc = `Cobro B2B: ${cuota.empresa} - Cuota #${cuota.numero_cuota} (${cuota.descripcion})`;
+        
         await client.query(`
             INSERT INTO movimientos_caja 
             (sede_id, usuario_id, tipo_movimiento, categoria, monto, descripcion, metodo_pago, fecha_registro)
             VALUES ($1, $2, 'INGRESO', 'Ingresos Varios (Caja)', $3, $4, $5, NOW())
-        `, [sedeId, usuarioId, cuota.monto, desc, metodo_pago]);
+        `, [sedeId, usuarioId, cuota.monto, desc, metodoFinal]);
 
-        // Actualizar estado cuota
+        // 4. Actualizar estado de la cuota (Aquí SÍ existe estado)
         await client.query(`
-            UPDATE cuotas_acuerdos SET estado = 'PAGADO', fecha_pago = NOW(), metodo_pago = $2
+            UPDATE cuotas_acuerdos 
+            SET estado = 'PAGADO', fecha_pago = NOW(), metodo_pago = $2
             WHERE id = $1
-        `, [id, metodo_pago]);
+        `, [id, metodoFinal]);
 
         await client.query('COMMIT');
-        res.json({ msg: "Pago registrado." });
+        res.json({ msg: "✅ Pago registrado correctamente en caja." });
 
     } catch (err) {
         await client.query('ROLLBACK');
-        res.status(500).json({ error: err.message });
+        console.error("❌ Error en pagarCuota:", err.message); 
+        res.status(500).json({ error: "Error interno: " + err.message });
     } finally {
         client.release();
     }
@@ -475,5 +488,125 @@ exports.editarCuota = async (req, res) => {
         res.status(500).json({ error: err.message });
     } finally {
         client.release();
+    }
+};
+
+// 14. 🔥 HISTORIAL TOTAL DE CANJES (CON FILTROS Y EXPORTACIÓN)
+exports.obtenerHistorialTotal = async (req, res) => {
+    try {
+        const { page, limit, inicio, fin, search, canal, exportar } = req.query;
+
+        // 1. Construcción dinámica del WHERE
+        let whereClause = "WHERE c.estado = 'CANJEADO'";
+        const params = [];
+        let paramIndex = 1;
+
+        // Filtro Fechas
+        if (inicio) {
+            whereClause += ` AND DATE(c.fecha_canje) >= $${paramIndex}`;
+            params.push(inicio);
+            paramIndex++;
+        }
+        if (fin) {
+            whereClause += ` AND DATE(c.fecha_canje) <= $${paramIndex}`;
+            params.push(fin);
+            paramIndex++;
+        }
+
+        // Filtro Canal (Socio)
+        if (canal) {
+            whereClause += ` AND a.canal_id = $${paramIndex}`;
+            params.push(canal);
+            paramIndex++;
+        }
+
+        // Filtro Búsqueda (Código, Usuario, Producto)
+        if (search) {
+            whereClause += ` AND (
+                c.codigo_unico ILIKE $${paramIndex} OR 
+                u.nombres ILIKE $${paramIndex} OR 
+                p.nombre ILIKE $${paramIndex}
+            )`;
+            params.push(`%${search}%`);
+            paramIndex++;
+        }
+
+        // 2. Lógica para Exportar (Sin paginación) vs Listar (Con paginación)
+        let queryFinal = "";
+        
+        if (exportar === 'true') {
+            // MODO EXCEL: Traemos TODO lo que coincida
+            queryFinal = `
+                SELECT 
+                    c.fecha_canje, 
+                    c.codigo_unico, 
+                    ce.nombre as socio_canal,
+                    a.descripcion as nombre_paquete,
+                    p.nombre as producto, 
+                    u.nombres as usuario
+                FROM codigos_externos c
+                LEFT JOIN productos p ON c.producto_asociado_id = p.id
+                LEFT JOIN usuarios u ON c.usuario_canje_id = u.id
+                LEFT JOIN acuerdos_comerciales a ON c.acuerdo_id = a.id
+                LEFT JOIN canales_externos ce ON a.canal_id = ce.id
+                ${whereClause}
+                ORDER BY c.fecha_canje DESC
+            `;
+        } else {
+            // MODO TABLA: Con Paginación
+            const pagina = parseInt(page) || 1;
+            const limite = parseInt(limit) || 20;
+            const offset = (pagina - 1) * limite;
+
+            queryFinal = `
+                SELECT 
+                    c.id, c.codigo_unico, c.fecha_canje, c.estado,
+                    p.nombre as producto, u.nombres as usuario,
+                    ce.nombre as socio_canal, a.descripcion as nombre_paquete
+                FROM codigos_externos c
+                LEFT JOIN productos p ON c.producto_asociado_id = p.id
+                LEFT JOIN usuarios u ON c.usuario_canje_id = u.id
+                LEFT JOIN acuerdos_comerciales a ON c.acuerdo_id = a.id
+                LEFT JOIN canales_externos ce ON a.canal_id = ce.id
+                ${whereClause}
+                ORDER BY c.fecha_canje DESC
+                LIMIT ${limite} OFFSET ${offset}
+            `;
+        }
+
+        // Ejecutar Query de Datos
+        const resData = await pool.query(queryFinal, params);
+
+        if (exportar === 'true') {
+            return res.json(resData.rows); // Retornamos array puro para el Excel
+        }
+
+        // Ejecutar Query de Conteo (Solo para paginación)
+        // Nota: Debemos reconstruir el query count con los mismos filtros
+        const countQuery = `
+            SELECT COUNT(*) 
+            FROM codigos_externos c
+            LEFT JOIN productos p ON c.producto_asociado_id = p.id
+            LEFT JOIN usuarios u ON c.usuario_canje_id = u.id
+            LEFT JOIN acuerdos_comerciales a ON c.acuerdo_id = a.id
+            ${whereClause}
+        `;
+        const resCount = await pool.query(countQuery, params);
+
+        const totalItems = parseInt(resCount.rows[0].count);
+        const totalPaginas = Math.ceil(totalItems / (parseInt(limit) || 20));
+
+        res.json({
+            data: resData.rows,
+            pagination: {
+                total: totalItems,
+                paginaActual: parseInt(page) || 1,
+                totalPaginas: totalPaginas
+            }
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Error al obtener historial" });
     }
 };

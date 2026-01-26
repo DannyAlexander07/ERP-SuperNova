@@ -68,6 +68,7 @@
                 }));
                 
                 renderizarTabla();
+                verificarAlertasMasivas();
             }
         } catch (error) { console.error(error); }
     }
@@ -105,13 +106,37 @@
                 mostrarBotonStock = 'inline-flex';
                 
                 // Formato visual del stock
-                if (prod.stock <= 0) stockHtml = `<span style="color:red; font-weight:bold;">🔴 Agotado</span>`;
-                else if (prod.stock <= prod.minimo) stockHtml = `<span style="color:orange; font-weight:bold;">⚠️ ${prod.stock} (Bajo)</span>`;
-                else stockHtml = `<span style="color:green; font-weight:bold;">🟢 ${prod.stock} UND</span>`;
+                if (prod.stock <= 0) {
+                    // AGOTADO (Rojo + Icono Palpitante)
+                    stockHtml = `
+                        <div style="display:flex; align-items:center;">
+                            <i class='bx bxs-error-circle icono-alerta-pulsante'></i> 
+                            <div>
+                                <span style="color:#dc2626; font-weight:bold;">0 AGOTADO</span>
+                                <span class="texto-alerta-bajo">¡Reponer ya!</span>
+                            </div>
+                        </div>
+                    `;
+                }
+                else if (prod.stock <= prod.minimo) {
+                    // BAJO (Naranja/Rojo + Icono Palpitante)
+                    stockHtml = `
+                        <div style="display:flex; align-items:center;">
+                            <i class='bx bxs-bell-ring icono-alerta-pulsante' style="color:#f59e0b;"></i>
+                            <div>
+                                <span style="color:#d97706; font-weight:bold;">${prod.stock} UND</span>
+                                <span class="texto-alerta-bajo" style="color:#d97706;">¡Quedan solo ${prod.stock}!</span>
+                            </div>
+                        </div>
+                    `;
+                }
+                else {
+                    // NORMAL (Verde)
+                    stockHtml = `<span style="color:#16a34a; font-weight:bold;">🟢 ${prod.stock} UND</span>`;
+                }
             
             } else {
-                // Solo para 'servicio' mostramos infinito
-                stockHtml = `<span style="color:#999;">∞</span>`;
+                stockHtml = `<span style="color:#94a3b8;">∞ Servicio</span>`;
             }
 
             const bgClass = getIconClass(prod.categoria);
@@ -151,6 +176,54 @@
 
         // 5. Actualizar los botones de abajo
         actualizarControlesPaginacionInv(datosFiltrados.length);
+    }
+
+    // --- 🔥 NUEVAS FUNCIONES PARA NOTIFICACIONES FLOTANTES ---
+    function verificarAlertasMasivas() {
+        const contenedor = document.getElementById('stock-toast-container');
+        if(!contenedor) return;
+        contenedor.innerHTML = ''; // Limpiar anteriores
+
+        // Filtramos productos físicos con stock bajo
+        const criticos = productosData.filter(p => 
+            p.tipo === 'fisico' && p.stock <= p.minimo
+        );
+
+        // Limitamos a 4 alertas para no saturar
+        const mostrar = criticos.slice(0, 4);
+
+        mostrar.forEach((prod, index) => {
+            // Delay para efecto cascada
+            setTimeout(() => {
+                crearToastStock(prod);
+            }, index * 300);
+        });
+    }
+
+    function crearToastStock(prod) {
+        const contenedor = document.getElementById('stock-toast-container');
+        const div = document.createElement('div');
+        div.className = 'stock-toast';
+        
+        let mensaje = `Quedan solo <strong>${prod.stock}</strong> unidades.`;
+        if(prod.stock <= 0) mensaje = `<strong>¡Producto Agotado!</strong> (0 Stock)`;
+
+        div.innerHTML = `
+            <i class='bx bxs-alarm-exclamation bx-tada'></i>
+            <div class="stock-toast-content">
+                <h4>${prod.nombre}</h4>
+                <p>${mensaje}</p>
+            </div>
+        `;
+
+        contenedor.appendChild(div);
+
+        // Desaparecer automáticamente a los 6 segundos
+        setTimeout(() => {
+            div.style.opacity = '0';
+            div.style.transform = 'translateX(50px)';
+            setTimeout(() => div.remove(), 500);
+        }, 6000);
     }
 
 
@@ -220,25 +293,24 @@
         } catch (e) { console.error(e); }
     }
 
-    // Función que renderiza SOLO la página actual
+// Función que renderiza SOLO la página actual (CORREGIDO: VENTAS SOLO EN SALIDAS)
     function renderKardexPaginado() {
         const tbody = document.getElementById('tabla-kardex-body');
         tbody.innerHTML = '';
 
         if(movimientosFiltrados.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px;">Sin movimientos.</td></tr>';
+            // Ajustamos el colspan a 11 para cubrir todas las columnas
+            tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:20px;">Sin movimientos.</td></tr>';
             document.getElementById('kardex-page-info').innerText = "0 de 0";
             document.getElementById('kardex-pagination-controls').innerHTML = "";
             return;
         }
 
-        // CÁLCULO MATEMÁTICO DE PÁGINA
         const inicio = (paginaActual - 1) * filasPorPagina;
         const fin = inicio + filasPorPagina;
         const datosPagina = movimientosFiltrados.slice(inicio, fin);
         const totalPaginas = Math.ceil(movimientosFiltrados.length / filasPorPagina);
 
-        // RENDERIZAR FILAS
         datosPagina.forEach(m => {
             const tr = document.createElement('tr');
             const fecha = new Date(m.fecha).toLocaleString();
@@ -251,36 +323,59 @@
             
             if (m.tipo_movimiento && m.tipo_movimiento.includes('ajuste')) tipoTexto = "Ajuste";
 
-            // Dinero
+            // --- CÁLCULOS FINANCIEROS ---
             const costo = parseFloat(m.costo_unitario) || 0;
-            const total = Math.abs(m.cantidad) * costo;
+            const precioVenta = parseFloat(m.precio_venta) || 0;
+            
+            // 1. Total Costo (Valor de inventario): SIEMPRE VISIBLE
+            const totalCosto = Math.abs(m.cantidad) * costo;
+
+            // 2. Total Venta (Ganancia esperada/real):
+            const totalVentaCalculado = Math.abs(m.cantidad) * precioVenta;
+
+            // --- LÓGICA VISUAL ---
+            
+            // A. Precio Venta Unitario:
+            // Si es SALIDA (Venta), mostramos precio. Si es ENTRADA, guion.
+            const textoPrecioVenta = !esPositivo ? `S/ ${precioVenta.toFixed(2)}` : '-';
+
+            // B. Total Venta:
+            // Si es SALIDA (Venta), mostramos el total en negrita azul oscuro.
+            // Si es ENTRADA, mostramos guion.
+            const textoTotalVenta = !esPositivo 
+                ? `<span style="color:#0f172a; font-weight:bold;">S/ ${totalVentaCalculado.toFixed(2)}</span>` 
+                : '-';
 
             tr.innerHTML = `
-                <td style="font-size:12px; color:#666;">${fecha}</td>
-                
+                <td style="font-size:11px; color:#666;">${fecha}</td>
                 <td>
-                    <span style="background:#e0e7ff; color:#3730a3; padding:4px 8px; border-radius:6px; font-weight:700; font-size:11px;">
+                    <span style="background:#e0e7ff; color:#3730a3; padding:2px 6px; border-radius:4px; font-weight:700; font-size:10px;">
                         ${m.nombre_sede || 'Sede'}
                     </span>
                 </td>
-
-                <td style="font-weight:600; font-size:13px;">${m.producto}</td>
+                <td style="font-weight:600; font-size:12px;">${m.producto}</td>
                 <td>
-                    <span style="color:${color}; font-weight:bold; font-size:12px;">
+                    <span style="color:${color}; font-weight:bold; font-size:11px;">
                         <i class='bx ${icono}'></i> ${tipoTexto}
                     </span>
                     <br><small style="color:#888; font-size:10px;">${m.motivo || '-'}</small>
                 </td>
+                
                 <td style="text-align:center; font-weight:bold; color:${color}">${signo}${m.cantidad}</td>
-                <td style="text-align:right; font-size:12px;">S/ ${costo.toFixed(2)}</td>
-                <td style="text-align:right; font-weight:bold; font-size:12px; color:#333;">S/ ${total.toFixed(2)}</td>
+                
+                <td style="text-align:right; font-size:11px; color:#64748b;">S/ ${costo.toFixed(2)}</td>
+                <td style="text-align:right; font-size:11px; font-weight:bold; color:#000;">S/ ${totalCosto.toFixed(2)}</td>
+
+                <td style="text-align:right; font-size:11px; color:#0f172a;">${textoPrecioVenta}</td>
+                <td style="text-align:right; font-size:11px;">${textoTotalVenta}</td>
+
                 <td style="text-align:center; font-weight:bold">${m.stock_resultante}</td>
-                <td style="font-size:11px;">${m.usuario || 'Sistema'}</td>
+                <td style="font-size:10px;">${m.usuario || 'Sistema'}</td>
             `;
             tbody.appendChild(tr);
         });
 
-        // ACTUALIZAR CONTROLES DE PAGINACIÓN
+        // ACTUALIZAR CONTROLES
         const info = document.getElementById('kardex-page-info');
         if(info) info.innerText = `Mostrando ${inicio + 1} - ${Math.min(fin, movimientosFiltrados.length)} de ${movimientosFiltrados.length}`;
 
@@ -358,8 +453,9 @@
         XLSX.writeFile(workbook, `Kardex_Valorizado_${fechaHoy}.xlsx`);
     }
 
-    // --- MODALES ---
-    window.abrirModalStock = function(id) {
+
+    // --- MODALES (ACTUALIZADO: BLOQUEA COSTO EN COMBOS) ---
+window.abrirModalStock = function(id) {
         const prod = productosData.find(p => p.id === id);
         if(!prod) return;
         
@@ -372,9 +468,28 @@
         
         // Reset inputs
         document.getElementById('stk-cantidad').value = "";
-        document.getElementById('stk-costo').value = prod.costo || "";
         
-        // Default a Entrada
+        const inputCosto = document.getElementById('stk-costo');
+        
+        // 🔥 CORRECCIÓN AQUÍ: Usamos .toFixed(2) para que solo muestre 2 decimales
+        const costoVisual = prod.costo ? parseFloat(prod.costo).toFixed(2) : "";
+        inputCosto.value = costoVisual;
+        
+        // LÓGICA DE BLOQUEO (Mantener lo que hicimos antes)
+        if (prod.tipo === 'combo') {
+            inputCosto.readOnly = true;
+            inputCosto.style.backgroundColor = "#f1f5f9";
+            inputCosto.style.color = "#64748b";
+            inputCosto.title = "Automático (Suma de ingredientes)";
+            inputCosto.placeholder = "Automático";
+        } else {
+            inputCosto.readOnly = false;
+            inputCosto.style.backgroundColor = "";
+            inputCosto.style.color = "";
+            inputCosto.title = "Ingrese nuevo costo si varió";
+            inputCosto.placeholder = " ";
+        }
+        
         setTipoStock('entrada');
     }
 
@@ -563,13 +678,13 @@ window.guardarProducto = async function() {
     finally { btnSave.innerText = txtOriginal; btnSave.disabled = false; }
 }
 
-    // --- FORMULARIO STOCK ---
+// --- FORMULARIO STOCK (ACTUALIZADO: RECIBE CASCADA DE CAMBIOS) ---
     const formStock = document.getElementById('form-stock');
     if(formStock) {
         formStock.addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const id = document.getElementById('stk-id').value;
+            const id = parseInt(document.getElementById('stk-id').value);
             const tipoAjuste = document.getElementById('stk-tipo').value;
             const cantidad = document.getElementById('stk-cantidad').value;
             const costo = document.getElementById('stk-costo').value;
@@ -582,26 +697,55 @@ window.guardarProducto = async function() {
             btn.disabled = true; btn.innerText = "Procesando...";
 
             try {
-                // 🚨 CAMBIO: La ruta sigue siendo la misma, pero el backend ahora usa 'ajustarStock'
                 const res = await fetch(`/api/inventario/${id}/stock`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('token') },
-                    body: JSON.stringify({ cantidad, costo, motivo, tipoAjuste }) // Enviamos tipoAjuste
+                    body: JSON.stringify({ cantidad, costo, motivo, tipoAjuste })
                 });
 
                 const data = await res.json();
+                
                 if(res.ok) {
-                    // Mensaje diferente según éxito
                     const msg = tipoAjuste === 'salida' ? "Baja registrada (Merma)." : "Ingreso registrado.";
-                    // Usar toast o alert
                     alert("✅ " + msg);
+                    
+                    // 1. Actualizar EL PRODUCTO PRINCIPAL
+                    const prodIndex = productosData.findIndex(p => p.id === id);
+                    if (prodIndex !== -1) {
+                        if (data.nuevo_stock !== undefined) productosData[prodIndex].stock = parseInt(data.nuevo_stock);
+                        
+                        // 🔥 CORRECCIÓN AQUÍ: Redondeamos lo que llega del backend
+                        if (data.nuevo_costo !== undefined) {
+                            // parseFloat( ... .toFixed(2) ) convierte "1.5703..." en el número 1.57
+                            productosData[prodIndex].costo = parseFloat(parseFloat(data.nuevo_costo).toFixed(2));
+                        }
+                    }
+
+                    // 2. 🔥 ACTUALIZAR COMBOS AFECTADOS (CASCADA)
+                    // Si el backend nos dice que otros combos cambiaron de precio, actualizamos la data local
+                    if (data.combos_afectados && data.combos_afectados.length > 0) {
+                        data.combos_afectados.forEach(combo => {
+                            const comboIndex = productosData.findIndex(p => p.id === combo.id);
+                            if (comboIndex !== -1) {
+                                productosData[comboIndex].costo = combo.nuevo_costo;
+                                console.log(`🔄 Combo actualizado localmente: ID ${combo.id} -> Nuevo Costo: ${combo.nuevo_costo}`);
+                            }
+                        });
+                    }
+
                     cerrarModalStock();
-                    initInventario(); 
+                    renderizarTabla(); 
+
                 } else {
                     alert("❌ " + data.msg);
                 }
-            } catch(error) { console.error(error); alert("Error de conexión"); }
-            finally { btn.disabled = false; btn.innerText = txt; }
+            } catch(error) { 
+                console.error(error); 
+                alert("Error de conexión"); 
+            } finally { 
+                btn.disabled = false; 
+                btn.innerText = txt; 
+            }
         });
     }
 

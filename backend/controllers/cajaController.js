@@ -89,7 +89,6 @@ exports.registrarMovimiento = async (req, res) => {
     }
 };
 
-// 3. OBTENER RESUMEN (KPIs + DESGLOSE DETALLADO INCLUYENDO TRANSFERENCIA)
 // 3. OBTENER RESUMEN (CORREGIDO PARA LEER CRM Y VENTAS)
 exports.obtenerResumenCaja = async (req, res) => {
     try {
@@ -103,6 +102,22 @@ exports.obtenerResumenCaja = async (req, res) => {
         let sedeConsulta = null; 
         if (esAdmin && filtroSedeId) sedeConsulta = filtroSedeId; 
         else if (!esAdmin) sedeConsulta = usuarioSedeId; 
+
+        const resTope = await pool.query(`
+            SELECT descripcion FROM movimientos_caja 
+            WHERE categoria = 'AUTORIZACION_TOPE' 
+            AND ($1::int IS NULL OR sede_id = $1::int)
+            AND fecha_registro::date = CURRENT_DATE
+            ORDER BY id DESC LIMIT 1
+        `, [sedeConsulta]);
+
+        // Extraemos el número del texto "Tope autorizado hasta: 2000"
+        let topeAutorizado = 1000; // Por defecto empezamos en 1000
+        if (resTope.rows.length > 0) {
+            const texto = resTope.rows[0].descripcion;
+            const numero = parseInt(texto.split(': ')[1]);
+            if (!isNaN(numero)) topeAutorizado = numero;
+        }
 
         // CONSULTA MAESTRA CORREGIDA
         // Ahora normalizamos el texto del método de pago para que sume todo correctamente
@@ -183,6 +198,8 @@ exports.obtenerResumenCaja = async (req, res) => {
         const m = resMerma.rows[0];
 
         res.json({ 
+
+            topeAutorizado: topeAutorizado,
             // Totales Generales
             dia: parseFloat(c.neto_hoy || 0),
             semana: parseFloat(c.neto_semana || 0),
@@ -218,5 +235,39 @@ exports.obtenerResumenCaja = async (req, res) => {
     } catch (err) {
         console.error("❌ Error resumen caja detallado:", err.message);
         res.status(500).json({ msg: 'Error interno al calcular KPIs.' });
+    }
+};
+
+exports.autorizarTope = async (req, res) => {
+    // Solo admins pueden autorizar
+    const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
+    const esAdmin = ['superadmin', 'admin', 'administrador', 'gerente'].includes(rol);
+    
+    if (!esAdmin) {
+        return res.status(403).json({ msg: "⛔ Solo administradores pueden autorizar el tope de caja." });
+    }
+
+    const { nuevoTope, sedeId } = req.body;
+    // Si no mandan sede, usamos la del usuario
+    const sedeTarget = sedeId || req.usuario.sede_id;
+
+    try {
+        // Guardamos esto en una tabla temporal o configuración de la sede.
+        // Como no tenemos tabla de config, usaremos la tabla 'sedes' agregando una columna al vuelo o actualizando.
+        // OJO: Para hacerlo rápido y sin migrar DB, usaremos una tabla de 'movimientos_caja' con un tipo especial
+        // que servirá de "marcador".
+        
+        await pool.query(
+            `INSERT INTO movimientos_caja 
+            (sede_id, usuario_id, tipo_movimiento, categoria, descripcion, monto, metodo_pago, fecha_registro)
+            VALUES ($1, $2, 'NEUTRO', 'AUTORIZACION_TOPE', 'Tope autorizado hasta: ' || $3, 0, 'SISTEMA', NOW())`,
+            [sedeTarget, req.usuario.id, nuevoTope]
+        );
+
+        res.json({ msg: `✅ Tope autorizado hasta S/ ${nuevoTope}` });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ msg: "Error al autorizar tope" });
     }
 };

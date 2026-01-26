@@ -14,6 +14,12 @@
     let paginaCodigos = 1;
     const itemsPorPaginaCodigos = 20;
 
+    let historialHoyCache = []; // Guardamos todos los de hoy aquí
+    let pagMiniActual = 1;
+    const itemsMini = 5; // Mostrar solo 5 en el widget pequeño
+
+    let pagHistorialTotal = 1; // Para el modal grande
+
     // Variables para Paginación de Acuerdos
     let paginaActual = 1;
     const itemsPorPagina = 5;
@@ -267,30 +273,56 @@
         document.getElementById('conf-monto').innerHTML = "S/ " + parseFloat(monto).toFixed(2);
         document.getElementById('modal-confirmar-pago').classList.add('active');
     }
-    // D. EJECUTAR EL PAGO REAL
+
+    // D. EJECUTAR EL PAGO REAL (ACTUALIZADO)
     window.ejecutarPago = async function() {
         const cuotaId = document.getElementById('conf-cuota-id').value;
         const btn = event.currentTarget;
+        
+        // 1. Estado de carga visual
         btn.disabled = true;
+        const textoOriginal = btn.innerHTML;
         btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Procesando...";
 
         try {
+            // 2. Petición al Backend
             const res = await fetch(`/api/terceros/cuotas/${cuotaId}/pagar`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('token') },
-                body: JSON.stringify({ metodo_pago: 'TRANSFERENCIA' }) 
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'x-auth-token': localStorage.getItem('token') 
+                },
+                body: JSON.stringify({ 
+                    metodo_pago: 'TRANSFERENCIA' 
+                    // Nota: Si agregas un select de sede en el HTML, podrías enviar:
+                    // sede_destino: document.getElementById('tu-select-sede').value
+                }) 
             });
+
+            const data = await res.json();
+
             if(res.ok) {
+                // ✅ ÉXITO
                 cerrarModalConfirmacion();
-                cerrarModalPagos(); // Cerramos todo para refrescar la vista
-                alert("✅ Pago registrado exitosamente en Caja.");
+                cerrarModalPagos(); // Cerramos la lista para forzar recarga al volver a abrir
+                alert(data.msg || "✅ Pago registrado exitosamente en Caja.");
+                
+                // Actualizar la tabla principal de acuerdos para reflejar cambios si es necesario
+                if(typeof cargarAcuerdos === 'function') {
+                    cargarAcuerdos(); 
+                }
             } else {
-                alert("Error al registrar pago.");
+                // ❌ ERROR DEL BACKEND (Muestra el mensaje real del error 500 si ocurre)
+                alert("Error: " + (data.error || "No se pudo registrar el pago."));
             }
-        } catch(e) { console.error(e); alert("Error de conexión"); } 
-        finally {
+
+        } catch(e) { 
+            console.error("Error de red:", e); 
+            alert("Error de conexión con el servidor."); 
+        } finally {
+            // 3. Restaurar botón
             btn.disabled = false;
-            btn.innerHTML = "Sí, Cobrar";
+            btn.innerHTML = textoOriginal;
         }
     }
 
@@ -334,12 +366,15 @@
         document.getElementById('modal-pagos').classList.remove('active');
     }
 
-    // --- 5. OTRAS FUNCIONES ---
+// --- 5. OTRAS FUNCIONES ---
     window.validarCodigo = async function() {
         const input = document.getElementById('input-codigo-canje');
         const resultadoBox = document.getElementById('resultado-validacion');
         const codigo = input.value.trim();
+        
         if(!codigo) return;
+        
+        // Reiniciar estado visual
         resultadoBox.className = 'result-box hidden';
         input.disabled = true;
 
@@ -349,8 +384,13 @@
                 headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('token') },
                 body: JSON.stringify({ codigo })
             });
+            
             const data = await res.json();
-            if(res.ok) {
+
+            // 🔥 CAMBIO CLAVE AQUÍ:
+            // Ahora verificamos data.success en lugar de res.ok
+            if(data.success === true) {
+                // ✅ CASO ÉXITO (VERDE)
                 resultadoBox.className = 'result-box success';
                 resultadoBox.innerHTML = `
                     <span class="result-title"><i class='bx bx-check-circle'></i> ACCESO PERMITIDO</span>
@@ -358,13 +398,23 @@
                     <div class="result-product">📦 ${data.producto || 'Producto Generico'}</div>
                 `;
                 cargarHistorialCanjes();
+                input.value = ''; // Limpiamos solo si fue éxito
             } else {
+                // ❌ CASO ERROR / YA USADO (ROJO)
+                // El backend devuelve 200 OK, pero con success: false y el mensaje de error
                 resultadoBox.className = 'result-box error';
                 resultadoBox.innerHTML = `<span class="result-title"><i class='bx bx-error'></i> DENEGADO</span><p>${data.msg}</p>`;
+                input.select(); // Seleccionamos el texto para que corrijan fácil
             }
-        } catch (e) { console.error(e); } 
+
+        } catch (e) { 
+            console.error(e); 
+            resultadoBox.className = 'result-box error';
+            resultadoBox.innerHTML = `<span class="result-title"><i class='bx bx-wifi-off'></i> ERROR RED</span><p>No se pudo conectar al servidor.</p>`;
+        } 
         finally {
-            input.disabled = false; input.value = ''; input.focus();
+            input.disabled = false; 
+            input.focus();
         }
     }
 
@@ -513,21 +563,232 @@
     async function cargarHistorialCanjes() {
         const lista = document.getElementById('lista-ultimos-canjes');
         if(!lista) return;
+        
         try {
             const res = await fetch('/api/terceros/historial', { headers: {'x-auth-token': localStorage.getItem('token')} });
             if(res.ok) {
                 const data = await res.json();
-                lista.innerHTML = '';
-                if(data.length === 0) { lista.innerHTML = '<li class="empty-msg">No hay canjes hoy.</li>'; return; }
-                data.forEach(item => {
-                    const li = document.createElement('li');
-                    li.className = 'success';
-                    const hora = new Date(item.fecha_canje).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    li.innerHTML = `<span><strong>${item.codigo_unico}</strong><br><small>${item.producto || 'Producto'}</small></span><span>${hora}</span>`;
-                    lista.appendChild(li);
-                });
+                historialHoyCache = data || [];
+                pagMiniActual = 1; // Resetear a página 1
+                renderizarMiniHistorial();
             }
         } catch(e) { console.error(e); }
+    }
+
+    window.renderizarMiniHistorial = function() {
+        const lista = document.getElementById('lista-ultimos-canjes');
+        lista.innerHTML = '';
+
+        if(historialHoyCache.length === 0) { 
+            lista.innerHTML = '<li class="empty-msg">No hay canjes hoy.</li>'; 
+            return; 
+        }
+
+        const totalPags = Math.ceil(historialHoyCache.length / itemsMini);
+        const inicio = (pagMiniActual - 1) * itemsMini;
+        const fin = inicio + itemsMini;
+        const itemsPagina = historialHoyCache.slice(inicio, fin);
+
+        itemsPagina.forEach(item => {
+            const li = document.createElement('li');
+            li.className = 'success';
+            
+            // Fecha y Hora formateada
+            const fechaObj = new Date(item.fecha_canje);
+            const fechaStr = fechaObj.toLocaleDateString([], {day:'2-digit', month:'2-digit'});
+            const horaStr = fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+            li.innerHTML = `
+                <div style="display:flex; justify-content:space-between; width:100%;">
+                    <span>
+                        <strong style="color:#334155;">${item.codigo_unico}</strong><br>
+                        <small style="color:#64748b;">${item.producto || 'Producto'}</small>
+                    </span>
+                    <span style="text-align:right; font-size:0.75rem;">
+                        <div style="font-weight:bold;">${horaStr}</div>
+                        <div style="color:#94a3b8;">${fechaStr}</div>
+                    </span>
+                </div>
+            `;
+            lista.appendChild(li);
+        });
+
+        // Actualizar botones mini
+        document.getElementById('txt-mini-page').innerText = `Pg ${pagMiniActual}/${totalPags}`;
+        document.getElementById('btn-mini-prev').disabled = (pagMiniActual === 1);
+        document.getElementById('btn-mini-next').disabled = (pagMiniActual === totalPags);
+    }
+
+    window.cambiarPaginaMini = function(dir) {
+        pagMiniActual += dir;
+        renderizarMiniHistorial();
+    }
+
+    // --- NUEVO: MODAL HISTORIAL TOTAL ---
+    window.abrirModalHistorialTotal = function() {
+        document.getElementById('modal-historial-total').classList.add('active');
+        
+        // Llenar select de canales en el filtro (reusamos la variable global 'canales')
+        const selectFiltro = document.getElementById('filtro-hist-canal');
+        selectFiltro.innerHTML = '<option value="">Todos los Socios</option>';
+        canales.forEach(c => {
+            selectFiltro.innerHTML += `<option value="${c.id}">${c.nombre}</option>`;
+        });
+
+        // Limpiar filtros visuales al abrir
+        document.getElementById('filtro-hist-inicio').value = '';
+        document.getElementById('filtro-hist-fin').value = '';
+        document.getElementById('filtro-hist-search').value = '';
+        
+        pagHistorialTotal = 1;
+        cargarTablaHistorialTotal();
+    }
+
+    window.cerrarModalHistorialTotal = function() {
+        document.getElementById('modal-historial-total').classList.remove('active');
+    }
+
+    window.aplicarFiltrosHistorial = function() {
+        pagHistorialTotal = 1; // Resetear a pag 1 al filtrar
+        cargarTablaHistorialTotal();
+    }
+
+    window.cargarTablaHistorialTotal = async function() {
+        const tbody = document.getElementById('tabla-historial-total');
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;">Cargando filtros...</td></tr>';
+
+        // Recoger valores de filtros
+        const inicio = document.getElementById('filtro-hist-inicio').value;
+        const fin = document.getElementById('filtro-hist-fin').value;
+        const search = document.getElementById('filtro-hist-search').value;
+        const canal = document.getElementById('filtro-hist-canal').value;
+
+        // Construir URL Params
+        const params = new URLSearchParams({
+            page: pagHistorialTotal,
+            limit: 10,
+            inicio, fin, search, canal
+        });
+
+        try {
+            const res = await fetch(`/api/terceros/historial-total?${params}`, { 
+                headers: {'x-auth-token': localStorage.getItem('token')} 
+            });
+            const json = await res.json();
+            
+            tbody.innerHTML = '';
+            document.getElementById('total-registros-hist').innerText = json.pagination?.total || 0;
+
+            if(!json.data || json.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#64748b;">No se encontraron resultados con esos filtros.</td></tr>';
+                document.getElementById('info-hist-page').innerText = "Pg 0/0";
+                return;
+            }
+
+            json.data.forEach(Row => {
+                const fechaObj = new Date(Row.fecha_canje);
+                const fecha = fechaObj.toLocaleDateString();
+                const hora = fechaObj.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${fecha}</td>
+                    <td style="color:#64748b; font-size:0.8rem;">${hora}</td>
+                    <td style="font-family:monospace; font-weight:bold; color:#0f172a;">${Row.codigo_unico}</td>
+                    <td><span style="background:#f0f9ff; color:#0369a1; padding:2px 6px; border-radius:4px; font-size:0.75rem; font-weight:bold;">${Row.socio_canal || '-'}</span></td>
+                    <td style="font-size:0.8rem;">${Row.nombre_paquete || '-'}</td>
+                    <td style="font-size:0.8rem;">${Row.usuario || 'Sistema'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Actualizar controles paginación
+            document.getElementById('info-hist-page').innerText = `Página ${json.pagination.paginaActual} de ${json.pagination.totalPaginas}`;
+            document.getElementById('btn-hist-prev').disabled = (json.pagination.paginaActual === 1);
+            document.getElementById('btn-hist-next').disabled = (json.pagination.paginaActual === json.pagination.totalPaginas);
+
+        } catch(e) {
+            console.error(e);
+            tbody.innerHTML = '<tr><td colspan="6" style="color:red; text-align:center;">Error al cargar datos.</td></tr>';
+        }
+    }
+
+    window.cambiarPaginaHistorial = function(dir) {
+        pagHistorialTotal += dir;
+        cargarTablaHistorialTotal();
+    }
+
+// 🔥 FUNCIÓN EXPORTAR EXCEL (CORREGIDA PARA EXCEL ESPAÑOL/LATINO)
+    // 🔥 FUNCIÓN EXPORTAR EXCEL (CORREGIDA PARA LATINOAMÉRICA: USO DE PUNTO Y COMA)
+    window.exportarHistorialExcel = async function() {
+        const btn = event.currentTarget;
+        const txtOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i>";
+
+        // 1. Recoger filtros
+        const inicio = document.getElementById('filtro-hist-inicio').value;
+        const fin = document.getElementById('filtro-hist-fin').value;
+        const search = document.getElementById('filtro-hist-search').value;
+        const canal = document.getElementById('filtro-hist-canal').value;
+
+        const params = new URLSearchParams({
+            exportar: 'true',
+            inicio, fin, search, canal
+        });
+
+        try {
+            // 2. Pedir datos
+            const res = await fetch(`/api/terceros/historial-total?${params}`, { 
+                headers: {'x-auth-token': localStorage.getItem('token')} 
+            });
+            const data = await res.json();
+
+            if(data.length === 0) {
+                alert("No hay datos para exportar.");
+                return;
+            }
+
+            // 3. Generar CSV con PUNTO Y COMA (;)
+            let csvContent = "\uFEFF"; // BOM para tildes
+            
+            // CABECERAS CON PUNTO Y COMA
+            csvContent += "FECHA;HORA;CODIGO;SOCIO/CANAL;PAQUETE;PRODUCTO;USUARIO\n";
+
+            data.forEach(row => {
+                const f = new Date(row.fecha_canje);
+                const fecha = f.toLocaleDateString();
+                const hora = f.toLocaleTimeString();
+                
+                // Limpieza de comillas internas (doble comilla para escapar en CSV)
+                // Envolvemos en comillas por seguridad, pero usamos ; para separar
+                const socio = `"${(row.socio_canal || "").replace(/"/g, '""')}"`;
+                const paquete = `"${(row.nombre_paquete || "").replace(/"/g, '""')}"`;
+                const prod = `"${(row.producto || "").replace(/"/g, '""')}"`;
+                const user = `"${(row.usuario || "").replace(/"/g, '""')}"`;
+                const codigo = `"${row.codigo_unico}"`;
+
+                // UNIMOS CON PUNTO Y COMA
+                csvContent += `${fecha};${hora};${codigo};${socio};${paquete};${prod};${user}\n`;
+            });
+
+            // 4. Descargar
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `Historial_Canjes_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+        } catch(e) {
+            console.error(e);
+            alert("Error al exportar.");
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = txtOriginal;
+        }
     }
 
     async function cargarCanales() {

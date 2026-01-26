@@ -26,6 +26,8 @@ router.get('/acuerdos/:id/codigos', checkAuth, tercerosController.listarCodigosP
 
 router.get('/acuerdos/:id/cuotas', checkAuth, tercerosController.obtenerCuotasAcuerdo);
 router.post('/cuotas/:id/pagar', checkAuth, tercerosController.pagarCuota);
+
+router.get('/historial-total', checkAuth, tercerosController.obtenerHistorialTotal);
 router.put('/cuotas/:id', checkAuth, tercerosController.editarCuota);
 // 3. Operación (Caja y Validación)
 router.post('/validar', checkAuth, tercerosController.validarYCanjear);

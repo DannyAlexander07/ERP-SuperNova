@@ -954,3 +954,81 @@
     border-radius: 4px;
     color: #64748b;
 }
+
+/* --- ALERTA DE STOCK BAJO (NIVEL 3) --- */
+
+/* 1. Animación de Latido (Pulsar) */
+@keyframes latidoRojo {
+    0% { transform: scale(1); text-shadow: 0 0 0 rgba(220, 38, 38, 0); }
+    50% { transform: scale(1.3); text-shadow: 0 0 10px rgba(220, 38, 38, 0.5); }
+    100% { transform: scale(1); text-shadow: 0 0 0 rgba(220, 38, 38, 0); }
+}
+
+.icono-alerta-pulsante {
+    color: #dc2626; /* Rojo intenso */
+    animation: latidoRojo 1.5s infinite ease-in-out;
+    display: inline-block;
+    margin-right: 5px;
+    font-size: 16px;
+}
+
+/* 2. Texto de Advertencia en Tabla */
+.texto-alerta-bajo {
+    display: block;
+    font-size: 10px;
+    color: #dc2626;
+    font-weight: 800;
+    margin-top: 2px;
+    letter-spacing: 0.3px;
+}
+
+/* 3. Contenedor de Notificaciones Flotantes (Toasts) */
+#stock-toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none; /* Para poder hacer click "a través" si no hay nada */
+}
+
+/* 4. Tarjeta de Notificación Individual */
+.stock-toast {
+    background: white;
+    border-left: 5px solid #dc2626;
+    padding: 15px 20px;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    min-width: 300px;
+    pointer-events: auto;
+    animation: slideInRight 0.5s ease-out forwards;
+    opacity: 0;
+    transform: translateX(50px);
+}
+
+@keyframes slideInRight {
+    to { opacity: 1; transform: translateX(0); }
+}
+
+.stock-toast i {
+    font-size: 24px;
+    color: #dc2626;
+}
+
+.stock-toast-content h4 {
+    margin: 0;
+    font-size: 14px;
+    color: #1e293b;
+    font-weight: 700;
+}
+
+.stock-toast-content p {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: #64748b;
+}

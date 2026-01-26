@@ -225,26 +225,28 @@
                     </button>
                 </div>
 
-                <div class="table-responsive-kardex">
-                    <table class="kardex-table">
-                        <thead>
-                            <tr>
-                                <th>Fecha</th>
-                                <th>Sede</th>
-                                <th>Producto</th>
-                                <th>Movimiento</th>
-                                <th style="text-align:center">Cant.</th>
-                                <th style="text-align:right">Costo Unit.</th>
-                                <th style="text-align:right">Total Mov.</th>
-                                <th style="text-align:center">Stock Final</th>
-                                <th>Usuario</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabla-kardex-body">
-                            </tbody>
-                    </table>
-                </div>
+                <table class="kardex-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Sede</th>
+                            <th>Producto</th>
+                            <th>Movimiento</th>
+                            <th style="text-align:center">Cant.</th>
+                            
+                            <th style="text-align:right">Costo Unit.</th>
+                            <th style="text-align:right">Total Costo</th>
+                            
+                            <th style="text-align:right">P. Venta</th>
+                            <th style="text-align:right">Total Venta</th>
 
+                            <th style="text-align:center">Stock Final</th>
+                            <th>Usuario</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-kardex-body">
+                    </tbody>
+                </table>
                 <div class="pagination-container" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px; display: flex; justify-content: space-between; align-items: center;">
                     <span class="page-info" id="kardex-page-info">Cargando...</span>
                     
@@ -319,4 +321,6 @@
         </div>
     </div>
 </div>
+
+<div id="stock-toast-container"></div>
 </div>

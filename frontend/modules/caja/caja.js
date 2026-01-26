@@ -7,6 +7,9 @@
     let currentPage = 1;
     const ITEMS_PER_PAGE = 10;
     let resumenGlobal = null;
+
+    let topeActual = 1000;
+    let efectivoActual = 0;
     
     // Variable para guardar el filtro actual (vacío = todas o la del usuario)
     let filtroSedeActual = "";
@@ -65,7 +68,6 @@
         cargarMovimientos();
     }
 
-    // --- 1. CARGAR KPIS Y RESUMEN ---
 // --- 1. CARGAR KPIS Y RESUMEN ---
     async function cargarResumen() {
         try {
@@ -76,7 +78,13 @@
             
             if(res.ok) {
                 const data = await res.json();
-                resumenGlobal = data.desglose; 
+                resumenGlobal = data.desglose;
+                
+                topeActual = data.topeAutorizado || 1000;
+                efectivoActual = parseFloat(data.desglose.hoy.efectivo || 0);
+
+                // 🔥 2. VERIFICAR ALERTA INMEDIATAMENTE
+                verificarAlertaEfectivo();
 
                 // Pintar los cuadros de arriba (Total General)
                 const setKpi = (id, valor) => {
@@ -98,11 +106,80 @@
             }
         } catch (e) { console.error("Error KPIs:", e); }
     }
+
     // --- FUNCIONES PARA LAS PESTAÑAS DE DESGLOSE ---
     window.cambiarPeriodoDesglose = function(periodo, btn) {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         if(btn) btn.classList.add('active');
         actualizarVistaDesglose(periodo);
+    }
+
+    window.verificarAlertaEfectivo = function() {
+        const alerta = document.getElementById('alerta-arqueo');
+        const msg = document.getElementById('mensaje-alerta-arqueo');
+
+        // Solo alerta si el efectivo supera el tope autorizado
+        if (efectivoActual >= topeActual) {
+            alerta.style.display = 'flex'; // MOSTRAR PANTALLA ROJA
+            msg.innerText = `El efectivo actual (S/ ${efectivoActual.toFixed(2)}) ha superado el límite de S/ ${topeActual}.`;
+            
+            // Calculamos el siguiente nivel (Ej: si tope es 1000 -> 2000)
+            const siguienteNivel = Math.ceil((efectivoActual + 1) / 1000) * 1000;
+            document.getElementById('monto-actual-alerta').innerText = `S/ ${efectivoActual.toFixed(2)}`;
+            document.getElementById('nuevo-tope-propuesto').innerText = `S/ ${siguienteNivel}.00`;
+            
+            // Guardamos el dato para usarlo en el botón
+            window.nuevoTopeParaAutorizar = siguienteNivel;
+        } else {
+            alerta.style.display = 'none'; // OCULTAR
+        }
+    }
+
+    window.confirmarAutorizacionTope = async function() {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch('/api/caja/autorizar-tope', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-auth-token': token 
+                },
+                body: JSON.stringify({
+                    nuevoTope: window.nuevoTopeParaAutorizar,
+                    sedeId: filtroSedeActual
+                })
+            });
+
+            const data = await res.json();
+            
+            if (res.ok) {
+                alert(data.msg);
+                cerrarModalAutorizacion();
+                document.getElementById('alerta-arqueo').style.display = 'none'; // Quitar alerta visualmente
+                cargarResumen(); // Recargar para actualizar el tope en memoria
+            } else {
+                alert("❌ Error: " + data.msg); // Aquí saldrá si no es admin
+            }
+
+        } catch (e) {
+            console.error(e);
+            alert("Error de conexión");
+        }
+    }
+    // --- FUNCIÓN PARA SALIR DE CAJA SI HAY ALERTA ---
+    window.salirAlInicio = function() {
+        // En lugar de ir a '/', recargamos la página actual.
+        // Como ya tienes el Token guardado, el sistema te mostrará el Dashboard (Inicio)
+        // y la alerta roja desaparecerá.
+        window.location.reload();
+    }
+
+    window.abrirModalAutorizacion = function() {
+        document.getElementById('modal-autorizar-tope').classList.add('active');
+    }
+
+    window.cerrarModalAutorizacion = function() {
+        document.getElementById('modal-autorizar-tope').classList.remove('active');
     }
 
     function actualizarVistaDesglose(periodo) {

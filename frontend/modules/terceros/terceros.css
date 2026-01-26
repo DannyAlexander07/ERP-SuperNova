@@ -413,3 +413,92 @@ textarea.form-control:focus { border-color: #3b82f6; background: #eff6ff; }
 .btn-secondary:active {
     transform: translateY(0);
 }
+
+/* =========================================
+   ESTILOS PARA PAGINACIÓN Y WIDGET HISTORIAL
+   ========================================= */
+
+/* Contenedor de la paginación (mini) */
+.history-card .mini-pagination {
+    display: flex !important; /* Forzar flex */
+    justify-content: center !important; /* Centrar los botones en lugar de separarlos */
+    align-items: center !important;
+    gap: 15px; /* Espacio entre botones y texto */
+    margin-top: 15px !important;
+    padding-top: 10px !important;
+    border-top: 1px solid #f1f5f9;
+}
+
+/* Botones de paginación (Anterior / Siguiente) */
+.history-card .mini-pagination button.btn-xs {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    background-color: #ffffff;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    padding: 0;
+}
+
+/* Hover en botones */
+.history-card .mini-pagination button.btn-xs:hover:not(:disabled) {
+    background-color: #f1f5f9;
+    color: #3b82f6;
+    border-color: #cbd5e1;
+}
+
+/* Botones deshabilitados */
+.history-card .mini-pagination button.btn-xs:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: #f8fafc;
+}
+
+/* Texto "Pg 1" */
+.history-card .mini-pagination #txt-mini-page {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #475569;
+    min-width: 40px;
+    text-align: center;
+}
+
+/* Botón "Ver Todo" en la cabecera del widget */
+.history-card button[onclick="abrirModalHistorialTotal()"] {
+    background-color: #eff6ff !important;
+    color: #3b82f6 !important;
+    font-weight: 600;
+    font-size: 0.75rem;
+    border: 1px solid #dbeafe !important;
+    padding: 4px 10px !important;
+    border-radius: 6px !important;
+    transition: all 0.2s;
+}
+
+.history-card button[onclick="abrirModalHistorialTotal()"]:hover {
+    background-color: #3b82f6 !important;
+    color: #ffffff !important;
+}
+
+/* Ajuste de la lista para que no baile */
+#lista-ultimos-canjes {
+    min-height: 220px; /* Altura fija para evitar saltos */
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+}
+
+/* Estilo de los items de la lista (por si acaso) */
+#lista-ultimos-canjes li {
+    padding: 10px 0;
+    border-bottom: 1px dashed #e2e8f0;
+}
+#lista-ultimos-canjes li:last-child {
+    border-bottom: none;
+}

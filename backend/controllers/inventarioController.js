@@ -146,17 +146,12 @@ exports.obtenerRecetaCombo = async (req, res) => {
     }
 };
 
-// 3. OBTENER KARDEX (SEGURIDAD JERÁRQUICA)
+// 3. OBTENER KARDEX (ACTUALIZADO: CON PRECIO DE VENTA)
 exports.obtenerKardex = async (req, res) => {
     try {
         const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
         const usuarioSedeId = req.usuario.sede_id;
-
-        // 🧠 DEFINICIÓN DE ROLES:
-        // 'superadmin' o 'gerente' -> Ve TODO y puede filtrar.
-        // 'admin', 'administrador', 'cajero', etc. -> Solo ven SU sede.
         const esSuperAdmin = rol === 'superadmin' || rol === 'gerente';
-        
         const filtroSedeId = req.query.sede;
         
         let query = `
@@ -170,7 +165,9 @@ exports.obtenerKardex = async (req, res) => {
                 m.cantidad,
                 m.stock_resultante,
                 m.motivo,
-                COALESCE(m.costo_unitario_movimiento, 0) as costo_unitario
+                COALESCE(m.costo_unitario_movimiento, 0) as costo_unitario,
+                -- 🔥 NUEVO: Traemos el precio de venta actual del producto
+                COALESCE(p.precio_venta, 0) as precio_venta
             FROM movimientos_inventario m
             JOIN productos p ON m.producto_id = p.id
             JOIN usuarios u ON m.usuario_id = u.id
@@ -181,17 +178,13 @@ exports.obtenerKardex = async (req, res) => {
         const params = [];
         let paramIndex = 1;
 
-        // --- LÓGICA DE SEGURIDAD ACTUALIZADA ---
         if (esSuperAdmin) {
-            // EL JEFE SUPREMO: Puede filtrar o ver todo
             if (filtroSedeId) {
                 query += ` AND m.sede_id = $${paramIndex}`;
                 params.push(filtroSedeId);
                 paramIndex++;
             }
         } else {
-            // ADMINISTRADORES DE SEDE Y PERSONAL:
-            // Se les fuerza a ver ÚNICAMENTE su sede asignada.
             query += ` AND m.sede_id = $${paramIndex}`;
             params.push(usuarioSedeId);
             paramIndex++;
@@ -249,13 +242,12 @@ exports.eliminarProducto = async (req, res) => {
     }
 };
 
-// 4. ACTUALIZAR PRODUCTO (VERSIÓN ROBUSTA CON LOGS PARA RECETAS)
+// 4. ACTUALIZAR PRODUCTO (CON CASCADA DE COSTOS PARA COMBOS)
 exports.actualizarProducto = async (req, res) => {
     const { id } = req.params;
-    // Agregamos 'comboDetalles' al destructuring
     let { nombre, precio, categoria, costo, stock, stock_minimo, tipo, comboDetalles } = req.body;
     
-    console.log(`🔄 Backend Actualizando ID: ${id} | Tipo: ${tipo}`);
+    console.log(`🔄 Actualizando ID: ${id}`);
     
     const sedeId = req.usuario.sede_id;
     const usuarioId = req.usuario.id;
@@ -264,11 +256,10 @@ exports.actualizarProducto = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // --- 🧹 LIMPIEZA DE TIPO ---
         let tipoLimpio = (tipo || 'fisico').toLowerCase().trim();
         if (tipoLimpio === 'físico') tipoLimpio = 'fisico';
 
-        // A. Actualizar Datos Globales
+        // 1. Actualizar Datos Globales
         await client.query(
             `UPDATE productos 
              SET nombre=$1, precio_venta=$2, categoria=$3, costo_compra=$4, tipo_item=$5 
@@ -276,7 +267,7 @@ exports.actualizarProducto = async (req, res) => {
             [nombre, precio, categoria, costo, tipoLimpio, id]
         );
 
-        // B. LÓGICA DE STOCK (MAGIA MULTI-SEDE)
+        // 2. Lógica de Stock (Sin cambios en tu lógica original)
         const stockActualRes = await client.query(
             `SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2`,
             [id, sedeId]
@@ -295,13 +286,11 @@ exports.actualizarProducto = async (req, res) => {
         const stockNuevo = parseInt(stock);
         const diferencia = stockNuevo - stockViejo;
 
-        // Actualizar Stock numérico
         if (diferencia !== 0) {
             await client.query(
                 `UPDATE inventario_sedes SET cantidad = $1, stock_minimo_local = $2 WHERE producto_id = $3 AND sede_id = $4`,
                 [stockNuevo, stock_minimo, id, sedeId]
             );
-
             const tipoMov = diferencia > 0 ? 'ajuste_positivo' : 'ajuste_negativo';
             await client.query(
                 `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
@@ -315,31 +304,39 @@ exports.actualizarProducto = async (req, res) => {
             );
         }
 
-        // C. 🔥 ACTUALIZACIÓN DE RECETA (CON LOGS Y SEGURIDAD) 🔥
+        // 3. Actualización de Receta (Si es combo)
         if (tipoLimpio === 'combo') {
-            console.log(`🍽️ Procesando receta para Combo ID ${id}...`);
-            
-            // 1. Borramos la receta anterior
             await client.query('DELETE FROM productos_combo WHERE producto_padre_id = $1', [id]);
-
-            // 2. Insertamos la nueva receta
             if (comboDetalles && Array.isArray(comboDetalles) && comboDetalles.length > 0) {
-                
                 for (const item of comboDetalles) {
-                    // Convertimos a enteros para asegurar que no sean strings vacíos
-                    const hijoId = parseInt(item.id_producto);
-                    const hijoCant = parseInt(item.cantidad);
-
-                    if (hijoId && hijoCant > 0) {
-                        await client.query(
-                            `INSERT INTO productos_combo (producto_padre_id, producto_hijo_id, cantidad) VALUES ($1, $2, $3)`,
-                            [id, hijoId, hijoCant]
-                        );
-                    }
+                    await client.query(
+                        `INSERT INTO productos_combo (producto_padre_id, producto_hijo_id, cantidad) VALUES ($1, $2, $3)`,
+                        [id, parseInt(item.id_producto), parseInt(item.cantidad)]
+                    );
                 }
-                console.log(`✅ Receta actualizada con ${comboDetalles.length} items.`);
-            } else {
-                console.warn("⚠️ Receta vacía o inválida recibida en Backend.");
+            }
+        }
+
+        // --- 🔥 LÓGICA DE CASCADA: SI CAMBIÓ COSTO, ACTUALIZAR COMBOS PADRES 🔥 ---
+        // (Esto pasa si el producto editado es ingrediente de otros)
+        if (tipoLimpio === 'fisico') {
+             const combosPadres = await client.query(
+                `SELECT DISTINCT producto_padre_id FROM productos_combo WHERE producto_hijo_id = $1`, 
+                [id]
+            );
+
+            for (const row of combosPadres.rows) {
+                const padreId = row.producto_padre_id;
+                // Recalcular costo del padre
+                const recalculo = await client.query(`
+                    SELECT SUM(p.costo_compra * pc.cantidad) as nuevo_costo_combo
+                    FROM productos_combo pc
+                    JOIN productos p ON pc.producto_hijo_id = p.id
+                    WHERE pc.producto_padre_id = $1
+                `, [padreId]);
+
+                const nuevoCostoCombo = recalculo.rows[0].nuevo_costo_combo || 0;
+                await client.query('UPDATE productos SET costo_compra = $1 WHERE id = $2', [nuevoCostoCombo, padreId]);
             }
         }
 
@@ -355,10 +352,9 @@ exports.actualizarProducto = async (req, res) => {
     }
 };
 
-// 5. AGREGAR STOCK (CON CÁLCULO DE COSTO PROMEDIO PONDERADO)
+// 5. AGREGAR STOCK (CON CÁLCULO PONDERADO Y ACTUALIZACIÓN EN CASCADA DE COMBOS)
 exports.ajustarStock = async (req, res) => {
     const { id } = req.params;
-    // Recibimos 'tipoAjuste' ('entrada' o 'salida')
     const { cantidad, costo, motivo, tipoAjuste } = req.body;
     const sedeId = req.usuario.sede_id;
     const usuarioId = req.usuario.id;
@@ -374,27 +370,27 @@ exports.ajustarStock = async (req, res) => {
         await client.query('BEGIN');
 
         // 1. Obtener datos actuales
-        const prodData = await client.query('SELECT costo_compra, nombre FROM productos WHERE id = $1', [id]);
+        const prodData = await client.query('SELECT costo_compra, nombre, tipo_item FROM productos WHERE id = $1', [id]);
         if (prodData.rows.length === 0) throw new Error("Producto no encontrado");
         
-        const stockLocalData = await client.query('SELECT cantidad FROM inventario_sedes WHERE producto_id=$1 AND sede_id=$2', [id, sedeId]);
-        
         const costoActual = parseFloat(prodData.rows[0].costo_compra) || 0;
+        const tipoItem = prodData.rows[0].tipo_item;
+
+        // 2. LÓGICA DE STOCK Y COSTO PONDERADO
+        const stockLocalData = await client.query('SELECT cantidad FROM inventario_sedes WHERE producto_id=$1 AND sede_id=$2', [id, sedeId]);
         const stockActual = stockLocalData.rows.length > 0 ? stockLocalData.rows[0].cantidad : 0;
 
-        // 2. LÓGICA SEGÚN TIPO
         let nuevoStock = stockActual;
         let nuevoCostoPromedio = costoActual;
 
         if (tipoAjuste === 'entrada') {
-            // --- INGRESO (COMPRA) ---
-            // Fórmula PMP (Solo si entra stock con costo diferente)
-            if (costoUnitario > 0) {
+            // FÓRMULA PROMEDIO PONDERADO (Solo si es item físico/ingrediente)
+            if (costoUnitario > 0 && tipoItem !== 'combo') {
                 const valorTotalActual = stockActual * costoActual;
                 const valorIngreso = cantidadReal * costoUnitario;
                 nuevoCostoPromedio = (valorTotalActual + valorIngreso) / (stockActual + cantidadReal);
                 
-                // Actualizar Costo Global
+                // Actualizar Costo del Producto Principal
                 await client.query('UPDATE productos SET costo_compra = $1 WHERE id = $2', [nuevoCostoPromedio, id]);
             }
 
@@ -409,12 +405,9 @@ exports.ajustarStock = async (req, res) => {
             nuevoStock = stockActual + cantidadReal;
 
         } else {
-            // --- SALIDA (MERMA / CONSUMO) ---
-            if (stockActual < cantidadReal) {
-                throw new Error(`Stock insuficiente. Tienes ${stockActual}.`);
-            }
-
-            // Restar Stock
+            // Salida
+            if (stockActual < cantidadReal) throw new Error(`Stock insuficiente. Tienes ${stockActual}.`);
+            
             await client.query(
                 `UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3`,
                 [cantidadReal, id, sedeId]
@@ -422,33 +415,58 @@ exports.ajustarStock = async (req, res) => {
             nuevoStock = stockActual - cantidadReal;
         }
 
-        // 3. Registrar en Kardex
-        // Usamos el costo específico si es entrada, o el costo promedio si es salida (valorización de pérdida)
+        // 3. REGISTRAR KARDEX
         const costoKardex = tipoAjuste === 'entrada' ? costoUnitario : costoActual;
-        
-        // Guardamos cantidad negativa si es salida
         const cantidadKardex = tipoAjuste === 'salida' ? -cantidadReal : cantidadReal;
-        // Tipo movimiento en BD
         const tipoMovimientoBD = tipoAjuste === 'salida' ? 'salida_ajuste' : 'entrada_compra';
 
         await client.query(
             `INSERT INTO movimientos_inventario (
                 sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-            [
-                sedeId, 
-                id, 
-                usuarioId, 
-                tipoMovimientoBD, 
-                cantidadKardex, 
-                nuevoStock, 
-                motivo || (tipoAjuste === 'entrada' ? 'Compra' : 'Merma'), 
-                costoKardex
-            ]
+            [sedeId, id, usuarioId, tipoMovimientoBD, cantidadKardex, nuevoStock, motivo || (tipoAjuste === 'entrada' ? 'Compra' : 'Merma'), costoKardex]
         );
 
+        // --- 🔥 LÓGICA DE CASCADA: ACTUALIZAR COSTO DE COMBOS ASOCIADOS 🔥 ---
+        // Si este producto cambió de precio, buscamos todos los combos que lo contienen
+        let combosAfectados = [];
+        
+        if (tipoAjuste === 'entrada' && Math.abs(nuevoCostoPromedio - costoActual) > 0.001) {
+            // 1. Buscar combos padres
+            const combosPadres = await client.query(
+                `SELECT DISTINCT producto_padre_id FROM productos_combo WHERE producto_hijo_id = $1`, 
+                [id]
+            );
+
+            // 2. Recalcular costo de cada combo padre
+            for (const row of combosPadres.rows) {
+                const padreId = row.producto_padre_id;
+                
+                // Sumar (Costo Hijos * Cantidad Receta)
+                const recalculo = await client.query(`
+                    SELECT SUM(p.costo_compra * pc.cantidad) as nuevo_costo_combo
+                    FROM productos_combo pc
+                    JOIN productos p ON pc.producto_hijo_id = p.id
+                    WHERE pc.producto_padre_id = $1
+                `, [padreId]);
+
+                const nuevoCostoCombo = recalculo.rows[0].nuevo_costo_combo || 0;
+
+                // Actualizar el combo padre
+                await client.query('UPDATE productos SET costo_compra = $1 WHERE id = $2', [nuevoCostoCombo, padreId]);
+                
+                combosAfectados.push({ id: padreId, nuevo_costo: parseFloat(nuevoCostoCombo) });
+            }
+        }
+
         await client.query('COMMIT');
-        res.json({ msg: 'Ajuste de inventario realizado correctamente' });
+        
+        res.json({ 
+            msg: 'Ajuste realizado. Costos actualizados.',
+            nuevo_stock: nuevoStock,
+            nuevo_costo: nuevoCostoPromedio,
+            combos_afectados: combosAfectados // Enviamos lista de combos actualizados
+        });
 
     } catch (err) {
         await client.query('ROLLBACK');

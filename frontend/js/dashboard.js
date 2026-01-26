@@ -15,7 +15,8 @@ if (userStr) {
     const apellidoReal = u.apellidos || "";
     
     currentUser.name = `${nombreReal} ${apellidoReal}`.trim();
-    currentUser.role = u.rol || "colaborador";
+    // Normalizamos el rol a minúsculas para evitar errores (Admin vs admin)
+    currentUser.role = (u.rol || "colaborador").toLowerCase();
     
     if (u.foto_url && u.foto_url !== "null") {
         currentUser.photoUrl = u.foto_url;
@@ -27,20 +28,15 @@ if (userStr) {
     window.location.href = "index.html";
 }
 
+// 2. DEFINICIÓN DE MENÚ Y PERMISOS
 const menuItems = [
     { id: 'inicio', icon: 'bx-grid-alt', text: 'Dashboard', roles: ['superadmin', 'admin', 'colaborador', 'gerente', 'logistica'] },
     { id: 'calendario', icon: 'bx-calendar-event', text: 'Calendario', roles: ['superadmin', 'admin', 'colaborador', 'gerente'] },
     { id: 'ventas', icon: 'bx-cart-alt', text: 'Ventas', roles: ['superadmin', 'admin', 'colaborador', 'gerente'] },
-    
-    // 🔥 NUEVO MÓDULO: CANJES / TERCEROS
-    // Lo ponemos visible para colaborador (cajeros) para que puedan validar en puerta
     { id: 'terceros', icon: 'bx-qr-scan', text: 'Canjes / Terceros', roles: ['superadmin', 'admin', 'gerente', 'colaborador'] },
-
     { id: 'historial', icon: 'bx-history', text: 'Historial Ventas', roles: ['superadmin', 'admin', 'gerente'] },
-    
-    { id: 'caja', icon: 'bx-wallet', text: 'Flujo de Caja', roles: ['superadmin', 'admin', 'gerente'] },
+    { id: 'caja', icon: 'bx-wallet', text: 'Flujo de Caja', roles: ['superadmin', 'admin', 'gerente', 'colaborador'] },
     { id: 'caja_chica', icon: 'bx-wallet-alt', text: 'Caja Chica', roles: ['superadmin', 'admin', 'gerente', 'colaborador'] },
-
     { id: 'inventario', icon: 'bx-box', text: 'Inventario', roles: ['superadmin', 'admin', 'colaborador', 'logistica', 'gerente'] },
     { id: 'proveedores', icon: 'bx-store-alt', text: 'Proveedores', roles: ['superadmin', 'admin', 'logistica', 'gerente'] },
     { id: 'facturas', icon: 'bx-receipt', text: 'Facturas', roles: ['superadmin', 'admin', 'gerente'] },
@@ -54,7 +50,7 @@ const menuItems = [
 document.addEventListener('DOMContentLoaded', () => {
     initSidebar();
     renderMenu();
-    loadModule('inicio'); 
+    loadModule('inicio'); // Carga inicial
 });
 
 const body = document.querySelector('body');
@@ -130,7 +126,7 @@ function toggleMenuMovil() {
 let currentModuleCss = null;
 let currentModuleJs = null;
 
-
+// --- FUNCIÓN PRINCIPAL DE CARGA DE MÓDULOS ---
 async function loadModule(moduleId) {
     if (window.innerWidth < 768) {
         sidebar.classList.remove("mobile-active");
@@ -140,49 +136,57 @@ async function loadModule(moduleId) {
     const menuItem = menuItems.find(item => item.id === moduleId);
     if(tituloModulo) tituloModulo.innerText = menuItem ? menuItem.text : 'Módulo';
 
+    // 1. Limpieza de recursos anteriores
     if (currentModuleCss) currentModuleCss.remove();
     if (currentModuleJs) currentModuleJs.remove();
     
-    contenedorDinamico.innerHTML = '<div style="text-align:center; padding:40px; color:#666;">Cargando...</div>';
+    // Limpieza de funciones globales si existen (Garbage Collection manual)
+    if (typeof window.destroyCurrentModule === 'function') {
+        window.destroyCurrentModule();
+        window.destroyCurrentModule = null;
+    }
+    
+    contenedorDinamico.innerHTML = '<div style="text-align:center; padding:40px; color:#666;"><i class="bx bx-loader-alt bx-spin" style="font-size:30px"></i><br>Cargando...</div>';
 
     try {
-        // Carga dinámica basada en el ID (terceros -> modules/terceros/terceros.html)
+        // 2. Carga HTML
         const htmlResponse = await fetch(`modules/${moduleId}/${moduleId}.html`);
-        if (!htmlResponse.ok) throw new Error("Modulo no encontrado");
+        if (!htmlResponse.ok) throw new Error("Módulo no encontrado");
         
         const htmlContent = await htmlResponse.text();
         contenedorDinamico.innerHTML = htmlContent;
 
-        // Cargar CSS
+        // 3. Carga CSS
         currentModuleCss = document.createElement('link');
         currentModuleCss.rel = 'stylesheet';
         currentModuleCss.href = `modules/${moduleId}/${moduleId}.css`;
         document.head.appendChild(currentModuleCss);
 
-        // Cargar JS con "cache-busting"
+        // 4. Carga JS con cache-busting
         const jsResponse = await fetch(`modules/${moduleId}/${moduleId}.js?t=${Date.now()}`);
         if (jsResponse.ok) {
             currentModuleJs = document.createElement('script');
             currentModuleJs.src = `modules/${moduleId}/${moduleId}.js?t=${Date.now()}`;
             
             currentModuleJs.onload = () => {
-                console.log(`Módulo ${moduleId} cargado.`);
+                console.log(`✅ Módulo ${moduleId} cargado.`);
                 
-                // 🔥 INICIALIZADORES POR MÓDULO
+                // 🔥 INICIALIZADORES ESPECÍFICOS POR MÓDULO 🔥
+                // Esto permite que el módulo "sepa" que acaba de nacer.
+                
+                // INICIO (DASHBOARD)
+                if (moduleId === 'inicio' && typeof window.initDashboard === 'function') {
+                    window.initDashboard(); 
+                }
+
+                // OTROS MÓDULOS
                 if (moduleId === 'facturas' && typeof window.initFacturas === 'function') window.initFacturas();
                 if (moduleId === 'clientes' && typeof window.initClientes === 'function') window.initClientes();
                 if (moduleId === 'analitica' && typeof window.obtenerReporteCompleto === 'function') window.obtenerReporteCompleto();
                 if (moduleId === 'historial' && typeof window.initHistorial === 'function') window.initHistorial();
                 if (moduleId === 'crm' && typeof window.initCRM === 'function') window.initCRM();
                 if (moduleId === 'inventario' && typeof window.initInventario === 'function') window.initInventario();
-                
-                // 👇 AQUÍ AGREGAMOS LA INICIALIZACIÓN DE TERCEROS
-                if (moduleId === 'terceros' && typeof window.initTerceros === 'function') {
-                    // initTerceros es interno en el IIFE, pero el script se ejecuta al cargar.
-                    // Si tu archivo terceros.js tiene el (function(){...})() al final, se ejecuta solo.
-                    // Pero si exportas funciones globales, está bien.
-                    // En el código que te pasé, terceros.js se auto-ejecuta.
-                }
+                if (moduleId === 'terceros' && typeof window.initTerceros === 'function') window.initTerceros();
             };
 
             document.body.appendChild(currentModuleJs);
@@ -190,7 +194,10 @@ async function loadModule(moduleId) {
 
     } catch (error) {
         console.error(error);
-        contenedorDinamico.innerHTML = `<div style="padding:20px">Error cargando módulo.</div>`;
+        contenedorDinamico.innerHTML = `<div style="padding:20px; text-align:center; color:red;">
+            <i class='bx bx-error-circle' style="font-size:40px"></i>
+            <p>Error cargando el módulo "${moduleId}".<br>Verifica que los archivos existan.</p>
+        </div>`;
     }
 }
 

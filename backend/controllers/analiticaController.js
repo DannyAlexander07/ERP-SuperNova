@@ -212,30 +212,60 @@ exports.obtenerResumenGlobal = async (req, res) => {
     }
 };
 
-// 4. RESUMEN DEL DÍA
+// 4. RESUMEN DEL DÍA (CORREGIDO: FECHA EXACTA LIMA)
 exports.obtenerResumenDia = async (req, res) => {
-    // ... (Tu código existente estaba bien, no lo toco para no alargar demasiado)
-    // Pero si quieres la versión segura:
     const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
     const esAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
     const sedeId = req.usuario.sede_id; 
-    const hoy = new Date().toISOString().slice(0, 10);
+    
+    // 🔥 CORRECCIÓN CRÍTICA DE FECHA
+    // Usamos Intl para forzar la fecha exacta en Lima sin conversión UTC automática
+    const formatter = new Intl.DateTimeFormat('en-CA', { 
+        timeZone: 'America/Lima', 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit' 
+    });
+    const hoy = formatter.format(new Date()); // Retorna "2026-01-23" EXACTO
+
+    console.log("================ DEPURACIÓN DASHBOARD V2 ================");
+    console.log("1. Hora Real Servidor:", new Date().toISOString());
+    console.log("2. FECHA LIMA FORZADA:", hoy); // <--- ESTO DEBE DECIR 2026-01-23
+    console.log("=========================================================");
 
     try {
         const filtroSede = esAdmin ? "" : "AND sede_id = $2";
         const params = esAdmin ? [hoy] : [hoy, sedeId];
 
-        const cajaQuery = `SELECT COALESCE(SUM(monto), 0) as total FROM movimientos_caja WHERE tipo_movimiento = 'INGRESO' AND fecha_registro::date = $1 ${filtroSede}`;
-        const eventosQuery = `SELECT COUNT(*) as cantidad FROM eventos WHERE fecha_inicio::date = $1 AND estado != 'cancelado' ${filtroSede}`;
+        // Consulta de Ventas (Usamos la fecha ya formateada correctamente)
+        const ventasQuery = `
+            SELECT COALESCE(SUM(total_venta), 0) as total 
+            FROM ventas 
+            WHERE (fecha_venta AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima')::date = $1 
+            AND UPPER(estado) IN ('COMPLETADO', 'PAGADO', 'CERRADO')
+            ${filtroSede}
+        `;
+        
+        // Consulta de Eventos
+        const eventosQuery = `
+            SELECT COUNT(*) as cantidad 
+            FROM eventos 
+            WHERE (fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima')::date = $1 
+            AND estado != 'cancelado' 
+            ${filtroSede}
+        `;
 
-        const [resCaja, resEventos] = await Promise.all([
-            pool.query(cajaQuery, params),
+        const [resVentas, resEventos] = await Promise.all([
+            pool.query(ventasQuery, params),
             pool.query(eventosQuery, params)
         ]);
 
+        console.log("💰 Ventas Encontradas:", resVentas.rows[0].total);
+
         res.json({
-            ventasHoy: parseFloat(resCaja.rows[0].total),
-            eventosHoy: parseInt(resEventos.rows[0].cantidad)
+            ventasHoy: parseFloat(resVentas.rows[0].total),
+            eventosHoy: parseInt(resEventos.rows[0].cantidad),
+            fechaServer: hoy
         });
 
     } catch (err) {
