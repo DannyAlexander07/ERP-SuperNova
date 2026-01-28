@@ -40,6 +40,7 @@
             <p>No se encontraron clientes con esa búsqueda.</p>
         </div>
     </div>
+
     <div class="pagination-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0;">
         <span id="page-info" style="font-size: 13px; color: #6b7280; font-weight: 600;">Página 1 de 1</span>
         <div style="display: flex; gap: 10px;">
@@ -47,6 +48,7 @@
             <button id="btn-next" class="btn-cancel" onclick="cambiarPagina(1)">Siguiente</button>
         </div>
     </div>
+
     <div id="modal-lead" class="modal-overlay">
         <div class="modal-content slide-in-right">
             <div class="modal-header">
@@ -112,6 +114,7 @@
                         <div class="form-group">
                             <label>Fecha Tentativa</label>
                             <div class="input-wrapper">
+                                <i class='bx bx-calendar'></i> 
                                 <input type="date" id="lead-fecha"> 
                             </div>
                         </div>
@@ -138,7 +141,7 @@
                                 <i class='bx bx-building'></i>
                                 <select id="lead-sede" onchange="cargarSalasPorSede()"> 
                                     <option value="">Seleccionar...</option>
-                                    </select>
+                                </select>
                             </div>
                         </div>
                         
@@ -246,4 +249,66 @@
             </div>
         </div>
     </div>
+
+    <div id="modal-cobrar-saldo" class="modal-overlay"> <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class='bx bxs-check-shield' style="color:#10b981;"></i> Finalizar Evento</h3>
+                <button class="close-modal" onclick="cerrarModalCobroFinal()"><i class='bx bx-x'></i></button>
+            </div>
+            
+            <div class="modal-body">
+                <input type="hidden" id="cobro-lead-id">
+                
+                <div class="info-box">
+                    <i class='bx bx-info-circle'></i>
+                    <span>Confirma los datos reales para ajustar stock y calcular el saldo.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Confirmar Cantidad Niños</label>
+                    <input type="number" id="cobro-ninos" onchange="recalcularSaldoVisual()" placeholder="0">
+                </div>
+
+                <div class="form-group">
+                    <label>Confirmar Combo / Paquete</label>
+                    <select id="cobro-paquete" onchange="recalcularSaldoVisual()">
+                        </select>
+                </div>
+
+                <div id="resumen-cobro">
+                    <div class="resumen-row">
+                        <span>Costo Total Nuevo:</span>
+                        <strong id="txt-nuevo-total">S/ 0.00</strong>
+                    </div>
+                    <div class="resumen-row" style="color: #ef4444;">
+                        <span>(-) Ya pagado (Señal):</span>
+                        <span id="txt-ya-pagado">S/ 0.00</span>
+                    </div>
+                    <div class="resumen-row total-final">
+                        <span>SALDO A PAGAR:</span>
+                        <span id="txt-saldo-pagar">S/ 0.00</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Método de Pago del Saldo</label>
+                    <select id="cobro-metodo">
+                        <option value="efectivo">Efectivo</option>
+                        <option value="yape">Yape</option>
+                        <option value="plin">Plin</option>
+                        <option value="transferencia">Transferencia</option>
+                        <option value="tarjeta">Tarjeta</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="cerrarModalCobroFinal()">Cancelar</button>
+                <button class="btn-cobrar" onclick="procesarCobroFinal()">
+                    <i class='bx bx-check-circle'></i> Confirmar Cobro
+                </button>
+            </div>
+        </div>
+    </div>
+
 </div>

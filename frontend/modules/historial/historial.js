@@ -93,199 +93,212 @@
         }
     }
 
-    // --- 2. RENDERIZAR TABLA (ACTUALIZADA CON SEDE Y NUEVOS CAMPOS) ---
-   // --- 2. RENDERIZAR TABLA (ACTUALIZADA CON LÓGICA DE DETALLE B2B) ---
-    function renderizarTablaHistorial(datos) {
-        const tbody = document.getElementById('tabla-historial-body');
-        if (!tbody) return;
-        tbody.innerHTML = '';
+// --- 2. RENDERIZAR TABLA (ACTUALIZADA CON PDF, XML Y ESTADOS SUNAT) ---
+// --- 2. RENDERIZAR TABLA (ACTUALIZADA CON PDF, XML Y ESTADOS SUNAT) ---
+function renderizarTablaHistorial(datos) {
+    const tbody = document.getElementById('tabla-historial-body');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    // 1. Validar si hay datos
+    if (!datos || datos.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px;">No se encontraron resultados.</td></tr>';
+        const paginacionDiv = document.getElementById('historial-paginacion');
+        if(paginacionDiv) paginacionDiv.innerHTML = '';
+        return;
+    }
+
+    // 2. Paginación (Mantiene tu lógica actual)
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    const dataToRender = datos.slice(startIndex, endIndex);
+    
+    // 3. Renderizar Filas
+    dataToRender.forEach(v => {
+        const tr = document.createElement('tr');
         
-        // 1. Validar si hay datos
-        if (!datos || datos.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px;">No se encontraron resultados.</td></tr>';
-            const paginacionDiv = document.getElementById('historial-paginacion');
-            if(paginacionDiv) paginacionDiv.innerHTML = '';
-            return;
+        // A. Fechas
+        const fechaStr = v.fecha_venta ? new Date(v.fecha_venta).toLocaleDateString() : '-';
+        const horaStr  = v.fecha_venta ? new Date(v.fecha_venta).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
+
+        // B. Cliente y Vendedor
+        const clienteInfo = v.nombre_cliente_temporal || v.doc_cliente_temporal || 'Consumidor Final';
+        const vendedorTexto = v.nombre_vendedor ? `${v.nombre_vendedor}`.trim() : '<span style="color:#aaa;">No asignado</span>';
+        const cajeroTexto = v.nombre_cajero || v.nombre_usuario || 'Sistema';
+
+        // C. PRECIO (Con etiqueta de descuento si existe)
+        let precioHtml = `S/ ${parseFloat(v.total_venta).toFixed(2)}`;
+        if (v.observaciones && (v.observaciones.includes('Descuento') || v.observaciones.includes('Convenio'))) {
+            precioHtml += `<br><span style="background:#dcfce7; color:#166534; font-size:9px; padding:1px 4px; border-radius:3px;">🏷️ OFF</span>`;
         }
 
-        // 2. Lógica de Paginación
-        const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-        const endIndex = startIndex + ITEMS_PER_PAGE;
-        const dataToRender = datos.slice(startIndex, endIndex);
+        // 🔥 D. TIPO DE COMPROBANTE Y ESTADO SUNAT (NUEVO)
+        let tipoDocHtml = '';
+        let estadoSunatHtml = '';
+
+        // Badge del Estado SUNAT
+        if (v.sunat_estado && v.sunat_estado !== 'NO_APLICA') {
+            let colorEstado = '#64748b'; // Gris (Default)
+            let iconEstado = '';
+            
+            if (v.sunat_estado === 'ACEPTADA') { colorEstado = '#10b981'; iconEstado='bx-check'; } // Verde
+            else if (v.sunat_estado === 'PENDIENTE') { colorEstado = '#f59e0b'; iconEstado='bx-time'; } // Amarillo
+            else if (v.sunat_estado === 'ANULADA') { colorEstado = '#ef4444'; iconEstado='bx-x'; } // Rojo
+            else if (v.sunat_estado === 'ERROR') { colorEstado = '#dc2626'; iconEstado='bx-error'; } // Rojo Oscuro
+
+            estadoSunatHtml = `<div style="margin-top:2px; font-size:10px; color:${colorEstado}; font-weight:700;">
+                <i class='bx ${iconEstado}'></i> ${v.sunat_estado}
+            </div>`;
+        }
+
+        // Badge del Tipo Doc + Serie (Ej: F001-23)
+        const serieCorr = (v.serie && v.correlativo) ? `<br><small style="color:#666; font-family:monospace;">${v.serie}-${v.correlativo}</small>` : '';
+
+        if (v.tipo_comprobante === 'Factura') {
+            tipoDocHtml = `<span class="badge" style="background:#e0e7ff; color:#4338ca; border:1px solid #c7d2fe;">FACTURA</span>${serieCorr}${estadoSunatHtml}`;
+        } else if (v.tipo_comprobante === 'Recibo Interno') {
+            tipoDocHtml = `<span class="badge" style="background:#fff7ed; color:#c2410c; border:1px solid #fdba74;">RECIBO</span>`;
+        } else {
+            tipoDocHtml = `<span class="badge" style="background:#f3f4f6; color:#4b5563; border:1px solid #e5e7eb;">BOLETA</span>${serieCorr}${estadoSunatHtml}`;
+        }
+
+        // E. MÉTODO DE PAGO
+        let metodoHtml = `<span class="badge badge-soft-primary">${v.metodo_pago || '-'}</span>`;
+        if (v.metodo_pago === 'Tarjeta' && v.tipo_tarjeta) {
+            const iconoTarjeta = v.tipo_tarjeta === 'Credito' ? '🏦' : '💳';
+            metodoHtml += `<div style="font-size:10px; color:#666; margin-top:2px;">${iconoTarjeta} ${v.tipo_tarjeta}</div>`;
+        } else if (v.metodo_pago === 'Yape') {
+             metodoHtml = `<span class="badge-pago badge-yape" style="font-size:11px"><i class='bx bx-qr'></i> Yape</span>`;
+        } else if (v.metodo_pago === 'Plin') {
+             metodoHtml = `<span class="badge-pago badge-plin" style="font-size:11px"><i class='bx bx-mobile-alt'></i> Plin</span>`;
+        }
+
+        // 🔥 F. ACCIONES Y BOTONES (NUEVO: PDF/XML)
+        let botonesAccion = `<div style="display:flex; gap:5px;">`;
         
-        // 3. Renderizar Filas
-        dataToRender.forEach(v => {
-            const tr = document.createElement('tr');
-            
-            // A. Fechas
-            const fechaStr = v.fecha_venta ? new Date(v.fecha_venta).toLocaleDateString() : '-';
-            const horaStr  = v.fecha_venta ? new Date(v.fecha_venta).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
+        // 1. Ver Detalle (Ojo)
+        // 🔥 MODIFICADO: Pasa el ID y el código visual ('M-0052')
+        if (v.origen === 'VENTA_POS' || !v.origen) {
+            botonesAccion += `<button class="btn-icon" title="Ver Detalle" onclick="verDetallesVenta(${v.id}, '${v.codigo_visual}')" style="color:#4f46e5;"><i class='bx bx-show'></i></button>`;
+        } else {
+            botonesAccion += `<button class="btn-icon" title="${v.observaciones}" style="color:#059669; cursor:help;"><i class='bx bx-info-circle'></i></button>`;
+        }
 
-            // B. Cliente y Vendedor
-            const clienteInfo = v.nombre_cliente_temporal || v.doc_cliente_temporal || 'Consumidor Final';
-            const vendedorTexto = v.nombre_vendedor 
-                ? `${v.nombre_vendedor} ${v.apellido_vendedor || ''}`.trim() 
-                : '<span style="color:#aaa; font-style:italic; font-size:11px">No asignado</span>';
-            const cajeroTexto = v.nombre_cajero || v.nombre_usuario || 'Sistema';
-
-            // C. DETECTAR DESCUENTO (Lógica Visual) 🏷️
-            let precioHtml = `S/ ${parseFloat(v.total_venta).toFixed(2)}`;
-            if (v.observaciones && (v.observaciones.includes('Descuento') || v.observaciones.includes('Convenio'))) {
-                const match = v.observaciones.match(/(\d+%)/); 
-                const porcentaje = match ? match[0] : "OFF";
-                precioHtml += `<br><span style="background:#dcfce7; color:#166534; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; border:1px solid #bbf7d0;">🏷️ ${porcentaje} DESC.</span>`;
-            }
-
-            // 🔥 D. NUEVO: TIPO DE COMPROBANTE (Icono)
-            let tipoDocHtml = '';
-            if (v.tipo_comprobante === 'Factura') {
-                tipoDocHtml = `<span class="badge" style="background:#e0e7ff; color:#4338ca; border:1px solid #c7d2fe;">🏢 FACTURA</span>`;
-            } else if (v.tipo_comprobante === 'Recibo Interno') {
-                 // Estilo especial para B2B
-                tipoDocHtml = `<span class="badge" style="background:#fff7ed; color:#c2410c; border:1px solid #fdba74;">📋 RECIBO</span>`;
-            } else {
-                // Por defecto Boleta
-                tipoDocHtml = `<span class="badge" style="background:#f3f4f6; color:#4b5563; border:1px solid #e5e7eb;">📄 BOLETA</span>`;
-            }
-
-            // 🔥 E. NUEVO: DETALLE MÉTODO DE PAGO
-            let metodoHtml = `<span class="badge badge-soft-primary">${v.metodo_pago || '-'}</span>`;
-            
-            if (v.metodo_pago === 'Tarjeta' && v.tipo_tarjeta) {
-                const iconoTarjeta = v.tipo_tarjeta === 'Credito' ? '🏦' : '💳';
-                metodoHtml += `<div style="font-size:10px; color:#666; margin-top:2px;">${iconoTarjeta} ${v.tipo_tarjeta}</div>`;
-            
-            } else if (v.metodo_pago === 'Yape') {
-                 metodoHtml = `<span class="badge-pago badge-yape"><i class='bx bx-qr'></i> Yape</span>`;
-            
-            } else if (v.metodo_pago === 'Plin') {
-                 metodoHtml = `<span class="badge-pago badge-plin"><i class='bx bx-mobile-alt'></i> Plin</span>`;
-            }
-
-            // 🔥 F. LÓGICA BOTONES (VER DETALLE vs INFO)
-            let btnVerDetalle = '';
-            
-            // Si es VENTA_POS (origen real), mostramos el ojo normal
-            if (v.origen === 'VENTA_POS' || !v.origen) { // !v.origen por compatibilidad con datos viejos
-                btnVerDetalle = `
-                    <button class="btn-icon" title="Ver Detalle" onclick="verDetallesVenta(${v.id})" style="color:#4f46e5; margin-right:5px;">
-                        <i class='bx bx-show'></i>
-                    </button>`;
-            } else {
-                // Si es COBRO B2B, mostramos un info tooltip (porque no hay productos que desglosar)
-                btnVerDetalle = `
-                    <button class="btn-icon" title="${v.observaciones || 'Cobro Administrativo'}" style="color:#059669; margin-right:5px; cursor:help;">
-                        <i class='bx bx-info-circle'></i>
-                    </button>`;
-            }
-
-            // Solo permitir anular si es VENTA_POS (B2B se gestiona en su módulo)
-            let btnDeleteHtml = '';
-            if (v.origen === 'VENTA_POS' || !v.origen) {
-                 btnDeleteHtml = `<button class="btn-icon delete" title="Anular Venta" onclick="eliminarVenta(${v.id})" style="color:#ef4444;"><i class='bx bx-block'></i></button>`;
-            } else {
-                 // Botón deshabilitado visualmente para B2B
-                 btnDeleteHtml = `<button class="btn-icon" title="Gestionar en Módulo Terceros" style="color:#cbd5e1; cursor:not-allowed;"><i class='bx bx-block'></i></button>`;
-            }
-            
-            tr.innerHTML = `
-                <td>
-                    <div style="font-weight:600">${fechaStr}</div>
-                    <div style="font-size:11px; color:#666">${horaStr}</div>
-                </td>
-                
-                <td>
-                    <span style="background:#e0e7ff; color:#3730a3; padding:3px 8px; border-radius:4px; font-weight:700; font-size:11px;">
-                        ${v.nombre_sede || 'Local'}
-                    </span>
-                </td>
-
-                <td style="font-weight:bold; font-size:15px; color:#333;">
-                    ${v.codigo_visual || '#' + v.id}
-                </td>
-
-                <td>${tipoDocHtml}</td>
-
-                <td>${clienteInfo}</td>
-
-                <td>${metodoHtml}</td>
-
-                <td style="font-weight: 700; color:#16a34a; font-size:15px;">${precioHtml}</td>
-
-                <td>
-                    <div style="display:flex; align-items:center; gap:5px;">
-                        <i class='bx bx-star' style="color:#f59e0b;"></i>
-                        <span style="font-weight:600; color:#333; font-size:13px;">${vendedorTexto}</span>
-                    </div>
-                </td>
-
-                <td>
-                    <div style="display:flex; align-items:center; gap:5px; color:#666;">
-                        <i class='bx bx-desktop'></i> 
-                        <span style="font-size:12px;">${cajeroTexto}</span>
-                    </div>
-                </td>
-
-                <td>
-                    ${btnVerDetalle}
-                    ${btnDeleteHtml}
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
+        // 2. Botones SUNAT (Solo aparecen si existen los enlaces)
+        if (v.enlace_pdf) {
+            botonesAccion += `<a href="${v.enlace_pdf}" target="_blank" class="btn-icon" title="Imprimir Ticket/Factura" style="color:#dc2626; text-decoration:none;"><i class='bx bxs-file-pdf'></i></a>`;
+        }
+        if (v.enlace_xml) {
+            botonesAccion += `<a href="${v.enlace_xml}" target="_blank" class="btn-icon" title="Descargar XML" style="color:#64748b; text-decoration:none;"><i class='bx bxs-file-code'></i></a>`;
+        }
         
-        renderizarPaginacion(datos.length, datos);
-    }
+        // 3. Botón Anular
+        let btnDeleteHtml = '';
+        if (v.origen === 'VENTA_POS' || !v.origen) {
+             // Si ya está anulada en SUNAT, deshabilitamos visualmente
+             if(v.sunat_estado === 'ANULADA'){
+                 btnDeleteHtml = `<button class="btn-icon" title="Ya anulado" style="color:#ccc; cursor:not-allowed;"><i class='bx bx-block'></i></button>`;
+             } else {
+                 btnDeleteHtml = `<button class="btn-icon delete" title="Anular Venta" onclick="eliminarVenta(${v.id})" style="color:#ef4444;"><i class='bx bx-trash'></i></button>`;
+             }
+        } else {
+             btnDeleteHtml = `<button class="btn-icon" title="Gestionar en Módulo Terceros" style="color:#cbd5e1; cursor:not-allowed;"><i class='bx bx-block'></i></button>`;
+        }
+        botonesAccion += btnDeleteHtml;
+        botonesAccion += `</div>`;
+
+        // Renderizado Final de la Fila
+        tr.innerHTML = `
+            <td>
+                <div style="font-weight:600">${fechaStr}</div>
+                <div style="font-size:11px; color:#666">${horaStr}</div>
+            </td>
+            <td>
+                <span style="background:#e0e7ff; color:#3730a3; padding:3px 8px; border-radius:4px; font-weight:700; font-size:11px;">
+                    ${v.nombre_sede || 'Local'}
+                </span>
+            </td>
+            <td style="font-weight:bold; font-size:14px; color:#333;">
+                ${v.codigo_visual || '#' + v.id}
+            </td>
+            <td>${tipoDocHtml}</td>
+            <td>${clienteInfo}</td>
+            <td>${metodoHtml}</td>
+            <td style="font-weight: 700; color:#16a34a; font-size:15px;">${precioHtml}</td>
+            <td>
+                <div style="display:flex; align-items:center; gap:5px;">
+                    <i class='bx bx-user' style="color:#f59e0b;"></i>
+                    <span style="font-weight:600; color:#333; font-size:12px;">${vendedorTexto}</span>
+                </div>
+            </td>
+            <td>
+                <div style="display:flex; align-items:center; gap:5px; color:#666;">
+                    <i class='bx bx-desktop'></i> 
+                    <span style="font-size:12px;">${cajeroTexto}</span>
+                </div>
+            </td>
+            <td>${botonesAccion}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+    
+    renderizarPaginacion(datos.length, datos);
+}
     
     // --- 3. VER DETALLE (MODAL) ---
-    window.verDetallesVenta = async function(ventaId) {
-        const modal = document.getElementById('modal-detalle-venta');
-        const body = document.getElementById('detalle-venta-body');
-        
-        modal.classList.add('active');
-        document.getElementById('detalle-ticket-id').innerText = "#" + ventaId;
-        body.innerHTML = '<div style="text-align:center; padding:20px"><i class="bx bx-loader-alt bx-spin"></i> Cargando...</div>';
+   // --- 3. VER DETALLE (MODAL ACTUALIZADO) ---
+window.verDetallesVenta = async function(ventaId, codigoVisual) {
+    const modal = document.getElementById('modal-detalle-venta');
+    const body = document.getElementById('detalle-venta-body');
+    
+    modal.classList.add('active');
+    
+    // 🔥 MODIFICADO: Usa el código visual (ej: M-0052) o el ID si no hay código
+    const tituloTicket = codigoVisual || ("#" + ventaId);
+    document.getElementById('detalle-ticket-id').innerText = tituloTicket;
+    
+    body.innerHTML = '<div style="text-align:center; padding:20px"><i class="bx bx-loader-alt bx-spin"></i> Cargando...</div>';
 
-        try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(`${API_BASE}/ventas/detalle/${ventaId}`, { 
-                headers: { 'x-auth-token': token }
-            });
-            
-            if (res.ok) {
-                const data = await res.json();
-                let html = `
-                    <table style="width:100%; border-collapse:collapse; font-size:13px;">
-                        <thead style="background:#f8fafc; color:#64748b;">
-                            <tr>
-                                <th style="padding:8px; text-align:left;">Producto</th>
-                                <th style="padding:8px; text-align:center;">Cant.</th>
-                                <th style="padding:8px; text-align:right;">Total</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                `;
-                
-                data.forEach(item => {
-                    html += `
-                        <tr style="border-bottom:1px solid #eee;">
-                            <td style="padding:8px;">${item.nombre_producto_historico}</td>
-                            <td style="padding:8px; text-align:center;">${item.cantidad}</td>
-                            <td style="padding:8px; text-align:right;">S/ ${parseFloat(item.subtotal).toFixed(2)}</td>
+    try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_BASE}/ventas/detalle/${ventaId}`, { 
+            headers: { 'x-auth-token': token }
+        });
+        
+        if (res.ok) {
+            const data = await res.json();
+            let html = `
+                <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                    <thead style="background:#f8fafc; color:#64748b;">
+                        <tr>
+                            <th style="padding:8px; text-align:left;">Producto</th>
+                            <th style="padding:8px; text-align:center;">Cant.</th>
+                            <th style="padding:8px; text-align:right;">Total</th>
                         </tr>
-                    `;
-                });
-                html += `</tbody></table>`;
-                body.innerHTML = html;
-            } else {
-                body.innerHTML = `<p style="color:red;">Error al cargar detalle.</p>`;
-            }
+                    </thead>
+                    <tbody>
+            `;
             
-        } catch(e) {
-            console.error(e);
-            body.innerHTML = `<p style="color:red;">Error de red.</p>`;
+            data.forEach(item => {
+                html += `
+                    <tr style="border-bottom:1px solid #eee;">
+                        <td style="padding:8px;">${item.nombre_producto_historico}</td>
+                        <td style="padding:8px; text-align:center;">${item.cantidad}</td>
+                        <td style="padding:8px; text-align:right;">S/ ${parseFloat(item.subtotal).toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+            html += `</tbody></table>`;
+            body.innerHTML = html;
+        } else {
+            body.innerHTML = `<p style="color:red;">Error al cargar detalle.</p>`;
         }
+        
+    } catch(e) {
+        console.error(e);
+        body.innerHTML = `<p style="color:red;">Error de red.</p>`;
     }
+}
 
     window.cerrarModalDetalle = function() {
         document.getElementById('modal-detalle-venta').classList.remove('active');

@@ -1,7 +1,6 @@
 // Ubicacion: SuperNova/backend/controllers/facturasController.js
 const pool = require('../db');
 
-// Ubicacion: SuperNova/backend/controllers/facturasController.js
 
 // 1. OBTENER TODAS LAS FACTURAS (CON NOMBRE DE SEDE Y PROVEEDOR)
 exports.obtenerFacturas = async (req, res) => {

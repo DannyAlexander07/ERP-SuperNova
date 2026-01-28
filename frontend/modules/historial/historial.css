@@ -375,3 +375,48 @@
 .badge-pago i {
     font-size: 14px; /* Un poco más grande que el texto */
 }
+
+/* --- ESTILOS PARA ESTADOS SUNAT Y DOCUMENTOS --- */
+
+/* Estilo base para las pastillas (badges) */
+.badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.75rem; /* 12px */
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    line-height: 1;
+}
+
+/* Ajuste para la columna de Documento */
+#tabla-historial-body td:nth-child(4) {
+    vertical-align: middle;
+    line-height: 1.4;
+}
+
+/* Botones de acción (PDF, XML) */
+.btn-icon {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem; /* Iconos grandes */
+    padding: 4px;
+    transition: transform 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon:hover {
+    transform: scale(1.15); /* Efecto zoom al pasar mouse */
+    background-color: #f1f5f9;
+    border-radius: 50%;
+}
+
+/* Botón eliminar (Anular) específico */
+.btn-icon.delete:hover {
+    background-color: #fee2e2; /* Fondo rojo suave */
+}

@@ -1,3 +1,5 @@
+//Ubicacion: frontend/modules/ventas/ventas.js
+
 (function() {
     console.log("Modulo POS Conectado 🚀");
 
@@ -353,7 +355,7 @@
         }
     }
     
-    // --- 🔥 FUNCIÓN PRINCIPAL: PROCESAR VENTA ---
+// --- 🔥 FUNCIÓN PRINCIPAL: PROCESAR VENTA (CON IMPRESIÓN) ---
     window.procesarVenta = async function() {
         if (carrito.length === 0) return alert("⚠️ Carrito vacío.");
 
@@ -374,10 +376,10 @@
             const metodoPago = document.querySelector('input[name="pago"]:checked').value;
             let tipoTarjeta = null;
             if (metodoPago === 'Tarjeta') {
-                tipoTarjeta = document.querySelector('input[name="tipo_tarjeta"]:checked').value; // Debito o Credito
+                tipoTarjeta = document.querySelector('input[name="tipo_tarjeta"]:checked').value; 
             }
 
-            // 3. Recopilar Datos de Comprobante (Boleta/Factura)
+            // 3. Recopilar Datos de Comprobante
             const tipoComprobante = document.querySelector('input[name="tipo_comprobante"]:checked').value;
             let docCliente = null;
             let razonSocial = null;
@@ -393,7 +395,6 @@
                 razonSocial = document.getElementById('cliente-razon').value;
                 direccion = document.getElementById('cliente-direccion').value;
             } else {
-                // Es Boleta
                 docCliente = document.getElementById('cliente-dni').value;
             }
 
@@ -404,9 +405,8 @@
                 tipo_venta: tipoVenta,
                 metodoPago: metodoPago,
                 
-                // Nuevos campos para Backend
                 tipo_comprobante: tipoComprobante,
-                clienteDni: docCliente, // Aquí va DNI o RUC según corresponda
+                clienteDni: docCliente, 
                 cliente_razon_social: razonSocial,
                 cliente_direccion: direccion,
                 tipo_tarjeta: tipoTarjeta,
@@ -428,12 +428,24 @@
             const data = await res.json();
 
             if (res.ok) {
-                alert(`✅ ¡Venta Exitosa!\nTicket: ${data.ticketCodigo || 'OK'}`);
+                // ✅ VENTA EXITOSA
+                let mensaje = `✅ ¡Venta Exitosa!\nTicket: ${data.ticketCodigo || 'OK'}`;
+                
+                // 🔥 SI HAY PDF (Nubefact respondió rápido), ABRIRLO
+                // Intentamos abrir el PDF en una pestaña nueva automáticamente
+                // Esperamos un segundo para que el backend asíncrono termine (si fue muy rápido)
+                // O mejor, le decimos al usuario que vaya al historial si no sale aquí.
+                
+                // NOTA: Como la facturación es ASÍNCRONA en el backend, es probable que 'data.pdf'
+                // no llegue en esta respuesta inmediata. El usuario tendrá que ir al Historial a imprimir.
+                // Sin embargo, si llegara a responder rápido, lo mostramos.
+                
+                alert(mensaje);
+
                 carrito = [];
                 renderCarrito();
                 cerrarModalCobro();
                 
-                // 🔥 NUEVO: Cerrar carrito móvil tras venta
                 const ticketPanel = document.querySelector('.pos-ticket');
                 if(ticketPanel) ticketPanel.classList.remove('active');
                 
@@ -450,7 +462,6 @@
             btn.innerText = originalText;
         }
     }
-
     // --- JS: AGREGAR SI FALTA ---
 window.toggleCarritoMovil = function() {
     // Busca por clase .pos-ticket (es más seguro que por ID si cambiaste el HTML)

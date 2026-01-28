@@ -185,73 +185,88 @@ function renderTable(lista) {
     }
 
 // --- 6. EDITAR LEAD (LECTURA INTELIGENTE) ---
-    window.editarLead = async function(id) {
-        const lead = leadsGlobales.find(l => l.id == id);
-        if(!lead) return;
+window.editarLead = async function(id) {
+    const lead = leadsGlobales.find(l => l.id == id);
+    if(!lead) return;
 
-        await window.abrirModalLead();
-        document.querySelector('.modal-header h3').innerText = "Editar Cliente";
+    await window.abrirModalLead(); // Importante: Carga los vendedores antes de asignar el valor
+    document.querySelector('.modal-header h3').innerText = "Editar Cliente";
+    
+    // --- DATOS BÁSICOS ---
+    document.getElementById('lead-id').value = lead.id;
+    document.getElementById('lead-nombre').value = lead.nombre_apoderado;
+    document.getElementById('lead-telefono').value = lead.telefono;
+    document.getElementById('lead-email').value = lead.email;
+    document.getElementById('lead-canal').value = lead.canal_origen || 'WhatsApp';
+    document.getElementById('lead-hijo').value = lead.nombre_hijo;
+    
+    // --- CORRECCIÓN 1: VENDEDOR ---
+    if (lead.vendedor_id) {
+        document.getElementById('lead-vendedor').value = lead.vendedor_id;
+    }
+
+    // --- CORRECCIÓN 2: MÉTODO DE PAGO (SOLUCIÓN MAYÚSCULAS) ---
+    // Si la BD dice "Yape", lo convertimos a "yape" para que el HTML lo reconozca
+    if (lead.metodo_pago) {
+        document.getElementById('lead-metodo-pago').value = lead.metodo_pago.toLowerCase();
+    }
+
+    // Recuperar Nro Operación
+    if (lead.nro_operacion) {
+        document.getElementById('lead-nro-operacion').value = lead.nro_operacion;
+    }
+    // ---------------------------------------------
+
+    if (lead.paquete_interes) {
+        document.getElementById('lead-paquete').value = lead.paquete_interes;
+    }
+
+    // LÓGICA DE EXTRACCIÓN (Niños y Notas)
+    let cantidadNiños = 15; 
+    let notasLimpias = lead.notas || '';
+
+    if (lead.notas) {
+        const regex = /Niños:\s*(\d+)\.?\s*/i;
+        const match = lead.notas.match(regex);
         
-        // Datos básicos
-        document.getElementById('lead-id').value = lead.id;
-        document.getElementById('lead-nombre').value = lead.nombre_apoderado;
-        document.getElementById('lead-telefono').value = lead.telefono;
-        document.getElementById('lead-email').value = lead.email;
-        document.getElementById('lead-canal').value = lead.canal_origen || 'WhatsApp';
-        document.getElementById('lead-hijo').value = lead.nombre_hijo;
-        
-        if (lead.paquete_interes) {
-            document.getElementById('lead-paquete').value = lead.paquete_interes;
-        }
-
-        // 🔥 LÓGICA DE EXTRACCIÓN (SEPARA NÚMERO DE TEXTO)
-        let cantidadNiños = 15; // Valor por defecto si no encuentra nada
-        let notasLimpias = lead.notas || '';
-
-        if (lead.notas) {
-            // Regex: Busca "Niños:" seguido de espacios, un número, opcionalmente un punto y espacio
-            const regex = /Niños:\s*(\d+)\.?\s*/i;
-            const match = lead.notas.match(regex);
-            
-            if (match) {
-                cantidadNiños = match[1]; // Captura el número (ej: 35)
-                // Elimina SOLO la parte de "Niños: 35. " del texto para mostrar el resto limpio
-                notasLimpias = lead.notas.replace(regex, '');
-            }
-        }
-
-        // Asignamos los valores separados a cada input
-        document.getElementById('lead-cantidad-ninos').value = cantidadNiños;
-        document.getElementById('lead-obs').value = notasLimpias.trim(); 
-
-        // Resto de campos
-        document.getElementById('lead-valor').value = lead.valor_estimado;
-        document.getElementById('lead-estado').value = lead.estado || 'nuevo'; 
-
-        if(lead.fecha_tentativa) {
-            // Aseguramos formato fecha input
-            const fechaLimpia = new Date(lead.fecha_tentativa).toISOString().split('T')[0];
-            document.getElementById('lead-fecha').value = fechaLimpia;
-        }
-        document.getElementById('lead-hora-inicio').value = lead.hora_inicio || '16:00';
-        document.getElementById('lead-hora-fin').value = lead.hora_fin || '19:00';
-
-        if(lead.sede_interes) {
-            document.getElementById('lead-sede').value = lead.sede_interes;
-            await cargarSalasPorSede();
-            if(lead.salon_id) {
-                document.getElementById('lead-sala').value = lead.salon_id;
-            }
-        }
-
-        const btnCobrar = document.getElementById('btn-cobrar-saldo');
-        if(lead.estado !== 'ganado' && lead.estado !== 'perdido') { 
-             btnCobrar.style.display = 'inline-block';
-             btnCobrar.onclick = () => cobrarSaldoCliente(lead.id);
-        } else {
-             btnCobrar.style.display = 'none';
+        if (match) {
+            cantidadNiños = match[1]; 
+            notasLimpias = lead.notas.replace(regex, '');
         }
     }
+
+    document.getElementById('lead-cantidad-ninos').value = cantidadNiños;
+    document.getElementById('lead-obs').value = notasLimpias.trim(); 
+
+    document.getElementById('lead-valor').value = lead.valor_estimado;
+    document.getElementById('lead-estado').value = lead.estado || 'nuevo'; 
+
+    if(lead.fecha_tentativa) {
+        // Formatear fecha para input type="date"
+        const fechaLimpia = new Date(lead.fecha_tentativa).toISOString().split('T')[0];
+        document.getElementById('lead-fecha').value = fechaLimpia;
+    }
+    document.getElementById('lead-hora-inicio').value = lead.hora_inicio || '16:00';
+    document.getElementById('lead-hora-fin').value = lead.hora_fin || '19:00';
+
+    if(lead.sede_interes) {
+        document.getElementById('lead-sede').value = lead.sede_interes;
+        await cargarSalasPorSede(); // Cargar salas para poder seleccionar la guardada
+        if(lead.salon_id) {
+            document.getElementById('lead-sala').value = lead.salon_id;
+        }
+    }
+
+    const btnCobrar = document.getElementById('btn-cobrar-saldo');
+    // Solo mostramos cobrar si NO está ganado ni perdido, y si ya hubo pago inicial
+    if(lead.estado !== 'ganado' && lead.estado !== 'perdido' && parseFloat(lead.pago_inicial) > 0) { 
+         btnCobrar.style.display = 'inline-block';
+         // Usa el MODAL NUEVO de cobro final
+         btnCobrar.onclick = () => abrirModalCobroFinal(lead);
+    } else {
+         btnCobrar.style.display = 'none';
+    }
+}
 
 // --- 7. GUARDAR LEAD (SOPORTA MÉTODO DE PAGO Y NIÑOS) ---
 window.guardarLead = async function() {
@@ -517,6 +532,130 @@ async function cargarVendedores() {
             inputTotal.value = total.toFixed(2);
         }
     }
+
+    // --- 9. MODAL COBRO FINAL (CORREGIDO: VARIABLE GLOBAL) ---
+
+    let leadActualParaCobro = null; // Variable para guardar el lead temporalmente
+
+    window.abrirModalCobroFinal = function() {
+        // 1. Obtener ID del Lead actual
+        const leadId = document.getElementById('lead-id').value;
+        if (!leadId) return alert("Error: No se detectó el ID del Lead.");
+
+        // 2. Buscar datos del lead en memoria (CORREGIDO: leadsGlobales)
+        const lead = leadsGlobales.find(l => l.id == leadId);
+        if (!lead) return alert("Error: Lead no encontrado en memoria.");
+
+        leadActualParaCobro = lead; // Guardamos para usarlo en los cálculos
+
+        // 3. Referencias al DOM
+        const modal = document.getElementById('modal-cobrar-saldo');
+        const inputId = document.getElementById('cobro-lead-id');
+        const inputNinos = document.getElementById('cobro-ninos');
+        const selectPaquete = document.getElementById('cobro-paquete');
+        
+        if (!modal) return console.error("❌ Error: Falta #modal-cobrar-saldo");
+
+        // 4. Llenar datos iniciales
+        inputId.value = leadId;
+        inputNinos.value = document.getElementById('lead-cantidad-ninos').value; 
+
+        // Copiar opciones del select de paquetes
+        const mainPaqueteSelect = document.getElementById('lead-paquete');
+        selectPaquete.innerHTML = mainPaqueteSelect.innerHTML;
+        selectPaquete.value = mainPaqueteSelect.value;
+
+        // 5. Calcular saldos iniciales
+        recalcularSaldoVisual();
+
+        // 6. Mostrar Modal
+        modal.classList.add('active');
+    };
+
+    window.cerrarModalCobroFinal = function() {
+        const modal = document.getElementById('modal-cobrar-saldo');
+        if (modal) modal.classList.remove('active');
+    };
+
+    window.recalcularSaldoVisual = function() {
+        const ninos = parseInt(document.getElementById('cobro-ninos').value) || 0;
+        const paqueteId = document.getElementById('cobro-paquete').value;
+        
+        const txtNuevoTotal = document.getElementById('txt-nuevo-total');
+        const txtYaPagado = document.getElementById('txt-ya-pagado');
+        const txtSaldo = document.getElementById('txt-saldo-pagar');
+
+        // 1. Calcular Nuevo Costo Total
+        let precioUnitario = 0;
+        if (paqueteId && productosCache) {
+            const prod = productosCache.find(p => p.id == paqueteId);
+            if (prod) precioUnitario = parseFloat(prod.precio_venta);
+        }
+        
+        // Si no hay precio de paquete, usar el valor estimado original
+        let nuevoTotal = precioUnitario * ninos;
+        if (nuevoTotal === 0 && leadActualParaCobro) {
+            nuevoTotal = parseFloat(leadActualParaCobro.valor_estimado || 0);
+        }
+
+        // 2. Obtener lo ya pagado (Señal)
+        const yaPagado = parseFloat(leadActualParaCobro ? leadActualParaCobro.pago_inicial : 0);
+
+        // 3. Calcular Saldo
+        let saldo = nuevoTotal - yaPagado;
+        if (saldo < 0) saldo = 0;
+
+        // 4. Pintar en HTML
+        txtNuevoTotal.innerText = `S/ ${nuevoTotal.toFixed(2)}`;
+        txtYaPagado.innerText = `S/ ${yaPagado.toFixed(2)}`;
+        txtSaldo.innerText = `S/ ${saldo.toFixed(2)}`;
+    };
+
+    window.procesarCobroFinal = async function() {
+        const btn = document.querySelector('#modal-cobrar-saldo .btn-cobrar');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Procesando...`;
+
+        try {
+            const leadId = document.getElementById('cobro-lead-id').value;
+            const ninosFinal = document.getElementById('cobro-ninos').value;
+            const paqueteFinal = document.getElementById('cobro-paquete').value;
+            const metodo = document.getElementById('cobro-metodo').value;
+
+            const token = localStorage.getItem('token');
+            const res = await fetch(`/api/crm/leads/${leadId}/cobrar-saldo`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-auth-token': token 
+                },
+                body: JSON.stringify({
+                    cantidad_ninos_final: ninosFinal,
+                    paquete_final_id: paqueteFinal,
+                    metodoPago: metodo
+                })
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                alert("🎉 " + data.msg);
+                cerrarModalCobroFinal();
+                cerrarModalLead(); 
+                cargarLeads(); // Recargar tabla principal
+            } else {
+                alert("❌ Error: " + data.msg);
+            }
+
+        } catch (error) {
+            console.error(error);
+            alert("Error de conexión al cobrar.");
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    };
 
     // ARRANQUE
     initCRM();
