@@ -27,6 +27,22 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         document.body.appendChild(confirmModal);
     }
+
+    // Contenedor del Modal de Alerta
+    if (!document.getElementById('custom-alert')) {
+        const alertModal = document.createElement('div');
+        alertModal.id = 'custom-alert';
+        alertModal.className = 'custom-alert-overlay';
+        alertModal.innerHTML = `
+            <div class="alert-box">
+                <div class="alert-icon"><i class='bx bx-info-circle'></i></div>
+                <h3 class="alert-title">Información</h3>
+                <p class="alert-desc" id="alert-msg">Este es un mensaje de alerta.</p>
+                <button class="btn-alert-ok" id="btn-ok">Aceptar</button>
+            </div>
+        `;
+        document.body.appendChild(alertModal);
+    }
 });
 
 // 2. FUNCIÓN TOAST (Notificación)
@@ -99,3 +115,44 @@ window.showConfirm = function(message, title = "¿Estás seguro?") {
         };
     });
 }
+
+// 4. FUNCIÓN ALERT (Promesa)
+// Uso: await showAlert("El stock es insuficiente.", "error");
+window.showAlert = function(message, type = 'info') {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('custom-alert');
+        const msgEl = document.getElementById('alert-msg');
+        const titleEl = modal.querySelector('.alert-title');
+        const iconEl = modal.querySelector('.alert-icon');
+        const btnOk = document.getElementById('btn-ok');
+
+        // Configurar contenido según el tipo
+        let title = 'Información';
+        let iconClass = 'bx bx-info-circle icon-info';
+        if (type === 'error') {
+            title = 'Error';
+            iconClass = 'bx bx-x-circle icon-error';
+        } else if (type === 'success') {
+            title = 'Éxito';
+            iconClass = 'bx bx-check-circle icon-success';
+        }
+        
+        msgEl.innerText = message;
+        titleEl.innerText = title;
+        iconEl.innerHTML = `<i class='${iconClass.split(' ')[0]} ${iconClass.split(' ')[1]}'></i>`;
+        iconEl.className = `alert-icon ${iconClass.split(' ')[2]}`;
+        
+        // Mostrar modal
+        modal.classList.add('active');
+
+        const close = () => {
+            modal.classList.remove('active');
+            btnOk.replaceWith(btnOk.cloneNode(true)); // Limpiar listener
+        };
+
+        btnOk.onclick = () => {
+            close();
+            resolve();
+        };
+    });
+};

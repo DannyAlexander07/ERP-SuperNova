@@ -376,8 +376,6 @@
     font-size: 14px; /* Un poco más grande que el texto */
 }
 
-/* --- ESTILOS PARA ESTADOS SUNAT Y DOCUMENTOS --- */
-
 /* Estilo base para las pastillas (badges) */
 .badge {
     display: inline-block;
@@ -419,4 +417,47 @@
 /* Botón eliminar (Anular) específico */
 .btn-icon.delete:hover {
     background-color: #fee2e2; /* Fondo rojo suave */
+}
+
+/* --- ESTILOS PARA LOS BOTONES DEL MODAL --- */
+
+/* Botón Verde (Aceptar / Éxito) */
+.btn-primary {
+    background-color: #10b981; /* Verde esmeralda (match con el ícono) */
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2); /* Sombra suave verde */
+}
+
+.btn-primary:hover {
+    background-color: #059669; /* Verde un poco más oscuro al pasar el mouse */
+    transform: translateY(-1px); /* Pequeño efecto de elevación */
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+}
+
+/* Botón Secundario (Cerrar / Cancelar) - Por si lo necesitas para el modal de error */
+.btn-secondary {
+    background-color: #f3f4f6;
+    color: #4b5563;
+    border: 1px solid #e5e7eb;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-secondary:hover {
+    background-color: #e5e7eb;
+    color: #1f2937;
 }

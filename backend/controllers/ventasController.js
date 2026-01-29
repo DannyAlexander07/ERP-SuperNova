@@ -98,11 +98,14 @@ exports.registrarVenta = async (req, res) => {
             const esCombo = await client.query('SELECT producto_hijo_id, cantidad FROM productos_combo WHERE producto_padre_id = $1', [item.id]);
             if (esCombo.rows.length > 0) {
                 for (const hijo of esCombo.rows) {
-                    await descontarStock(client, hijo.producto_hijo_id, sedeId, item.cantidad * hijo.cantidad, usuarioId, codigoTicketVisual, `Ingrediente: ${item.nombre}`);
+                    // Ingredientes: Precio venta 0 (porque se vende el combo, no el ingrediente suelto)
+                    await descontarStock(client, hijo.producto_hijo_id, sedeId, item.cantidad * hijo.cantidad, usuarioId, codigoTicketVisual, `Ingrediente: ${item.nombre}`, 0);
                 }
-                await descontarStock(client, item.id, sedeId, item.cantidad, usuarioId, codigoTicketVisual, 'Venta Combo');
+                // Combo Principal: Pasamos el precio real
+                await descontarStock(client, item.id, sedeId, item.cantidad, usuarioId, codigoTicketVisual, 'Venta Combo', item.precioReal);
             } else {
-                await descontarStock(client, item.id, sedeId, item.cantidad, usuarioId, codigoTicketVisual, 'Venta Directa');
+                // Producto Normal: Pasamos el precio real
+                await descontarStock(client, item.id, sedeId, item.cantidad, usuarioId, codigoTicketVisual, 'Venta Directa', item.precioReal);
             }
         }
 
@@ -140,7 +143,7 @@ exports.registrarVenta = async (req, res) => {
     }
 };
 
-// 2. OBTENER HISTORIAL (CORREGIDO: MUESTRA CLIENTE REAL DEL CRM)
+// 2. OBTENER HISTORIAL (CORREGIDO: DIFERENCIA EVENTOS VS POS)
 exports.obtenerHistorialVentas = async (req, res) => {
     try {
         const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
@@ -172,16 +175,17 @@ exports.obtenerHistorialVentas = async (req, res) => {
                     u.nombres AS nombre_usuario,
                     vend.nombres || ' ' || COALESCE(vend.apellidos, '') AS nombre_vendedor,
                     
-                    -- 🔥 CORRECCIÓN: PRIORIDAD AL CLIENTE REGISTRADO (CRM)
                     COALESCE(c.nombre_completo, v.nombre_cliente_temporal, 'Consumidor Final') AS nombre_cliente_temporal,
                     v.doc_cliente_temporal, 
                     
-                    'VENTA_POS' as origen
+                    -- 🔥 CAMBIO CLAVE: YA NO PONEMOS 'VENTA_POS' FIJO, SINO EL REAL PARA DETECTAR EVENTOS
+                    COALESCE(v.origen, 'VENTA_POS') as origen,
+                    v.linea_negocio -- 🔥 NECESARIO PARA BLOQUEAR EL BOTÓN BORRAR SI ES 'EVENTOS'
                 FROM ventas v
                 JOIN usuarios u ON v.usuario_id = u.id          
                 LEFT JOIN usuarios vend ON v.vendedor_id = vend.id 
                 JOIN sedes s ON v.sede_id = s.id
-                LEFT JOIN clientes c ON v.cliente_id = c.id  -- <--- ESTO FALTABA
+                LEFT JOIN clientes c ON v.cliente_id = c.id 
                 WHERE 1=1 ${sedeCondition}
 
                 UNION ALL
@@ -191,7 +195,8 @@ exports.obtenerHistorialVentas = async (req, res) => {
                     mc.id + 900000, mc.fecha_registro, mc.monto, mc.metodo_pago,
                     'B2B-' || mc.id, 'Cobro Terceros', mc.descripcion, 'Recibo Interno', NULL,
                     'NO_APLICA', NULL, NULL, NULL, NULL, NULL,
-                    s.nombre, u.nombres, 'Acuerdo Comercial', 'CORPORATIVO', 'Cliente Corporativo', 'COBRO_CAJA'
+                    s.nombre, u.nombres, 'Acuerdo Comercial', 'CORPORATIVO', 'Cliente Corporativo', 
+                    'COBRO_CAJA', 'OTROS' -- origen y linea_negocio dummy
                 FROM movimientos_caja mc
                 JOIN usuarios u ON mc.usuario_id = u.id
                 JOIN sedes s ON mc.sede_id = s.id
@@ -203,7 +208,6 @@ exports.obtenerHistorialVentas = async (req, res) => {
 
         const result = await pool.query(query, params);
         
-        // Mapeo simple
         const ventasFormateadas = result.rows.map(v => ({
             ...v,
             nombre_cajero: v.nombre_usuario,
@@ -296,75 +300,90 @@ exports.obtenerDetalleVenta = async (req, res) => {
     }
 };
 
-// 4. ANULAR VENTA (SEGURIDAD TOTAL BASADA EN TU BASE DE DATOS REAL)
+// 4. ANULAR VENTA (INTELIGENTE: Detecta eventos y repone stock masivo)
 exports.eliminarVenta = async (req, res) => {
     const { id } = req.params;
     const usuarioId = req.usuario.id;
     
-    // 1. NORMALIZACIÓN DE ROL
-    // Convierte "Super Admin" -> "super admin" y "ADMIN" -> "admin"
+    // Normalización de Roles
     const rolRaw = req.usuario.rol || '';
     const rolUsuario = rolRaw.toLowerCase().trim();
-    
-    // 🔒 LISTA BLANCA DE PERMISOS (VIP)
-    // Solo estos roles exactos pueden anular.
-    const rolesPermitidos = [
-        'superadmin',   // (Alexander) - Visto en tu BD
-        'admin',        // (Danny, Cristian) - Visto en tu BD
-        'administrador',// (Por si el sistema cambia y guarda el nombre completo)
-        'super admin',  // (Por si acaso se guarda con espacio)
-        'gerente'       // (Futuro rol de alto nivel)
-    ];
+    // Solo estos roles pueden anular
+    const rolesPermitidos = ['superadmin', 'admin', 'administrador', 'super admin', 'gerente'];
 
     const client = await pool.connect();
     try {
-        // 2. BLOQUEO DE SEGURIDAD
-        // Si entra Pedro (colaborador) o alguien de Logística, el sistema los expulsa aquí.
         if (!rolesPermitidos.includes(rolUsuario)) {
-            console.log(`⛔ Bloqueo: Usuario ${req.usuario.nombres} (${rolUsuario}) intentó anular venta #${id}`);
-            throw new Error('⛔ ACCESO DENEGADO: Tu perfil no tiene permisos para anular ventas. Contacta a un Admin.');
+            throw new Error('⛔ ACCESO DENEGADO: Permisos insuficientes.');
         }
 
         await client.query('BEGIN');
         
-        // 3. Verificar venta y sede
+        // 3. Verificar venta
         const ventaRes = await client.query('SELECT * FROM ventas WHERE id = $1', [id]);
         if (ventaRes.rows.length === 0) throw new Error('Venta no encontrada.');
         const venta = ventaRes.rows[0];
 
-        // 4. RECUPERAR STOCK (Lógica de Combos corregida)
-        const detallesRes = await client.query('SELECT producto_id, cantidad, nombre_producto_historico FROM detalle_ventas WHERE venta_id = $1', [id]);
+        // 4. RECUPERAR STOCK INTELIGENTE
+        const detallesRes = await client.query('SELECT producto_id, cantidad FROM detalle_ventas WHERE venta_id = $1', [id]);
         
         for (const item of detallesRes.rows) {
-            // Verificamos si es combo
+            let cantidadAReponer = parseInt(item.cantidad) || 0; // Forzamos a que sea un número
+
+            // 🔥 CORRECCIÓN: Si es una venta de EVENTO, la cantidad real no está en el detalle, sino en el Lead.
+            if (venta.linea_negocio === 'EVENTOS' && venta.cliente_id) {
+                const leadRes = await client.query(
+                    `SELECT cantidad_ninos FROM leads WHERE cliente_asociado_id = $1 ORDER BY id DESC LIMIT 1`,
+                    [venta.cliente_id]
+                );
+                
+                // Si encontramos un lead asociado con cantidad de niños, esa es la cantidad real a reponer.
+                if (leadRes.rows.length > 0 && leadRes.rows[0].cantidad_ninos) {
+                    const cantidadNinos = parseInt(leadRes.rows[0].cantidad_ninos);
+                    if (!isNaN(cantidadNinos) && cantidadNinos > 0) {
+                        cantidadAReponer = cantidadNinos;
+                    }
+                }
+            }
+
+            if (!item.producto_id) continue; // Si no hay producto, no se puede reponer stock
+
+            // Verificamos si es combo (Receta)
             const esCombo = await client.query('SELECT producto_hijo_id, cantidad FROM productos_combo WHERE producto_padre_id = $1', [item.producto_id]);
             
             if (esCombo.rows.length > 0) {
-                // A. Reponer Ingredientes
+                // A. Reponer Ingredientes (Multiplicado por la cantidad real)
                 for (const hijo of esCombo.rows) {
-                    await reponerStock(client, hijo.producto_hijo_id, venta.sede_id, item.cantidad * hijo.cantidad, usuarioId, id, `Anulación Ingrediente Combo`);
+                    const totalInsumo = parseInt(hijo.cantidad) * cantidadAReponer;
+                    await reponerStock(client, hijo.producto_hijo_id, venta.sede_id, totalInsumo, usuarioId, id, `Anulación Evento (Ingrediente)`);
                 }
-                // 🔥 B. Reponer Combo Principal
-                await reponerStock(client, item.producto_id, venta.sede_id, item.cantidad, usuarioId, id, `Anulación Venta (Combo)`);
+                
+                // B. Reponer Combo Principal (Si aplica y controla stock)
+                await reponerStock(client, item.producto_id, venta.sede_id, cantidadAReponer, usuarioId, id, `Anulación Evento (Combo)`);
             } else {
-                // Producto Normal
-                await reponerStock(client, item.producto_id, venta.sede_id, item.cantidad, usuarioId, id, `Anulación Venta`);
+                // Producto Normal (Ej: Pulsera suelta) - Repone la cantidad real
+                await reponerStock(client, item.producto_id, venta.sede_id, cantidadAReponer, usuarioId, id, `Anulación Venta Directa`);
             }
         }
 
-        // 5. Eliminar Registros
+        // 5. Eliminar Registros Financieros
         await client.query('DELETE FROM movimientos_caja WHERE venta_id = $1', [id]);
         await client.query('DELETE FROM detalle_ventas WHERE venta_id = $1', [id]);
         await client.query('DELETE FROM ventas WHERE id = $1', [id]);
         
+        // Opcional: Reabrir el evento en el CRM
+        if (venta.origen === 'CRM_SALDO' && venta.cliente_id) {
+             // Restauramos el evento a "confirmado" para que se pueda volver a cobrar bien
+             // Usamos costo_total si total_venta no existe en la tabla eventos
+             await client.query(`UPDATE eventos SET estado = 'confirmado', saldo = costo_total WHERE cliente_id = $1 AND estado = 'finalizado'`, [venta.cliente_id]);
+             await client.query(`UPDATE leads SET estado = 'seguimiento' WHERE cliente_asociado_id = $1`, [venta.cliente_id]);
+        }
+
         await client.query('COMMIT');
-        
-        console.log(`⚠️ ALERTA: Venta #${id} ANULADA por ${rolUsuario} (ID: ${usuarioId})`);
-        res.json({ msg: `Venta anulada correctamente.` });
+        res.json({ msg: `Venta anulada y stock devuelto correctamente.` });
 
     } catch (err) {
         await client.query('ROLLBACK');
-        // Si el error es de permisos, retornamos 403 (Prohibido)
         const status = err.message.includes('ACCESO DENEGADO') ? 403 : 400;
         res.status(status).json({ msg: err.message });
     } finally {
@@ -389,46 +408,91 @@ exports.obtenerVendedores = async (req, res) => {
     }
 };
 
-// --- FUNCIONES AUXILIARES (STOCK) ---
-async function descontarStock(client, prodId, sedeId, cantidad, usuarioId, ticketCodigo, motivo) {
-    // Obtenemos datos del producto
-    const prod = await client.query('SELECT controla_stock, tipo_item, nombre, costo_compra FROM productos WHERE id = $1', [prodId]);
-    
+// 🔥 Nuevo parámetro agregado al final: precioVenta
+async function descontarStock(client, prodId, sedeId, cantidad, usuarioId, ticketCodigo, motivo, precioVenta = 0) {
+    // 1. Validar producto
+    const prod = await client.query('SELECT controla_stock, tipo_item, nombre FROM productos WHERE id = $1', [prodId]);
     if (prod.rows.length === 0) return;
-    
-    const { controla_stock, tipo_item, costo_compra } = prod.rows[0];
-    
-    // 🔥 CORRECCIÓN AQUÍ:
-    // Antes tenías: if (tipo_item === 'combo') return;
-    // Ahora: Solo bloqueamos si es 'servicio' O si 'controla_stock' es falso.
-    // Si es 'combo' y tiene stock activado, PASARÁ y se descontará.
+    const { controla_stock, tipo_item, nombre } = prod.rows[0];
+
     if (tipo_item === 'servicio' || !controla_stock) return;
 
-    // Verificar Stock Actual (Bloqueo pesimista para evitar ventas sin stock)
+    // 2. Verificar Stock Total
     const stockRes = await client.query('SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2 FOR UPDATE', [prodId, sedeId]);
-    const stockActual = stockRes.rows.length > 0 ? stockRes.rows[0].cantidad : 0;
-    
+    const stockActual = stockRes.rows.length > 0 ? parseInt(stockRes.rows[0].cantidad) : 0;
+
     if (stockActual < cantidad) {
-        throw new Error(`Stock insuficiente para: ${prod.rows[0].nombre} (Quedan: ${stockActual})`);
+        throw new Error(`Stock insuficiente para: ${nombre} (Quedan: ${stockActual})`);
     }
 
-    // Restar Stock Físico
-    await client.query('UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3', [cantidad, prodId, sedeId]);
-    
-    // Registrar en Kardex
-    await client.query(
-        `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
-         VALUES ($1, $2, $3, 'salida_venta', $4, $5, $6, $7)`, 
-        [
-            sedeId, 
-            prodId, 
-            usuarioId, 
-            -cantidad, // Negativo
-            (stockActual - cantidad), 
-            `Venta ${ticketCodigo} (${motivo})`, 
-            parseFloat(costo_compra) || 0
-        ]
+    // 3. 🔥 ALGORITMO PEPS: Consumir Lotes (Del más viejo al más nuevo)
+    let cantidadRestante = cantidad;
+    let stockParaKardex = stockActual; // Variable temporal para calcular el stock restante línea por línea
+
+    // Buscamos lotes activos ordenados por fecha
+    const lotesRes = await client.query(
+        `SELECT id, cantidad_actual, costo_unitario FROM inventario_lotes 
+         WHERE producto_id = $1 AND sede_id = $2 AND cantidad_actual > 0 
+         ORDER BY fecha_ingreso ASC FOR UPDATE`,
+        [prodId, sedeId]
     );
+
+    // Caso especial: Si hay stock físico pero no lotes (migración antigua)
+    if (lotesRes.rows.length === 0 && stockActual > 0) {
+        // Descontamos del total sin tocar lotes
+        await client.query('UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3', [cantidad, prodId, sedeId]);
+        
+        // 🔥 Guardamos el precio histórico aquí también
+        await client.query(
+            `INSERT INTO movimientos_inventario 
+            (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento, precio_venta_historico)
+             VALUES ($1, $2, $3, 'salida_venta', $4, $5, $6, 0, $7)`, 
+            [sedeId, prodId, usuarioId, -cantidad, (stockActual - cantidad), `Venta ${ticketCodigo} (Sin Lote)`, precioVenta]
+        );
+        return;
+    }
+
+    // ITERAMOS LOS LOTES
+    for (const lote of lotesRes.rows) {
+        if (cantidadRestante <= 0) break;
+
+        // Cuánto sacamos de ESTE lote específico
+        const aSacar = Math.min(cantidadRestante, lote.cantidad_actual);
+        const costoDeEsteLote = parseFloat(lote.costo_unitario);
+
+        // A. Actualizar Lote en BD
+        await client.query(
+            `UPDATE inventario_lotes 
+             SET cantidad_actual = cantidad_actual - $1,
+                 estado = CASE WHEN cantidad_actual - $1 = 0 THEN 'AGOTADO' ELSE estado END
+             WHERE id = $2`,
+            [aSacar, lote.id]
+        );
+
+        // B. 🔥 REGISTRAR EN KARDEX POR CADA LOTE
+        stockParaKardex -= aSacar;
+
+        await client.query(
+            `INSERT INTO movimientos_inventario 
+            (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento, precio_venta_historico)
+             VALUES ($1, $2, $3, 'salida_venta', $4, $5, $6, $7, $8)`, 
+            [
+                sedeId, 
+                prodId, 
+                usuarioId, 
+                -aSacar, 
+                stockParaKardex, 
+                `Venta ${ticketCodigo} (${motivo}) - Lote ${lote.id}`, 
+                costoDeEsteLote, 
+                precioVenta // 🔥 AQUÍ SE GUARDA EL PRECIO PARA SIEMPRE
+            ]
+        );
+
+        cantidadRestante -= aSacar;
+    }
+
+    // 4. Finalmente actualizamos el Stock Total (Resumen)
+    await client.query('UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3', [cantidad, prodId, sedeId]);
 }
 
 async function reponerStock(client, prodId, sedeId, cantidad, usuarioId, ticketId, motivo) {

@@ -482,6 +482,10 @@
     padding-left: 45px !important; /* Espacio suficiente para el icono */
 }
 
+.input-wrapper textarea {
+    padding-left: 20px !important; /* Espacio suficiente para el icono */
+}
+
 /* Aseguramos la posición del icono */
 .input-wrapper i {
     position: absolute;

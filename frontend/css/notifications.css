@@ -135,3 +135,72 @@
     font-weight: 600;
     cursor: pointer;
 }
+
+/* --- MODAL DE ALERTA (Reemplazo de alert) --- */
+.custom-alert-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: 10001; /* Encima del de confirmación */
+    display: none;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.custom-alert-overlay.active {
+    display: flex;
+    opacity: 1;
+}
+
+.alert-box {
+    background: white;
+    padding: 30px;
+    border-radius: 16px;
+    width: 400px;
+    text-align: center;
+    transform: scale(0.9);
+    transition: transform 0.2s ease;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+}
+
+.custom-alert-overlay.active .alert-box {
+    transform: scale(1);
+}
+
+.alert-icon {
+    font-size: 50px;
+    margin-bottom: 15px;
+}
+.alert-icon.icon-error { color: #e74c3c; }
+.alert-icon.icon-success { color: #2ecc71; }
+.alert-icon.icon-info { color: #3498db; }
+
+
+.alert-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 10px;
+}
+
+.alert-desc {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 25px;
+}
+
+.btn-alert-ok {
+    background: #3498db;
+    color: white;
+    border: none;
+    padding: 10px 35px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+}

@@ -93,8 +93,7 @@
         }
     }
 
-// --- 2. RENDERIZAR TABLA (ACTUALIZADA CON PDF, XML Y ESTADOS SUNAT) ---
-// --- 2. RENDERIZAR TABLA (ACTUALIZADA CON PDF, XML Y ESTADOS SUNAT) ---
+// --- 2. RENDERIZAR TABLA (CON BLOQUEO PARA EVENTOS) ---
 function renderizarTablaHistorial(datos) {
     const tbody = document.getElementById('tabla-historial-body');
     if (!tbody) return;
@@ -108,7 +107,7 @@ function renderizarTablaHistorial(datos) {
         return;
     }
 
-    // 2. Paginación (Mantiene tu lógica actual)
+    // 2. Paginación
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
     const dataToRender = datos.slice(startIndex, endIndex);
@@ -126,32 +125,32 @@ function renderizarTablaHistorial(datos) {
         const vendedorTexto = v.nombre_vendedor ? `${v.nombre_vendedor}`.trim() : '<span style="color:#aaa;">No asignado</span>';
         const cajeroTexto = v.nombre_cajero || v.nombre_usuario || 'Sistema';
 
-        // C. PRECIO (Con etiqueta de descuento si existe)
+        // C. PRECIO (Con etiqueta de descuento)
         let precioHtml = `S/ ${parseFloat(v.total_venta).toFixed(2)}`;
         if (v.observaciones && (v.observaciones.includes('Descuento') || v.observaciones.includes('Convenio'))) {
             precioHtml += `<br><span style="background:#dcfce7; color:#166534; font-size:9px; padding:1px 4px; border-radius:3px;">🏷️ OFF</span>`;
         }
 
-        // 🔥 D. TIPO DE COMPROBANTE Y ESTADO SUNAT (NUEVO)
+        // 🔥 D. TIPO DE COMPROBANTE Y ESTADO SUNAT
         let tipoDocHtml = '';
         let estadoSunatHtml = '';
 
         // Badge del Estado SUNAT
         if (v.sunat_estado && v.sunat_estado !== 'NO_APLICA') {
-            let colorEstado = '#64748b'; // Gris (Default)
+            let colorEstado = '#64748b'; 
             let iconEstado = '';
             
-            if (v.sunat_estado === 'ACEPTADA') { colorEstado = '#10b981'; iconEstado='bx-check'; } // Verde
-            else if (v.sunat_estado === 'PENDIENTE') { colorEstado = '#f59e0b'; iconEstado='bx-time'; } // Amarillo
-            else if (v.sunat_estado === 'ANULADA') { colorEstado = '#ef4444'; iconEstado='bx-x'; } // Rojo
-            else if (v.sunat_estado === 'ERROR') { colorEstado = '#dc2626'; iconEstado='bx-error'; } // Rojo Oscuro
+            if (v.sunat_estado === 'ACEPTADA') { colorEstado = '#10b981'; iconEstado='bx-check'; } 
+            else if (v.sunat_estado === 'PENDIENTE') { colorEstado = '#f59e0b'; iconEstado='bx-time'; }
+            else if (v.sunat_estado === 'ANULADA') { colorEstado = '#ef4444'; iconEstado='bx-x'; } 
+            else if (v.sunat_estado === 'ERROR') { colorEstado = '#dc2626'; iconEstado='bx-error'; }
 
             estadoSunatHtml = `<div style="margin-top:2px; font-size:10px; color:${colorEstado}; font-weight:700;">
                 <i class='bx ${iconEstado}'></i> ${v.sunat_estado}
             </div>`;
         }
 
-        // Badge del Tipo Doc + Serie (Ej: F001-23)
+        // Badge del Tipo Doc + Serie
         const serieCorr = (v.serie && v.correlativo) ? `<br><small style="color:#666; font-family:monospace;">${v.serie}-${v.correlativo}</small>` : '';
 
         if (v.tipo_comprobante === 'Factura') {
@@ -173,37 +172,46 @@ function renderizarTablaHistorial(datos) {
              metodoHtml = `<span class="badge-pago badge-plin" style="font-size:11px"><i class='bx bx-mobile-alt'></i> Plin</span>`;
         }
 
-        // 🔥 F. ACCIONES Y BOTONES (NUEVO: PDF/XML)
+        // 🔥 F. ACCIONES Y BOTONES (CON BLOQUEO INTELIGENTE)
         let botonesAccion = `<div style="display:flex; gap:5px;">`;
         
-        // 1. Ver Detalle (Ojo)
-        // 🔥 MODIFICADO: Pasa el ID y el código visual ('M-0052')
-        if (v.origen === 'VENTA_POS' || !v.origen) {
+        // 1. Ver Detalle
+        if (v.origen === 'VENTA_POS' || !v.origen || v.origen === 'CRM_SALDO') {
             botonesAccion += `<button class="btn-icon" title="Ver Detalle" onclick="verDetallesVenta(${v.id}, '${v.codigo_visual}')" style="color:#4f46e5;"><i class='bx bx-show'></i></button>`;
         } else {
             botonesAccion += `<button class="btn-icon" title="${v.observaciones}" style="color:#059669; cursor:help;"><i class='bx bx-info-circle'></i></button>`;
         }
 
-        // 2. Botones SUNAT (Solo aparecen si existen los enlaces)
+        // 2. PDF/XML
         if (v.enlace_pdf) {
-            botonesAccion += `<a href="${v.enlace_pdf}" target="_blank" class="btn-icon" title="Imprimir Ticket/Factura" style="color:#dc2626; text-decoration:none;"><i class='bx bxs-file-pdf'></i></a>`;
+            botonesAccion += `<a href="${v.enlace_pdf}" target="_blank" class="btn-icon" title="Imprimir Ticket" style="color:#dc2626;"><i class='bx bxs-file-pdf'></i></a>`;
         }
         if (v.enlace_xml) {
-            botonesAccion += `<a href="${v.enlace_xml}" target="_blank" class="btn-icon" title="Descargar XML" style="color:#64748b; text-decoration:none;"><i class='bx bxs-file-code'></i></a>`;
+            botonesAccion += `<a href="${v.enlace_xml}" target="_blank" class="btn-icon" title="XML" style="color:#64748b;"><i class='bx bxs-file-code'></i></a>`;
         }
         
-        // 3. Botón Anular
+        // 3. BOTÓN BORRAR (LÓGICA ACTUALIZADA)
         let btnDeleteHtml = '';
-        if (v.origen === 'VENTA_POS' || !v.origen) {
-             // Si ya está anulada en SUNAT, deshabilitamos visualmente
-             if(v.sunat_estado === 'ANULADA'){
-                 btnDeleteHtml = `<button class="btn-icon" title="Ya anulado" style="color:#ccc; cursor:not-allowed;"><i class='bx bx-block'></i></button>`;
-             } else {
-                 btnDeleteHtml = `<button class="btn-icon delete" title="Anular Venta" onclick="eliminarVenta(${v.id})" style="color:#ef4444;"><i class='bx bx-trash'></i></button>`;
-             }
-        } else {
+
+        // CASO A: Es una venta de EVENTOS o CRM -> BLOQUEAMOS
+        if (v.linea_negocio === 'EVENTOS' || v.origen === 'CRM_SALDO') {
+             btnDeleteHtml = `<button class="btn-icon" title="🚫 Gestionar anulación desde CRM (Leads)" style="color:#cbd5e1; cursor:not-allowed;" onclick="mostrarError('Esta venta pertenece a un Evento. Elimina el Lead en el CRM para evitar duplicidad de stock.')">
+                                <i class='bx bxs-lock-alt'></i>
+                              </button>`;
+        } 
+        // CASO B: Ya está anulada en SUNAT -> BLOQUEAMOS
+        else if (v.sunat_estado === 'ANULADA') {
+             btnDeleteHtml = `<button class="btn-icon" title="Ya anulado" style="color:#ccc; cursor:not-allowed;"><i class='bx bx-block'></i></button>`;
+        } 
+        // CASO C: Venta normal de mostrador -> PERMITIMOS BORRAR
+        else if (v.origen === 'VENTA_POS' || !v.origen) {
+             btnDeleteHtml = `<button class="btn-icon delete" title="Anular Venta" onclick="eliminarVenta(${v.id}, '${v.codigo_visual}')" style="color:#ef4444;"><i class='bx bx-trash'></i></button>`;
+        } 
+        // CASO D: Otros orígenes (B2B, etc)
+        else {
              btnDeleteHtml = `<button class="btn-icon" title="Gestionar en Módulo Terceros" style="color:#cbd5e1; cursor:not-allowed;"><i class='bx bx-block'></i></button>`;
         }
+
         botonesAccion += btnDeleteHtml;
         botonesAccion += `</div>`;
 
@@ -245,8 +253,7 @@ function renderizarTablaHistorial(datos) {
     renderizarPaginacion(datos.length, datos);
 }
     
-    // --- 3. VER DETALLE (MODAL) ---
-   // --- 3. VER DETALLE (MODAL ACTUALIZADO) ---
+// --- 3. VER DETALLE (MODAL ACTUALIZADO) ---
 window.verDetallesVenta = async function(ventaId, codigoVisual) {
     const modal = document.getElementById('modal-detalle-venta');
     const body = document.getElementById('detalle-venta-body');
@@ -366,13 +373,38 @@ window.verDetallesVenta = async function(ventaId, codigoVisual) {
         XLSX.writeFile(wb, `Ventas_${new Date().toISOString().slice(0, 10)}.xlsx`);
     }
 
-    // --- 6. ELIMINAR VENTA (ANULAR) ---
-    window.eliminarVenta = async function(id) {
-        if (!confirm(`⚠️ ¿ANULAR Venta #${id}?\n\n- Se devolverá el stock.\n- Se restará el dinero de caja.\n- Acción irreversible.`)) return;
+    
+    // Variable global dentro del módulo para retener el ID
+    let idVentaParaAnular = null; 
+
+    // Paso 1: Abrir Modal
+    window.eliminarVenta = function(id, codigoVisual) {
+        idVentaParaAnular = id; // Guardamos el ID aquí
+        console.log("🛑 ID seleccionado para borrar:", idVentaParaAnular); // Debug
+
+        const modal = document.getElementById('modal-confirmar-anulacion');
+        const texto = document.getElementById('texto-confirmar-anulacion');
         
+        if (modal && texto) {
+            texto.innerHTML = `Vas a anular la venta <b>${codigoVisual || '#' + id}</b>.<br>Se devolverá el stock y se ajustará la caja.`;
+            modal.classList.add('active');
+        } else {
+            // Si falta el HTML del modal, usamos confirm nativo como respaldo
+            if(confirm(`¿Anular venta #${id}?`)) {
+                confirmarAnulacionBackend();
+            }
+        }
+    }
+
+    // Paso 2: Ejecutar Borrado
+   window.confirmarAnulacionBackend = async function() {
+        if (!idVentaParaAnular) return;
+        
+        cerrarModalConfirmacion(); // Cierra la pregunta "¿Estás seguro?"
+
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`${API_BASE}/ventas/${id}`, {
+            const res = await fetch(`${API_BASE}/ventas/${idVentaParaAnular}`, {
                 method: 'DELETE',
                 headers: { 'x-auth-token': token }
             });
@@ -380,13 +412,45 @@ window.verDetallesVenta = async function(ventaId, codigoVisual) {
             const data = await res.json();
 
             if (res.ok) {
-                alert("✅ " + data.msg);
-                cargarHistorial(); // Recargar tabla
+                // ✅ AQUÍ ESTÁ EL CAMBIO: Usamos el modal bonito en vez de alert()
+                mostrarExito(data.msg || "Venta anulada y stock devuelto correctamente.");
+                cargarHistorial(); // Recargar la tabla
             } else {
-                alert("❌ " + (data.msg || "Error al anular."));
+                // ❌ Error bonito
+                mostrarError(data.msg || "No se pudo anular la venta.");
             }
         } catch (e) {
-            alert("Error de conexión.");
+            console.error(e);
+            mostrarError("Error de conexión con el servidor.");
+        } finally {
+            idVentaParaAnular = null;
+        }
+    }
+
+    window.cerrarModalConfirmacion = function() {
+        const modal = document.getElementById('modal-confirmar-anulacion');
+        if(modal) modal.classList.remove('active');
+    }
+
+    window.mostrarExito = function(mensaje) {
+        const modal = document.getElementById('modal-success');
+        const texto = document.getElementById('success-msg');
+        if (modal && texto) {
+            texto.innerText = mensaje;
+            modal.classList.add('active');
+        } else {
+            alert("✅ " + mensaje); // Respaldo por si falla el HTML
+        }
+    }
+
+    window.mostrarError = function(mensaje) {
+        const modal = document.getElementById('modal-error');
+        const texto = document.getElementById('error-msg');
+        if (modal && texto) {
+            texto.innerText = mensaje;
+            modal.classList.add('active');
+        } else {
+            alert("❌ " + mensaje); // Respaldo por si falla el HTML
         }
     }
 

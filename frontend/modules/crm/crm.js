@@ -184,12 +184,12 @@ function renderTable(lista) {
         document.getElementById('modal-lead').classList.remove('active');
     }
 
-// --- 6. EDITAR LEAD (LECTURA INTELIGENTE) ---
+// --- 6. EDITAR LEAD (CON BLOQUEO DE ESTADO GANADO) ---
 window.editarLead = async function(id) {
     const lead = leadsGlobales.find(l => l.id == id);
     if(!lead) return;
 
-    await window.abrirModalLead(); // Importante: Carga los vendedores antes de asignar el valor
+    await window.abrirModalLead(); // Carga vendedores y resetea form
     document.querySelector('.modal-header h3').innerText = "Editar Cliente";
     
     // --- DATOS BÁSICOS ---
@@ -200,22 +200,20 @@ window.editarLead = async function(id) {
     document.getElementById('lead-canal').value = lead.canal_origen || 'WhatsApp';
     document.getElementById('lead-hijo').value = lead.nombre_hijo;
     
-    // --- CORRECCIÓN 1: VENDEDOR ---
+    // Vendedor
     if (lead.vendedor_id) {
         document.getElementById('lead-vendedor').value = lead.vendedor_id;
     }
 
-    // --- CORRECCIÓN 2: MÉTODO DE PAGO (SOLUCIÓN MAYÚSCULAS) ---
-    // Si la BD dice "Yape", lo convertimos a "yape" para que el HTML lo reconozca
+    // Método de Pago
     if (lead.metodo_pago) {
         document.getElementById('lead-metodo-pago').value = lead.metodo_pago.toLowerCase();
     }
 
-    // Recuperar Nro Operación
+    // Nro Operación
     if (lead.nro_operacion) {
         document.getElementById('lead-nro-operacion').value = lead.nro_operacion;
     }
-    // ---------------------------------------------
 
     if (lead.paquete_interes) {
         document.getElementById('lead-paquete').value = lead.paquete_interes;
@@ -237,12 +235,13 @@ window.editarLead = async function(id) {
 
     document.getElementById('lead-cantidad-ninos').value = cantidadNiños;
     document.getElementById('lead-obs').value = notasLimpias.trim(); 
-
     document.getElementById('lead-valor').value = lead.valor_estimado;
-    document.getElementById('lead-estado').value = lead.estado || 'nuevo'; 
+
+    // --- MANEJO DEL ESTADO Y FECHAS ---
+    const estadoSelect = document.getElementById('lead-estado');
+    estadoSelect.value = lead.estado || 'nuevo'; 
 
     if(lead.fecha_tentativa) {
-        // Formatear fecha para input type="date"
         const fechaLimpia = new Date(lead.fecha_tentativa).toISOString().split('T')[0];
         document.getElementById('lead-fecha').value = fechaLimpia;
     }
@@ -251,22 +250,36 @@ window.editarLead = async function(id) {
 
     if(lead.sede_interes) {
         document.getElementById('lead-sede').value = lead.sede_interes;
-        await cargarSalasPorSede(); // Cargar salas para poder seleccionar la guardada
+        await cargarSalasPorSede(); 
         if(lead.salon_id) {
             document.getElementById('lead-sala').value = lead.salon_id;
         }
     }
 
+    // 🔥 BLOQUEO DE SEGURIDAD: SI YA ESTÁ GANADO, NO SE PUEDE CAMBIAR EL ESTADO 🔥
+    if (lead.estado === 'ganado') {
+        estadoSelect.disabled = true; // Bloquea el selector
+        estadoSelect.style.backgroundColor = '#dcfce7'; // Fondo verde suave
+        estadoSelect.style.color = '#166534'; // Texto verde oscuro
+        estadoSelect.style.fontWeight = 'bold';
+    } else {
+        // Restaurar estado normal si abrimos otro lead después
+        estadoSelect.disabled = false; 
+        estadoSelect.style.backgroundColor = ''; 
+        estadoSelect.style.color = '';
+        estadoSelect.style.fontWeight = 'normal';
+    }
+
+    // --- BOTÓN DE COBRAR SALDO ---
     const btnCobrar = document.getElementById('btn-cobrar-saldo');
     // Solo mostramos cobrar si NO está ganado ni perdido, y si ya hubo pago inicial
     if(lead.estado !== 'ganado' && lead.estado !== 'perdido' && parseFloat(lead.pago_inicial) > 0) { 
          btnCobrar.style.display = 'inline-block';
-         // Usa el MODAL NUEVO de cobro final
-         btnCobrar.onclick = () => abrirModalCobroFinal(lead);
+         btnCobrar.onclick = () => abrirModalCobroFinal(lead); // Usar lead directamente es más seguro
     } else {
          btnCobrar.style.display = 'none';
     }
-}
+};
 
 // --- 7. GUARDAR LEAD (SOPORTA MÉTODO DE PAGO Y NIÑOS) ---
 window.guardarLead = async function() {
@@ -275,7 +288,7 @@ window.guardarLead = async function() {
     const telefono = document.getElementById('lead-telefono').value;
     const estado = document.getElementById('lead-estado').value; 
 
-    if(!nombre || !telefono) return alert("Nombre y Teléfono son obligatorios");
+    if(!nombre || !telefono) return showAlert("Nombre y Teléfono son obligatorios", "error");
 
     // Capturamos inputs básicos
     const fechaInput = document.getElementById('lead-fecha').value; 
@@ -342,7 +355,7 @@ window.guardarLead = async function() {
                 });
             }
 
-            alert("✅ Guardado correctamente.");
+            showToast("Guardado correctamente.", "success");
             cerrarModalLead();
             
             // Recargar tabla para ver cambios
@@ -350,15 +363,19 @@ window.guardarLead = async function() {
 
         } else {
             const errorData = await res.json();
-            alert("Error al guardar: " + (errorData.msg || "Error desconocido"));
+            showAlert("Error al guardar: " + (errorData.msg || "Error desconocido"), "error");
         }
-    } catch(e) { console.error(e); alert("Error de conexión"); }
+    } catch(e) { 
+        console.error(e); 
+        showAlert("Error de conexión al guardar.", "error"); 
+    }
 }
 
     
     // --- 8. ELIMINAR LEAD ---
     window.eliminarLead = async function(id) {
-        if(!confirm("¿Eliminar este cliente?")) return;
+        if (!await showConfirm("¿Estás seguro de eliminar este lead? Todos los datos de eventos y pagos asociados se borrarán permanentemente.", "Confirmar Eliminación")) return;
+        
         try {
             const token = localStorage.getItem('token');
             const res = await fetch(`/api/crm/${id}`, {
@@ -366,9 +383,16 @@ window.guardarLead = async function() {
                 headers: { 'x-auth-token': token }
             });
             if(res.ok) {
+                showToast("Lead eliminado correctamente.", "success");
                 initCRM();
+            } else {
+                const err = await res.json();
+                showAlert(err.msg || "No se pudo eliminar el lead.", "error");
             }
-        } catch(e) { console.error(e); }
+        } catch(e) { 
+            console.error(e); 
+            showAlert("Error de conexión al eliminar.", "error");
+        }
     }
 
 async function cargarVendedores() {
@@ -534,17 +558,16 @@ async function cargarVendedores() {
     }
 
     // --- 9. MODAL COBRO FINAL (CORREGIDO: VARIABLE GLOBAL) ---
-
     let leadActualParaCobro = null; // Variable para guardar el lead temporalmente
 
     window.abrirModalCobroFinal = function() {
         // 1. Obtener ID del Lead actual
         const leadId = document.getElementById('lead-id').value;
-        if (!leadId) return alert("Error: No se detectó el ID del Lead.");
+        if (!leadId) return showAlert("Error: No se detectó el ID del Lead.", "error");
 
-        // 2. Buscar datos del lead en memoria (CORREGIDO: leadsGlobales)
+        // 2. Buscar datos del lead en memoria (leadsGlobales)
         const lead = leadsGlobales.find(l => l.id == leadId);
-        if (!lead) return alert("Error: Lead no encontrado en memoria.");
+        if (!lead) return showAlert("Error: Lead no encontrado en memoria.", "error");
 
         leadActualParaCobro = lead; // Guardamos para usarlo en los cálculos
 
@@ -564,6 +587,11 @@ async function cargarVendedores() {
         const mainPaqueteSelect = document.getElementById('lead-paquete');
         selectPaquete.innerHTML = mainPaqueteSelect.innerHTML;
         selectPaquete.value = mainPaqueteSelect.value;
+
+        // 🔥 BLOQUEO DE SEGURIDAD: NO PERMITIR CAMBIar EL PAQUETE AQUÍ 🔥
+        selectPaquete.disabled = true; 
+        selectPaquete.style.backgroundColor = "#e2e8f0"; // Gris claro visual
+        selectPaquete.style.cursor = "not-allowed";      // Cursor de prohibido
 
         // 5. Calcular saldos iniciales
         recalcularSaldoVisual();
@@ -640,22 +668,49 @@ async function cargarVendedores() {
             const data = await res.json();
 
             if (res.ok) {
-                alert("🎉 " + data.msg);
+                await showAlert(data.msg, "success");
                 cerrarModalCobroFinal();
                 cerrarModalLead(); 
                 cargarLeads(); // Recargar tabla principal
             } else {
-                alert("❌ Error: " + data.msg);
+                await showAlert(data.msg, "error");
             }
 
         } catch (error) {
             console.error(error);
-            alert("Error de conexión al cobrar.");
+            await showAlert("Error de conexión al procesar el cobro.", "error");
         } finally {
             btn.disabled = false;
             btn.innerHTML = originalText;
         }
     };
+
+    // --- FUNCIONES GLOBALES DE MODAL (SEGURAS) ---
+    window.mostrarExito = function(mensaje) {
+        const msgEl = document.getElementById('success-msg');
+        const modalEl = document.getElementById('modal-success');
+        
+        if (msgEl && modalEl) {
+            msgEl.innerText = mensaje;
+            modalEl.classList.add('active');
+        } else {
+            // Si no existe el HTML (ej: estás en otra página incompleta), usa alert
+            alert("✅ " + mensaje);
+        }
+    }
+
+    window.mostrarError = function(mensaje) {
+        const msgEl = document.getElementById('error-msg');
+        const modalEl = document.getElementById('modal-error');
+        
+        if (msgEl && modalEl) {
+            msgEl.innerText = mensaje;
+            modalEl.classList.add('active');
+        } else {
+            // Fallback seguro
+            alert("❌ " + mensaje);
+        }
+    }
 
     // ARRANQUE
     initCRM();

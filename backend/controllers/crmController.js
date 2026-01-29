@@ -575,70 +575,66 @@ exports.eliminarLead = async (req, res) => {
     try {
         await client.query('BEGIN');
         
-        // 1. Obtener datos del Lead antes de borrar
+        // 1. Obtener datos del Lead y el evento asociado antes de borrar
         const leadRes = await client.query('SELECT * FROM leads WHERE id = $1', [id]);
         if (leadRes.rows.length === 0) throw new Error('Lead no encontrado.');
         const lead = leadRes.rows[0];
 
-        // 2. Si tiene un cliente asociado, procedemos a borrar todo el rastro financiero y operativo
+        // 2. Si tiene un cliente asociado, procedemos a reponer stock y luego borrar todo
         if (lead.cliente_asociado_id) {
             const clienteId = lead.cliente_asociado_id;
 
-            // --- A. LIMPIEZA PROFUNDA DE VENTAS (SOLUCIÓN AL ERROR FK) ---
-            // Buscamos las ventas asociadas a este cliente que coincidan con el monto inicial
-            // (Asumimos que son las ventas generadas por este Lead)
-            const ventasRes = await client.query(
-                `SELECT id FROM ventas 
-                 WHERE cliente_id = $1 AND total_venta = $2`,
-                [clienteId, lead.pago_inicial]
-            );
-
-            // Iteramos sobre las ventas encontradas para borrar sus dependencias primero
-            for (const venta of ventasRes.rows) {
-                const ventaId = venta.id;
-
-                // A1. Borrar Movimientos de Caja vinculados a esta Venta (🔥 AQUÍ ESTABA EL ERROR)
-                // Primero eliminamos el registro en caja que apunta a esta venta
-                await client.query('DELETE FROM movimientos_caja WHERE venta_id = $1', [ventaId]);
-
-                // A2. Borrar Detalle de Venta (Productos)
-                await client.query('DELETE FROM detalle_ventas WHERE venta_id = $1', [ventaId]);
-
-                // A3. Finalmente borrar la Venta (Ahora sí se puede porque no tiene hijos)
-                await client.query('DELETE FROM ventas WHERE id = $1', [ventaId]);
-            }
-
-            // --- B. BUSCAR Y ELIMINAR EVENTO ---
-            // Buscar el evento asociado a este cliente
-            const eventoRes = await client.query(
-                `SELECT id FROM eventos WHERE cliente_id = $1 ORDER BY id DESC LIMIT 1`,
-                [clienteId]
-            );
-
+            const eventoRes = await client.query(`SELECT * FROM eventos WHERE cliente_id = $1 ORDER BY id DESC LIMIT 1`, [clienteId]);
+            
             if (eventoRes.rows.length > 0) {
-                const eventoId = eventoRes.rows[0].id;
+                const evento = eventoRes.rows[0];
+                const sedeId = evento.sede_id;
+                const paqueteId = lead.paquete_interes || evento.paquete_id; 
+                const cantidadAReponer = parseInt(lead.cantidad_ninos) || 0;
 
-                // --- C. LIMPIEZA DE PAGOS DE EVENTO ---
-                
-                // Obtenemos los IDs de los pagos registrados para este evento
+                // --- 🔥 INICIO: LÓGICA DE REPOSICIÓN DE STOCK ---
+                if (paqueteId && cantidadAReponer > 0) {
+                    const esCombo = await client.query('SELECT producto_hijo_id, cantidad FROM productos_combo WHERE producto_padre_id = $1', [paqueteId]);
+                    
+                    if (esCombo.rows.length > 0) {
+                        // Es un combo: reponer ingredientes
+                        for (const hijo of esCombo.rows) {
+                            const totalInsumo = parseInt(hijo.cantidad) * cantidadAReponer;
+                            if (totalInsumo > 0) {
+                                await reponerStock(client, hijo.producto_hijo_id, sedeId, totalInsumo, usuarioId, `lead_${id}`, `Anulación Lead (Insumo)`);
+                            }
+                        }
+                        // Reponer el combo padre si controla stock
+                        await reponerStock(client, paqueteId, sedeId, cantidadAReponer, usuarioId, `lead_${id}`, `Anulación Lead (Combo)`);
+                    } else {
+                        // Es un producto simple: reponerlo
+                        await reponerStock(client, paqueteId, sedeId, cantidadAReponer, usuarioId, `lead_${id}`, `Anulación Lead (Producto)`);
+                    }
+                }
+                // --- 🔥 FIN: LÓGICA DE REPOSICIÓN DE STOCK ---
+
+                // --- A. LIMPIEZA PROFUNDA DE VENTAS (TODAS LAS DE EVENTO) ---
+                const ventasRes = await client.query(
+                    `SELECT id FROM ventas WHERE cliente_id = $1 AND linea_negocio = 'EVENTOS'`,
+                    [clienteId]
+                );
+
+                for (const venta of ventasRes.rows) {
+                    const ventaId = venta.id;
+                    await client.query('DELETE FROM movimientos_caja WHERE venta_id = $1', [ventaId]);
+                    await client.query('DELETE FROM detalle_ventas WHERE venta_id = $1', [ventaId]);
+                    await client.query('DELETE FROM ventas WHERE id = $1', [ventaId]);
+                }
+
+                // --- B. LIMPIEZA DE EVENTO Y PAGOS ---
+                const eventoId = evento.id;
                 const pagosRes = await client.query('SELECT id FROM pagos_evento WHERE evento_id = $1', [eventoId]);
                 const pagosIds = pagosRes.rows.map(p => p.id);
 
                 if (pagosIds.length > 0) {
-                    // C1. Borrar movimientos de CAJA vinculados a estos pagos (Si existen por separado)
-                    await client.query(
-                        `DELETE FROM movimientos_caja WHERE pago_evento_id = ANY($1::int[])`,
-                        [pagosIds]
-                    );
-
-                    // C2. Borrar los PAGOS internos del evento
-                    await client.query(
-                        `DELETE FROM pagos_evento WHERE evento_id = $1`,
-                        [eventoId]
-                    );
+                    await client.query(`DELETE FROM movimientos_caja WHERE pago_evento_id = ANY($1::int[])`, [pagosIds]);
+                    await client.query(`DELETE FROM pagos_evento WHERE evento_id = $1`, [eventoId]);
                 }
-
-                // --- D. BORRAR EL EVENTO (Calendario) ---
                 await client.query('DELETE FROM eventos WHERE id = $1', [eventoId]);
             }
         }
@@ -646,18 +642,18 @@ exports.eliminarLead = async (req, res) => {
         // 3. Finalmente borrar el Lead (CRM)
         await client.query('DELETE FROM leads WHERE id = $1', [id]);
 
-        // 4. Auditoría (Registro de seguridad)
+        // 4. Auditoría
         if (usuarioId) {
             await client.query(
                 `INSERT INTO auditoria (usuario_id, accion, modulo, registro_id, detalle) 
                  VALUES ($1, 'ELIMINAR', 'CRM', $2, $3)`,
-                [usuarioId, id, `Eliminó Lead ${lead.nombre_apoderado}, venta de S/${lead.pago_inicial} y revirtió caja.`]
+                [usuarioId, id, `Eliminó Lead ${lead.nombre_apoderado}. Se revirtió stock, ventas, caja y evento.`]
             );
         }
 
         await client.query('COMMIT');
         
-        res.json({ msg: 'Lead eliminado correctamente. Se borraron ventas, caja, pagos y evento asociado.' });
+        res.json({ msg: 'Lead eliminado y stock repuesto correctamente.' });
         
     } catch (err) {
         await client.query('ROLLBACK');
@@ -668,10 +664,13 @@ exports.eliminarLead = async (req, res) => {
     }
 };
 
-// Cobrar Saldo (MASTER: CONECTADO A TABLA REAL 'productos_combo')
-exports.cobrarSaldo = async (req, res) => {
+// --- COBRAR SALDO FINAL Y CERRAR EVENTO (CORREGIDO: STOCK SIMPLE Y COMBO) ---
+exports.cobrarSaldoLead = async (req, res) => {
+    console.log("💰 [DEBUG] Iniciando cobrarSaldoLead...");
     const { id } = req.params; 
-    const { metodoPago, cantidad_ninos_final, paquete_final_id } = req.body; // 🔥 Recibimos paquete_final_id
+    const { metodoPago, cantidad_ninos_final, paquete_final_id } = req.body; 
+    
+    if (!req.usuario) return res.status(401).json({ msg: "Sesión no válida." });
     const usuarioId = req.usuario.id;
 
     const client = await pool.connect();
@@ -679,15 +678,16 @@ exports.cobrarSaldo = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // 1. Datos del Lead y Evento
+        // 1. Datos del Lead
         const leadRes = await client.query('SELECT * FROM leads WHERE id = $1', [id]);
         if (leadRes.rows.length === 0) throw new Error('Lead no encontrado');
         const lead = leadRes.rows[0];
 
         if (!lead.cliente_asociado_id) throw new Error('Sin evento asociado.');  
 
+        // 2. Datos del Evento
         const eventoRes = await client.query(
-            `SELECT * FROM eventos WHERE cliente_id = $1 AND estado != 'cancelado'`, 
+            `SELECT * FROM eventos WHERE cliente_id = $1 AND estado != 'cancelado' ORDER BY id DESC LIMIT 1`, 
             [lead.cliente_asociado_id]
         );
         if (eventoRes.rows.length === 0) throw new Error('No se encontró evento activo.');
@@ -695,155 +695,215 @@ exports.cobrarSaldo = async (req, res) => {
         const evento = eventoRes.rows[0];
         const sedeReal = evento.sede_id; 
 
-        // 2. DEFINIR QUÉ PAQUETE Y CANTIDAD USAR
-        // Si el usuario cambió el paquete en el modal, usamos ese. Si no, el del evento.
+        // 3. DEFINIR DATOS REALES
         const idPaqueteReal = paquete_final_id ? parseInt(paquete_final_id) : evento.paquete_id;
         const cantidadFinal = cantidad_ninos_final ? parseInt(cantidad_ninos_final) : 0;
 
-        // 3. OBTENER PRECIO Y DATOS DEL PRODUCTO SELECCIONADO
-        const prodRes = await client.query(
-            'SELECT id, precio_venta, nombre, costo_compra FROM productos WHERE id = $1', 
-            [idPaqueteReal]
-        );
-        if (prodRes.rows.length === 0) throw new Error('El paquete seleccionado no existe.');
-        
-        const productoPrincipal = prodRes.rows[0];
-        const precioUnitario = parseFloat(productoPrincipal.precio_venta);
+        // Variables para el producto
+        let productoPrincipal = { nombre: "Personalizado", precio_venta: 0, costo_compra: 0, controla_stock: false, tipo_item: 'servicio' };
+        let precioUnitario = 0;
 
-        // 4. RECALCULO FINANCIERO REAL
-        const nuevoCostoTotal = precioUnitario * cantidadFinal;
-        const pagadoPreviamente = parseFloat(evento.acuenta || 0);
-        let saldoAPagar = nuevoCostoTotal - pagadoPreviamente;
-        
-        if (saldoAPagar < 0) saldoAPagar = 0; // Por ahora no manejamos devoluciones automáticas
-
-        // 5. LÓGICA DE INVENTARIO (DESCONTAR DEL PAQUETE REAL)
-        
-        // A. Buscar Ingredientes (Receta)
-        const recetaRes = await client.query(
-            `SELECT r.producto_hijo_id AS ingrediente_id, r.cantidad, p.nombre, p.costo_compra 
-             FROM productos_combo r
-             JOIN productos p ON r.producto_hijo_id = p.id
-             WHERE r.producto_padre_id = $1`,
-            [idPaqueteReal]
-        );
-        const ingredientes = recetaRes.rows;
-
-        // B. Validar Stock Principal (Combo)
-        const stockMainRes = await client.query(
-            'SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2 FOR UPDATE',
-            [idPaqueteReal, sedeReal]
-        );
-        const stockMain = stockMainRes.rows.length > 0 ? parseInt(stockMainRes.rows[0].cantidad) : 0;
-
-        if (stockMain < cantidadFinal) {
-              throw new Error(`⛔ STOCK INSUFICIENTE: Combo "${productoPrincipal.nombre}" (Tienes ${stockMain}, necesitas ${cantidadFinal})`);
+        if (idPaqueteReal) {
+            // Obtenemos si controla stock y tipo de item
+            const prodRes = await client.query('SELECT id, precio_venta, nombre, costo_compra, controla_stock, tipo_item FROM productos WHERE id = $1', [idPaqueteReal]);
+            if (prodRes.rows.length > 0) {
+                productoPrincipal = prodRes.rows[0];
+                precioUnitario = parseFloat(productoPrincipal.precio_venta);
+            }
+        } else {
+             if(cantidadFinal > 0) precioUnitario = parseFloat(lead.valor_estimado) / cantidadFinal;
         }
 
-        // C. Validar Stock Ingredientes
-        for (const ing of ingredientes) {
-            const cantidadNecesariaTotal = parseInt(ing.cantidad) * cantidadFinal;
-            const stockIngRes = await client.query(
-                'SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2 FOR UPDATE',
-                [ing.ingrediente_id, sedeReal]
-            );
-            const stockIng = stockIngRes.rows.length > 0 ? parseInt(stockIngRes.rows[0].cantidad) : 0;
+        // 4. CÁLCULO FINANCIERO
+        let nuevoCostoTotal = precioUnitario * cantidadFinal;
+        if (nuevoCostoTotal === 0) nuevoCostoTotal = parseFloat(lead.valor_estimado || 0);
 
-            if (stockIng < cantidadNecesariaTotal) {
-                throw new Error(`⛔ FALTA INGREDIENTE: "${ing.nombre}". Tienes ${stockIng}, necesitas ${cantidadNecesariaTotal}.`);
+        const pagadoPreviamente = parseFloat(evento.acuenta || 0);
+        let saldoAPagar = nuevoCostoTotal - pagadoPreviamente;
+        if (saldoAPagar < 0) saldoAPagar = 0; 
+
+        // 5. LÓGICA DE INVENTARIO (CORREGIDA PARA PRODUCTOS SIMPLES Y COMBOS) 🔥
+        if (idPaqueteReal) {
+            // A. Buscar si es COMBO (tiene receta)
+            const recetaRes = await client.query(
+                `SELECT r.producto_hijo_id AS ingrediente_id, r.cantidad, p.nombre, p.costo_compra 
+                 FROM productos_combo r
+                 JOIN productos p ON r.producto_hijo_id = p.id
+                 WHERE r.producto_padre_id = $1`,
+                [idPaqueteReal]
+            );
+            const ingredientes = recetaRes.rows;
+
+            if (ingredientes.length > 0) {
+                // === CASO 1: ES UN COMBO CON INGREDIENTES ===
+                for (const ing of ingredientes) {
+                    const cantidadNecesariaTotal = parseInt(ing.cantidad) * cantidadFinal;
+                    
+                    // Validar Stock Ingrediente
+                    const stockIngRes = await client.query(
+                        'SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2 FOR UPDATE',
+                        [ing.ingrediente_id, sedeReal]
+                    );
+                    const stockIng = stockIngRes.rows.length > 0 ? parseInt(stockIngRes.rows[0].cantidad) : 0;
+
+                    if (stockIng < cantidadNecesariaTotal) {
+                        throw new Error(`⛔ FALTA INGREDIENTE: "${ing.nombre}". Tienes ${stockIng}, necesitas ${cantidadNecesariaTotal}.`);
+                    }
+
+                    // Descontar
+                    const updateIng = await client.query(
+                        `UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3 RETURNING cantidad`,
+                        [cantidadNecesariaTotal, ing.ingrediente_id, sedeReal]
+                    );
+
+                    // Registrar movimiento en Kardex
+                    await client.query(
+                        `INSERT INTO movimientos_inventario 
+                        (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
+                         VALUES ($1, $2, $3, 'salida_venta', $4, $5, $6, $7)`,
+                        [
+                            sedeReal, ing.ingrediente_id, usuarioId, -cantidadNecesariaTotal, 
+                            updateIng.rows[0].cantidad, 
+                            `Ingrediente Evento #${evento.id}`, 
+                            ing.costo_compra || 0
+                        ]
+                    );
+                }
+
+                // 🔥 INICIO DE LA CORRECCIÓN: Descontar stock del COMBO (Padre) si aplica
+                if (productoPrincipal.controla_stock && productoPrincipal.tipo_item !== 'servicio') {
+                    const stockComboRes = await client.query(
+                        'SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2 FOR UPDATE',
+                        [idPaqueteReal, sedeReal]
+                    );
+                    const stockCombo = stockComboRes.rows.length > 0 ? parseInt(stockComboRes.rows[0].cantidad) : 0;
+
+                    if (stockCombo < cantidadFinal) {
+                        throw new Error(`⛔ STOCK DEL COMBO INSUFICIENTE: "${productoPrincipal.nombre}". Tienes ${stockCombo}, necesitas ${cantidadFinal}.`);
+                    }
+
+                    const updateCombo = await client.query(
+                        `UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3 RETURNING cantidad`,
+                        [cantidadFinal, idPaqueteReal, sedeReal]
+                    );
+
+                    await client.query(
+                        `INSERT INTO movimientos_inventario 
+                        (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
+                         VALUES ($1, $2, $3, 'salida_venta', $4, $5, $6, $7)`,
+                        [
+                            sedeReal, idPaqueteReal, usuarioId, -cantidadFinal,
+                            updateCombo.rows[0].cantidad,
+                            `Venta Combo Evento #${evento.id} (${cantidadFinal} un.)`,
+                            productoPrincipal.costo_compra || 0
+                        ]
+                    );
+                }
+                // 🔥 FIN DE LA CORRECCIÓN
+
+            } else {
+                // === CASO 2: ES UN PRODUCTO SIMPLE (Ej: Pulsera, Juguete) === 🔥 ESTO ARREGLA TU PROBLEMA DE LOS 30 ITEMS
+                // Solo descontamos si 'controla_stock' es verdadero y NO es un servicio
+                if (productoPrincipal.controla_stock && productoPrincipal.tipo_item !== 'servicio') {
+                    
+                    const stockMainRes = await client.query(
+                        'SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2 FOR UPDATE',
+                        [idPaqueteReal, sedeReal]
+                    );
+                    
+                    const stockMain = stockMainRes.rows.length > 0 ? parseInt(stockMainRes.rows[0].cantidad) : 0;
+                    
+                    // Validamos que alcancen los 30 (o la cantidad de niños)
+                    if (stockMain < cantidadFinal) {
+                        throw new Error(`⛔ STOCK INSUFICIENTE: "${productoPrincipal.nombre}". Tienes ${stockMain}, necesitas ${cantidadFinal}.`);
+                    }
+
+                    // Descontar Stock Principal
+                    const updateMain = await client.query(
+                        `UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3 RETURNING cantidad`, 
+                        [cantidadFinal, idPaqueteReal, sedeReal]
+                    );
+
+                    // Registrar Kardex Principal
+                    await client.query(
+                        `INSERT INTO movimientos_inventario 
+                        (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
+                         VALUES ($1, $2, $3, 'salida_venta', $4, $5, $6, $7)`,
+                        [
+                            sedeReal, idPaqueteReal, usuarioId, -cantidadFinal, 
+                            updateMain.rows[0].cantidad, 
+                            `Venta Evento #${evento.id} (${cantidadFinal} un.)`, 
+                            productoPrincipal.costo_compra || 0
+                        ]
+                    );
+                }
             }
         }
 
-        // D. EJECUCIÓN DESCUENTO
-        // D1. Descontar Combo
-        const updateMain = await client.query(
-            `UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3 RETURNING cantidad`, 
-            [cantidadFinal, idPaqueteReal, sedeReal]
-        );
-        
-        await client.query(
-            `INSERT INTO movimientos_inventario 
-            (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
-             VALUES ($1, $2, $3, 'salida_venta', $4, $5, $6, $7)`,
-            [
-                sedeReal, idPaqueteReal, usuarioId, -cantidadFinal, 
-                updateMain.rows[0].cantidad, 
-                `Venta Final Evento #${evento.id}`, 
-                productoPrincipal.costo_compra || 0
-            ]
-        );
-
-        // D2. Descontar Ingredientes
-        for (const ing of ingredientes) {
-            const cantidadADescontar = parseInt(ing.cantidad) * cantidadFinal;
-            const updateIng = await client.query(
-                `UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3 RETURNING cantidad`,
-                [cantidadADescontar, ing.ingrediente_id, sedeReal]
+        // 6. REGISTRAR PAGO Y VENTA
+        if (saldoAPagar > 0) {
+            // A. Pago del Evento
+            const pagoRes = await client.query(
+                `INSERT INTO pagos_evento (evento_id, usuario_id, monto, metodo_pago, nro_operacion, tipo_pago)
+                 VALUES ($1, $2, $3, $4, 'PAGO_FINAL', 'SALDO') RETURNING id`,
+                [evento.id, usuarioId, saldoAPagar, metodoPago || 'efectivo']
             );
 
-            await client.query(
-                `INSERT INTO movimientos_inventario 
-                (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
-                 VALUES ($1, $2, $3, 'salida_venta', $4, $5, $6, $7)`,
+            // B. Ticket
+            const maxTicket = await client.query('SELECT COALESCE(MAX(numero_ticket_sede), 0) as max_num FROM ventas WHERE sede_id = $1', [sedeReal]);
+            const nextTicket = parseInt(maxTicket.rows[0].max_num) + 1;
+            
+            // C. Venta (Historial)
+            const ventaRes = await client.query(
+                `INSERT INTO ventas (
+                    sede_id, usuario_id, cliente_id, 
+                    total_venta, metodo_pago, fecha_venta, 
+                    tipo_comprobante, estado, 
+                    tipo_venta, linea_negocio, vendedor_id,
+                    numero_ticket_sede, observaciones, origen
+                ) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, 'ticket', 'completado', 'Evento', 'EVENTOS', $6, $7, $8, 'CRM_SALDO') RETURNING id`,
                 [
-                    sedeReal, ing.ingrediente_id, usuarioId, -cantidadADescontar, 
-                    updateIng.rows[0].cantidad, 
-                    `Ingrediente Evento #${evento.id}`, 
-                    ing.costo_compra || 0
+                    sedeReal, usuarioId, lead.cliente_asociado_id, 
+                    saldoAPagar, metodoPago || 'Efectivo',
+                    lead.vendedor_id, nextTicket,
+                    `Saldo Evento: ${lead.nombre_hijo} (${cantidadFinal} niños)`
+                ]
+            );
+            const ventaId = ventaRes.rows[0].id;
+
+            // D. Detalle
+            await client.query(
+                `INSERT INTO detalle_ventas (venta_id, producto_id, nombre_producto_historico, cantidad, precio_unitario, subtotal)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [ventaId, idPaqueteReal || null, `SALDO: ${productoPrincipal.nombre}`, 1, saldoAPagar, saldoAPagar]
+            );
+
+            // E. Caja
+            await client.query(
+                `INSERT INTO movimientos_caja (
+                    sede_id, usuario_id, tipo_movimiento, categoria, descripcion, monto, metodo_pago, pago_evento_id, venta_id
+                ) VALUES ($1, $2, 'INGRESO', 'EVENTO_SALDO', $3, $4, $5, $6, $7)`,
+                [
+                    sedeReal, usuarioId, 
+                    `SALDO FINAL | ${lead.nombre_apoderado}`, 
+                    saldoAPagar, metodoPago || 'efectivo', pagoRes.rows[0].id, ventaId
                 ]
             );
         }
 
-        // 6. REGISTRAR PAGO
-        const pagoRes = await client.query(
-            `INSERT INTO pagos_evento (evento_id, usuario_id, monto, metodo_pago, nro_operacion, tipo_pago)
-             VALUES ($1, $2, $3, $4, 'PAGO_FINAL', 'SALDO') RETURNING id`,
-            [evento.id, usuarioId, saldoAPagar, metodoPago || 'efectivo']
-        );
-
-        // 7. REGISTRAR EN CAJA
+        // 7. ACTUALIZAR ESTADOS
         await client.query(
-            `INSERT INTO movimientos_caja (
-                sede_id, usuario_id, tipo_movimiento, categoria, 
-                descripcion, monto, metodo_pago, pago_evento_id, fecha_registro
-            ) VALUES ($1, $2, 'INGRESO', 'Cobro Evento', 
-                $3, $4, $5, $6, CURRENT_TIMESTAMP
-            )`,
-            [
-                sedeReal, usuarioId, 
-                `SALDO FINAL | ${lead.nombre_apoderado} (${productoPrincipal.nombre})`, 
-                saldoAPagar, metodoPago || 'efectivo', pagoRes.rows[0].id
-            ]
-        );
-
-        // 🔥 8. NUEVO: REGISTRAR EN HISTORIAL DE VENTAS (Para que salga en el reporte)
-        // Insertamos una nueva venta por el monto del saldo
-        await client.query(
-            `INSERT INTO ventas (
-                sede_id, usuario_id, cliente_id, 
-                total_venta, metodo_pago, fecha_venta, 
-                tipo_comprobante, estado, 
-                tipo_venta, linea_negocio, vendedor_id
-            ) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, 'ticket', 'completado', 'Evento Saldo', 'EVENTOS', $6)`,
-            [
-                sedeReal, 
-                usuarioId, 
-                lead.cliente_asociado_id, 
-                saldoAPagar, 
-                metodoPago || 'Efectivo',
-                lead.vendedor_id // Asignamos al mismo vendedor del lead
-            ]
-        );
-
-        // 9. ACTUALIZAR EVENTO Y LEAD
-        await client.query(
-            `UPDATE eventos SET saldo = 0, acuenta = $1, costo_total = $2, paquete_id = $3, estado = 'confirmado' WHERE id = $4`, 
+            `UPDATE eventos SET saldo = 0, acuenta = $1, costo_total = $2, paquete_id = $3, estado = 'finalizado' WHERE id = $4`, 
             [(pagadoPreviamente + saldoAPagar), nuevoCostoTotal, idPaqueteReal, evento.id]
         );
-        await client.query(`UPDATE leads SET estado = 'ganado' WHERE id = $1`, [id]);
+        
+        await client.query(
+            `UPDATE leads SET estado = 'ganado', cantidad_ninos=$1, paquete_interes=$2, valor_estimado=$3, ultima_actualizacion=CURRENT_TIMESTAMP WHERE id = $4`, 
+            [cantidadFinal, idPaqueteReal, nuevoCostoTotal, id]
+        );
 
         await client.query('COMMIT');
-        res.json({ msg: `¡Cobro de S/${saldoAPagar.toFixed(2)} exitoso! Stock actualizado.`, nuevoEstado: 'ganado' });
+        res.json({ msg: `✅ Cobro de S/${saldoAPagar.toFixed(2)} exitoso! Stock actualizado.`, nuevoEstado: 'ganado' });
 
     } catch (err) {
         await client.query('ROLLBACK');
@@ -853,3 +913,25 @@ exports.cobrarSaldo = async (req, res) => {
         client.release();
     }
 };
+
+async function reponerStock(client, prodId, sedeId, cantidad, usuarioId, ticketId, motivo) {
+    if (!prodId || !cantidad) return; // No reponer si no hay producto o cantidad
+    
+    const prod = await client.query('SELECT controla_stock, costo_compra FROM productos WHERE id = $1', [prodId]);
+    if (!prod.rows[0]?.controla_stock) return;
+
+    const stockRes = await client.query('SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2 FOR UPDATE', [prodId, sedeId]);
+    let stockActual = stockRes.rows.length > 0 ? parseInt(stockRes.rows[0].cantidad) : 0;
+    
+    if (stockRes.rows.length === 0) {
+        await client.query(`INSERT INTO inventario_sedes (sede_id, producto_id, cantidad) VALUES ($1, $2, 0)`, [sedeId, prodId]);
+    }
+
+    await client.query('UPDATE inventario_sedes SET cantidad = cantidad + $1 WHERE producto_id = $2 AND sede_id = $3', [cantidad, prodId, sedeId]);
+    
+    await client.query(
+        `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
+         VALUES ($1, $2, $3, 'entrada_anulacion', $4, $5, $6, $7)`,
+        [sedeId, prodId, usuarioId, cantidad, (stockActual + cantidad), `Anulación #${ticketId} (${motivo})`, parseFloat(prod.rows[0].costo_compra) || 0]
+    );
+}
