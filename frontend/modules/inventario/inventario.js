@@ -398,21 +398,57 @@
         renderKardexPaginado();
     }
 
-    // --- 4. FILTRAR KARDEX ---
+// --- 4. FILTRAR KARDEX (CORREGIDO: FECHA + PRODUCTO) ---
     window.filtrarTablaKardex = function() {
-        const productoSeleccionado = document.getElementById('filtro-producto-kardex').value;
+        console.group("🔍 Depuración Filtro Kardex");
         
-        if (!productoSeleccionado) {
-            movimientosFiltrados = [...movimientosKardex];
-        } else {
-            movimientosFiltrados = movimientosKardex.filter(m => m.producto === productoSeleccionado);
-        }
+        // 1. Obtener valores de los filtros
+        const selectProducto = document.getElementById('filtro-producto-kardex');
+        const productoSeleccionado = selectProducto ? selectProducto.value : '';
         
-        paginaActual = 1; // IMPORTANTE: Volver a la primera página al filtrar
+        // Buscamos el input de fecha (como no tiene ID en tu HTML, lo buscamos por clase dentro del modal)
+        const inputFecha = document.querySelector('#modal-kardex .date-filter');
+        const fechaSeleccionada = inputFecha ? inputFecha.value : '';
+
+        console.log("🎯 Producto buscado:", productoSeleccionado || "(Todos)");
+        console.log("📅 Fecha buscada:", fechaSeleccionada || "(Todas)");
+        console.log("📦 Total movimientos antes de filtrar:", movimientosKardex.length);
+
+        // 2. Aplicar Filtros (Lógica combinada)
+        movimientosFiltrados = movimientosKardex.filter(m => {
+            let cumpleProducto = true;
+            let cumpleFecha = true;
+
+            // A. Validar Producto (si se seleccionó uno)
+            if (productoSeleccionado && productoSeleccionado !== "") {
+                // Usamos trim() para evitar errores por espacios vacíos
+                cumpleProducto = m.producto.trim() === productoSeleccionado.trim();
+            }
+
+            // B. Validar Fecha (si se seleccionó una)
+            if (fechaSeleccionada) {
+                // La fecha viene del servidor usualmente como "2024-01-29T14:00:00..."
+                // Cortamos los primeros 10 caracteres para tener solo "2024-01-29"
+                let fechaMovimiento = "";
+                if(m.fecha) {
+                    fechaMovimiento = new Date(m.fecha).toISOString().split('T')[0];
+                }
+                
+                cumpleFecha = fechaMovimiento === fechaSeleccionada;
+            }
+
+            // El registro debe cumplir AMBAS condiciones
+            return cumpleProducto && cumpleFecha;
+        });
+        
+        console.log("✅ Resultados encontrados:", movimientosFiltrados.length);
+        console.groupEnd();
+
+        // 3. Resetear a la página 1 y dibujar
+        paginaActual = 1; 
         renderKardexPaginado();
     }
 
-    // --- 5. EXPORTAR EXCEL ---
 // --- EXPORTAR EXCEL COMPLETO (CON DINERO) ---
     window.exportarKardexExcel = function() {
         if(movimientosKardex.length === 0) return alert("⚠️ No hay datos para exportar.");
@@ -451,6 +487,64 @@
         
         const fechaHoy = new Date().toISOString().split('T')[0];
         XLSX.writeFile(workbook, `Kardex_Valorizado_${fechaHoy}.xlsx`);
+    }
+
+    // --- 6. EXPORTAR INVENTARIO (TABLA PRINCIPAL) ---
+    window.exportarInventario = function() {
+        // 1. Validaciones
+        if (!productosData || productosData.length === 0) {
+            return showToast("⚠️ No hay productos para exportar.", "warning");
+        }
+
+        if (typeof XLSX === 'undefined') {
+            return showToast("⚠️ Error: La librería de Excel no se cargó correctamente.", "error");
+        }
+
+        // 2. Preparar los datos limpios para el Excel
+        const datosParaExcel = productosData.map(p => {
+            const costo = parseFloat(p.costo) || 0;
+            const precio = parseFloat(p.precio) || 0;
+            const stock = parseInt(p.stock) || 0;
+
+            return {
+                "Código SKU": p.codigo,
+                "Producto": p.nombre,
+                "Categoría": p.categoria,
+                "Tipo": p.tipo === 'fisico' ? 'Físico' : (p.tipo === 'combo' ? 'Combo' : 'Servicio'),
+                "Stock Actual": stock,
+                "Unidad": p.unidad,
+                "Costo Unit. (S/)": costo.toFixed(2),
+                "Precio Venta (S/)": precio.toFixed(2),
+                "Valorizado (Costo Total)": (stock * costo).toFixed(2), // Cuánto dinero tienes invertido
+                "Valorizado (Venta Total)": (stock * precio).toFixed(2) // Cuánto ganarías si vendes todo
+            };
+        });
+
+        // 3. Crear el libro de Excel
+        const worksheet = XLSX.utils.json_to_sheet(datosParaExcel);
+        const workbook = XLSX.utils.book_new();
+        
+        // 4. Ajustar ancho de columnas para que se vea profesional
+        const wscols = [
+            {wch: 15}, // Código
+            {wch: 35}, // Nombre
+            {wch: 15}, // Categoría
+            {wch: 10}, // Tipo
+            {wch: 10}, // Stock
+            {wch: 8},  // Unidad
+            {wch: 12}, // Costo
+            {wch: 12}, // Precio
+            {wch: 15}, // Val. Costo
+            {wch: 15}  // Val. Venta
+        ];
+        worksheet['!cols'] = wscols;
+
+        // 5. Descargar archivo
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Inventario General");
+        const fecha = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+        XLSX.writeFile(workbook, `Inventario_General_${fecha}.xlsx`);
+        
+        showToast("✅ Excel generado correctamente", "success");
     }
 
 
@@ -560,103 +654,126 @@ window.abrirModalStock = function(id) {
 
     window.cerrarModalProducto = function() { document.getElementById('modal-producto').classList.remove('active'); }
 
-// --- GUARDAR PRODUCTO (CON VALIDACIÓN TOTAL DE INGREDIENTES) ---
-// --- GUARDAR PRODUCTO (VERSIÓN DEBUG PARA DETECTAR ERROR DE STOCK) ---
+// --- GUARDAR PRODUCTO (VALIDACIÓN VISUAL + TIEMPO REAL) ---
 window.guardarProducto = async function() {
     console.log("🚀 Iniciando Guardado de Producto...");
 
     const modalActivo = document.querySelector('#modal-producto.active');
-    if (!modalActivo) return alert("Error: No se detectó el modal activo.");
+    if (!modalActivo) return showToast("Error: No se detectó el modal activo.", "error");
 
-    // Obtener valores
-    const id = modalActivo.querySelector('#prod-id').value; 
-    const nombre = modalActivo.querySelector('#prod-nombre').value;
-    const codigo = modalActivo.querySelector('#prod-codigo').value;
-    const precio = modalActivo.querySelector('#prod-precio').value;
-    const tipo = modalActivo.querySelector('#prod-tipo').value;
-    const categoria = modalActivo.querySelector('#prod-categoria').value;
-    const unidad = modalActivo.querySelector('#prod-unidad').value;
-    const costo = modalActivo.querySelector('#prod-costo').value;
-    const stockInput = modalActivo.querySelector('#prod-stock').value;
-    const minimo = modalActivo.querySelector('#prod-minimo').value;
+    // 1. Obtener referencias a los inputs
+    const inputs = {
+        id: modalActivo.querySelector('#prod-id'),
+        nombre: modalActivo.querySelector('#prod-nombre'),
+        codigo: modalActivo.querySelector('#prod-codigo'),
+        categoria: modalActivo.querySelector('#prod-categoria'),
+        tipo: modalActivo.querySelector('#prod-tipo'),
+        unidad: modalActivo.querySelector('#prod-unidad'),
+        precio: modalActivo.querySelector('#prod-precio'),
+        costo: modalActivo.querySelector('#prod-costo'),
+        stock: modalActivo.querySelector('#prod-stock'),
+        minimo: modalActivo.querySelector('#prod-minimo')
+    };
 
-    if(!nombre || !codigo || !precio) return alert("Faltan datos obligatorios.");
+    // 2. Limpieza inicial (Quitar bordes rojos previos)
+    Object.values(inputs).forEach(el => {
+        if(el) el.style.border = "1px solid #ccc";
+    });
 
-    // --- Conversión de Datos ---
-    let stockIngresado = parseInt(stockInput);
-    if (isNaN(stockIngresado)) stockIngresado = 0;
+    // 3. --- VALIDACIÓN DE CAMPOS OBLIGATORIOS ---
+    let errores = [];
 
-    console.log(`📊 Datos: Tipo=${tipo}, StockDeseado=${stockIngresado}, ItemsEnReceta=${comboDetallesTemp.length}`);
+    const marcarError = (input, nombreCampo) => {
+        input.style.border = "2px solid #EF4444"; // Borde Rojo
+        errores.push(nombreCampo);
 
-    // --- 🔥 VALIDACIÓN DE STOCK (CON LOGS) 🔥 ---
-    if (tipo === 'combo' && stockIngresado > 0) {
+        // 🔥 UX MEJORADA: Quitar el rojo apenas el usuario empiece a escribir
+        input.addEventListener('input', function() {
+            this.style.border = "1px solid #ccc";
+        }, { once: true }); // 'once: true' borra el evento después de usarse para ahorrar memoria
+    };
+
+    // Validamos uno por uno
+    if (!inputs.nombre.value.trim()) marcarError(inputs.nombre, "Nombre");
+    if (!inputs.codigo.value.trim()) marcarError(inputs.codigo, "Código SKU");
+    if (!inputs.categoria.value) marcarError(inputs.categoria, "Categoría");
+    if (!inputs.precio.value.trim()) marcarError(inputs.precio, "Precio Venta");
+
+    // Si hay errores, mostramos Toast y detenemos
+    if (errores.length > 0) {
+        return showToast("Completa los campos marcados en rojo.", "error");
+    }
+
+    // 4. Preparar valores
+    const stockIngresado = parseInt(inputs.stock.value) || 0;
+    const tipoVal = inputs.tipo.value;
+
+    console.log(`📊 Datos: Tipo=${tipoVal}, Stock=${stockIngresado}, Receta=${comboDetallesTemp.length}`);
+
+    // --- 5. VALIDACIÓN DE COMBOS (Stock vs Receta) ---
+    if (tipoVal === 'combo' && stockIngresado > 0) {
         
-        if (comboDetallesTemp.length === 0) return alert("⚠️ La receta del combo está vacía.");
+        if (comboDetallesTemp.length === 0) return showToast("⚠️ La receta del combo está vacía.", "warning");
 
         for (const itemReceta of comboDetallesTemp) {
-            // Forzamos conversión a número para evitar error de texto vs numero
             const idIngrediente = parseInt(itemReceta.id_producto);
-            
-            // Buscamos en la memoria
             const productoReal = productosData.find(p => p.id === idIngrediente);
-
-            console.log(`🔍 Verificando Ingrediente: ${itemReceta.nombre} (ID: ${idIngrediente})`);
 
             if (productoReal) {
                 const totalNecesario = stockIngresado * itemReceta.cantidad;
                 const stockDisponible = parseInt(productoReal.stock);
 
-                console.log(`   👉 Necesito: ${totalNecesario} | Tengo: ${stockDisponible}`);
-
                 if (stockDisponible < totalNecesario) {
-                    console.error("❌ BLOQUEO POR STOCK INSUFICIENTE DETECTADO");
-                    return alert(
-                        `❌ STOCK INSUFICIENTE\n\n` +
-                        `Ingrediente: ${itemReceta.nombre}\n` +
-                        `Necesitas: ${totalNecesario}\n` +
-                        `Tienes: ${stockDisponible}\n\n` +
-                        `No se puede guardar el combo.`
+                    console.error("❌ BLOQUEO POR STOCK INSUFICIENTE");
+                    return showToast(
+                        `Falta stock de: ${itemReceta.nombre} (Tienes: ${stockDisponible}, Necesitas: ${totalNecesario})`, 
+                        "error"
                     );
                 }
             } else {
-                console.error(`❌ El ingrediente ID ${idIngrediente} no se encontró en productosData.`);
-                // Esto pasa si el ingrediente está inactivo o no cargó en la lista inicial
-                return alert(`Error crítico: El ingrediente "${itemReceta.nombre}" no aparece en el inventario activo.`);
+                return showToast(`Error crítico: El ingrediente "${itemReceta.nombre}" no está disponible.`, "error");
             }
         }
     } else {
         console.log("ℹ️ Saltando validación estricta (No es combo o Stock es 0)");
     }
 
-    // --- Preparar Objeto para Backend ---
+    // --- 6. Preparar Objeto para Backend ---
     let lineaNegocioCalculada = 'CAFETERIA'; 
-    const catUpper = categoria.toUpperCase();
+    const catUpper = inputs.categoria.value.toUpperCase();
     if (catUpper.includes('ENTRADA') || catUpper.includes('TICKET')) lineaNegocioCalculada = 'TAQUILLA';
     else if (catUpper.includes('MERCH') || catUpper.includes('ROPA')) lineaNegocioCalculada = 'MERCH';
+    else if (catUpper.includes('ARCADE') || catUpper.includes('JUEGO')) lineaNegocioCalculada = 'JUEGOS';
+    else if (catUpper.includes('EVENTO')) lineaNegocioCalculada = 'EVENTOS';
 
-    // Aseguramos que comboDetalles se envíe
-    const detallesEnviar = (tipo === 'combo') ? comboDetallesTemp : [];
-    console.log("📦 Enviando al Backend:", detallesEnviar);
+    const detallesEnviar = (tipoVal === 'combo') ? comboDetallesTemp : [];
 
     const formObj = {
-        nombre, codigo, categoria, tipo, unidad, 
-        precio: parseFloat(precio),
-        costo: parseFloat(costo) || 0,
-        stock: stockIngresado, 
-        stock_minimo: parseInt(minimo) || 0,
-        imagen: getDefaultIcon(categoria),
-        comboDetalles: detallesEnviar, // <--- AQUÍ DEBE ESTAR LA RECETA
+        nombre: inputs.nombre.value.trim(),
+        codigo: inputs.codigo.value.trim(),
+        categoria: inputs.categoria.value,
+        tipo: inputs.tipo.value,
+        unidad: inputs.unidad.value,
+        precio: parseFloat(inputs.precio.value),
+        costo: parseFloat(inputs.costo.value) || 0,
+        stock: stockIngresado,
+        stock_minimo: parseInt(inputs.minimo.value) || 0,
+        imagen: getDefaultIcon(inputs.categoria.value),
+        comboDetalles: detallesEnviar,
         lineaNegocio: lineaNegocioCalculada 
     };
 
+    // --- 7. Enviar al Backend ---
     const btnSave = modalActivo.querySelector('.btn-primary');
     const txtOriginal = btnSave.innerText;
-    btnSave.innerText = "Guardando..."; btnSave.disabled = true;
+    btnSave.innerText = "Guardando..."; 
+    btnSave.disabled = true;
 
     try {
         let url = '/api/inventario';
         let method = 'POST';
-        if(id) { url = `/api/inventario/${id}`; method = 'PUT'; }
+        // Si hay ID, es edición (PUT)
+        if(inputs.id.value) { url = `/api/inventario/${inputs.id.value}`; method = 'PUT'; }
 
         const res = await fetch(url, {
             method: method,
@@ -665,89 +782,98 @@ window.guardarProducto = async function() {
         });
         
         const data = await res.json();
-        console.log("📩 Respuesta Server:", data);
 
         if(res.ok) {
-            alert("✅ " + data.msg);
+            showToast("✅ " + data.msg, "success");
             cerrarModalProducto();
-            await initInventario();
+            await initInventario(); // Recargar tabla
         } else {
-            alert("❌ Error Backend: " + data.msg);
+            // Error del Backend (Ej: Código duplicado)
+            showToast("❌ " + data.msg, "error");
+            
+            // Si el error menciona "Código", resaltamos ese input específico
+            if(data.msg && (data.msg.includes('Código') || data.msg.includes('SKU'))) {
+                marcarError(inputs.codigo, "Código");
+                inputs.codigo.focus();
+            }
         }
-    } catch (error) { console.error(error); alert("Error de conexión"); }
-    finally { btnSave.innerText = txtOriginal; btnSave.disabled = false; }
+    } catch (error) { 
+        console.error(error); 
+        showToast("Error de conexión con el servidor", "error"); 
+    } finally { 
+        btnSave.innerText = txtOriginal; 
+        btnSave.disabled = false; 
+    }
 }
 
-// --- FORMULARIO STOCK (ACTUALIZADO: RECIBE CASCADA DE CAMBIOS) ---
-    const formStock = document.getElementById('form-stock');
-    if(formStock) {
-        formStock.addEventListener('submit', async (e) => {
-            e.preventDefault();
+// --- FORMULARIO STOCK (ACTUALIZADO: CON TOASTS) ---
+const formStock = document.getElementById('form-stock');
+if(formStock) {
+    formStock.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const id = parseInt(document.getElementById('stk-id').value);
+        const tipoAjuste = document.getElementById('stk-tipo').value;
+        const cantidad = document.getElementById('stk-cantidad').value;
+        const costo = document.getElementById('stk-costo').value;
+        const motivo = document.getElementById('stk-motivo').value;
+
+        if(cantidad <= 0) return showToast("Cantidad inválida", "error");
+
+        const btn = document.getElementById('btn-stock-submit');
+        const txt = btn.innerText;
+        btn.disabled = true; btn.innerText = "Procesando...";
+
+        try {
+            const res = await fetch(`/api/inventario/${id}/stock`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('token') },
+                body: JSON.stringify({ cantidad, costo, motivo, tipoAjuste })
+            });
+
+            const data = await res.json();
             
-            const id = parseInt(document.getElementById('stk-id').value);
-            const tipoAjuste = document.getElementById('stk-tipo').value;
-            const cantidad = document.getElementById('stk-cantidad').value;
-            const costo = document.getElementById('stk-costo').value;
-            const motivo = document.getElementById('stk-motivo').value;
-
-            if(cantidad <= 0) return alert("Cantidad inválida");
-
-            const btn = document.getElementById('btn-stock-submit');
-            const txt = btn.innerText;
-            btn.disabled = true; btn.innerText = "Procesando...";
-
-            try {
-                const res = await fetch(`/api/inventario/${id}/stock`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('token') },
-                    body: JSON.stringify({ cantidad, costo, motivo, tipoAjuste })
-                });
-
-                const data = await res.json();
+            if(res.ok) {
+                const msg = tipoAjuste === 'salida' ? "Baja registrada (Merma)." : "Ingreso registrado.";
+                showToast("✅ " + msg, "success");
                 
-                if(res.ok) {
-                    const msg = tipoAjuste === 'salida' ? "Baja registrada (Merma)." : "Ingreso registrado.";
-                    alert("✅ " + msg);
+                // 1. Actualizar EL PRODUCTO PRINCIPAL
+                const prodIndex = productosData.findIndex(p => p.id === id);
+                if (prodIndex !== -1) {
+                    if (data.nuevo_stock !== undefined) productosData[prodIndex].stock = parseInt(data.nuevo_stock);
                     
-                    // 1. Actualizar EL PRODUCTO PRINCIPAL
-                    const prodIndex = productosData.findIndex(p => p.id === id);
-                    if (prodIndex !== -1) {
-                        if (data.nuevo_stock !== undefined) productosData[prodIndex].stock = parseInt(data.nuevo_stock);
-                        
-                        // 🔥 CORRECCIÓN AQUÍ: Redondeamos lo que llega del backend
-                        if (data.nuevo_costo !== undefined) {
-                            // parseFloat( ... .toFixed(2) ) convierte "1.5703..." en el número 1.57
-                            productosData[prodIndex].costo = parseFloat(parseFloat(data.nuevo_costo).toFixed(2));
-                        }
+                    // 🔥 CORRECCIÓN: Redondear costo
+                    if (data.nuevo_costo !== undefined) {
+                        productosData[prodIndex].costo = parseFloat(parseFloat(data.nuevo_costo).toFixed(2));
                     }
-
-                    // 2. 🔥 ACTUALIZAR COMBOS AFECTADOS (CASCADA)
-                    // Si el backend nos dice que otros combos cambiaron de precio, actualizamos la data local
-                    if (data.combos_afectados && data.combos_afectados.length > 0) {
-                        data.combos_afectados.forEach(combo => {
-                            const comboIndex = productosData.findIndex(p => p.id === combo.id);
-                            if (comboIndex !== -1) {
-                                productosData[comboIndex].costo = combo.nuevo_costo;
-                                console.log(`🔄 Combo actualizado localmente: ID ${combo.id} -> Nuevo Costo: ${combo.nuevo_costo}`);
-                            }
-                        });
-                    }
-
-                    cerrarModalStock();
-                    renderizarTabla(); 
-
-                } else {
-                    alert("❌ " + data.msg);
                 }
-            } catch(error) { 
-                console.error(error); 
-                alert("Error de conexión"); 
-            } finally { 
-                btn.disabled = false; 
-                btn.innerText = txt; 
+
+                // 2. 🔥 ACTUALIZAR COMBOS AFECTADOS (CASCADA)
+                if (data.combos_afectados && data.combos_afectados.length > 0) {
+                    data.combos_afectados.forEach(combo => {
+                        const comboIndex = productosData.findIndex(p => p.id === combo.id);
+                        if (comboIndex !== -1) {
+                            productosData[comboIndex].costo = combo.nuevo_costo;
+                            console.log(`🔄 Combo actualizado localmente: ID ${combo.id} -> Nuevo Costo: ${combo.nuevo_costo}`);
+                        }
+                    });
+                }
+
+                cerrarModalStock();
+                renderizarTabla(); 
+
+            } else {
+                showToast("❌ " + data.msg, "error");
             }
-        });
-    }
+        } catch(error) { 
+            console.error(error); 
+            showToast("Error de conexión", "error"); 
+        } finally { 
+            btn.disabled = false; 
+            btn.innerText = txt; 
+        }
+    });
+}
 
     // --- UTILIDADES ---
     function getPrefijoSede() {
@@ -862,48 +988,51 @@ window.toggleTipoProducto = function() {
         const nombreInput = document.getElementById('combo-search').value;
         const cantidad = parseInt(document.getElementById('combo-qty').value);
 
-        // Validación más estricta usando ID
-        if (!idSeleccionado) {
-            // Intento de recuperación: buscar por nombre exacto si el usuario no hizo click
-            const prod = productosData.find(p => p.nombre.toLowerCase() === nombreInput.toLowerCase() && p.tipo === 'fisico');
-            if(!prod) return alert("Por favor selecciona un producto de la lista.");
-            // Si lo encontramos, usamos ese
-            return procesarAgregado(prod.id, prod.nombre, cantidad);
+        // Validación
+        if (!nombreInput || cantidad <= 0) return showToast("Selecciona un producto y cantidad válida.", "warning");
+
+        // 1. Si tenemos ID oculto (seleccionado de la lista)
+        if (idSeleccionado) {
+            return procesarAgregado(parseInt(idSeleccionado), nombreInput, cantidad);
         }
 
-        procesarAgregado(parseInt(idSeleccionado), nombreInput, cantidad);
+        // 2. Si NO tenemos ID (escribió el nombre a mano), buscamos en la data
+        const prod = productosData.find(p => p.nombre.toLowerCase() === nombreInput.toLowerCase() && p.tipo === 'fisico');
+        
+        if(!prod) return showToast("Producto no encontrado en el inventario o no es físico.", "error");
+        
+        procesarAgregado(prod.id, prod.nombre, cantidad);
     }
 
     function procesarAgregado(id, nombre, cantidad) {
-            if (cantidad <= 0) return alert("Cantidad inválida.");
+        if (cantidad <= 0) return showToast("Cantidad inválida.", "warning");
 
-            // 1. Buscar el COSTO del producto original
-            const productoOriginal = productosData.find(p => p.id === id);
-            // Si no tiene costo definido, asumimos 0
-            const costoUnitario = productoOriginal ? (productoOriginal.costo || 0) : 0;
+        // 1. Buscar el COSTO del producto original
+        const productoOriginal = productosData.find(p => p.id === id);
+        const costoUnitario = productoOriginal ? (productoOriginal.costo || 0) : 0;
 
-            // 2. Verificar si ya existe en la receta
-            const existe = comboDetallesTemp.find(d => d.id_producto === id);
-            
-            if (existe) {
-                existe.cantidad += cantidad;
-            } else {
-                comboDetallesTemp.push({ 
-                    id_producto: id, 
-                    nombre: nombre, 
-                    cantidad: cantidad,
-                    costo: costoUnitario // <--- ¡IMPORTANTE! Guardamos el costo aquí
-                });
-            }
-
-            // 3. Resetear UI
-            document.getElementById('combo-search').value = '';
-            document.getElementById('combo-selected-id').value = '';
-            document.getElementById('combo-qty').value = 1;
-            
-            renderizarTablaCombo();
-            recalcularCostoCombo(); // <--- Recalcular Total
+        // 2. Verificar si ya existe en la receta
+        const existe = comboDetallesTemp.find(d => d.id_producto === id);
+        
+        if (existe) {
+            existe.cantidad += cantidad;
+        } else {
+            comboDetallesTemp.push({ 
+                id_producto: id, 
+                nombre: nombre, 
+                cantidad: cantidad,
+                costo: costoUnitario 
+            });
         }
+
+        // 3. Resetear UI
+        document.getElementById('combo-search').value = '';
+        document.getElementById('combo-selected-id').value = '';
+        document.getElementById('combo-qty').value = 1;
+        
+        renderizarTablaCombo();
+        recalcularCostoCombo(); 
+    }
 
     // Cierra el menú si haces click fuera
     document.addEventListener('click', function(e) {
@@ -1036,9 +1165,9 @@ window.editarProducto = async function(id) {
     // Asegúrate de que esta función sea global (window.)
     window.editarProducto = editarProducto;
 
-// --- ELIMINAR PRODUCTO (VERSIÓN MODERNA) ---
+        // --- ELIMINAR PRODUCTO (MODERNO) ---
     async function eliminarProducto(id) {
-        // 1. Usamos nuestro modal personalizado (esperamos la respuesta)
+        // 1. Usamos nuestra confirmación personalizada (esperamos la respuesta)
         const confirmado = await showConfirm(
             "Si eliminas este producto, se perderá su historial en el Kardex de esta sede.", 
             "¿Eliminar Producto?"
@@ -1053,7 +1182,6 @@ window.editarProducto = async function(id) {
             });
             
             if(response.ok) { 
-                // 2. Notificación Elegante
                 showToast("Producto eliminado correctamente", "success");
                 await initInventario(); // Recargar tabla
             } else {
@@ -1187,6 +1315,109 @@ function renderizarTablaCombo() {
             inputCosto.style.backgroundColor = "#e0e7ff"; 
             setTimeout(() => inputCosto.style.backgroundColor = "#f1f5f9", 300); // Volver al gris de readOnly
         }
+    }
+
+    // --- UTILIDAD: TOAST PERSONALIZADO (Reemplazo de Alert) ---
+    function showToast(mensaje, tipo = 'success') {
+        // Buscar si ya existe el contenedor, si no, crearlo
+        let container = document.getElementById('toast-container-custom');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container-custom';
+            container.style.cssText = `
+                position: fixed; top: 20px; right: 20px; z-index: 9999;
+                display: flex; flex-direction: column; gap: 10px;
+            `;
+            document.body.appendChild(container);
+        }
+
+        // Crear el elemento del toast
+        const toast = document.createElement('div');
+        
+        // Colores según tipo
+        const colores = {
+            success: { bg: '#10B981', icon: 'bx-check-circle' }, // Verde
+            error:   { bg: '#EF4444', icon: 'bx-x-circle' },     // Rojo
+            warning: { bg: '#F59E0B', icon: 'bx-error' }         // Naranja
+        };
+        const estilo = colores[tipo] || colores.success;
+
+        toast.style.cssText = `
+            background: white; border-left: 5px solid ${estilo.bg};
+            color: #333; padding: 15px 20px; border-radius: 4px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.15); display: flex; align-items: center; gap: 12px;
+            font-family: 'Segoe UI', sans-serif; font-size: 14px; min-width: 300px;
+            opacity: 0; transform: translateX(50px); transition: all 0.3s ease;
+        `;
+
+        toast.innerHTML = `
+            <i class='bx ${estilo.icon}' style="font-size: 20px; color: ${estilo.bg};"></i>
+            <span style="flex:1; font-weight:500;">${mensaje}</span>
+        `;
+
+        container.appendChild(toast);
+
+        // Animación de entrada
+        requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateX(0)';
+        });
+
+        // Auto eliminar
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(50px)';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    // --- UTILIDAD: CONFIRMACIÓN PERSONALIZADA (Promesa) ---
+    function showConfirm(mensaje, titulo = "¿Estás seguro?") {
+        return new Promise((resolve) => {
+            // Crear overlay
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0,0,0,0.5); z-index: 10000;
+                display: flex; justify-content: center; align-items: center;
+            `;
+
+            // Crear tarjeta
+            const card = document.createElement('div');
+            card.style.cssText = `
+                background: white; padding: 25px; border-radius: 12px;
+                width: 320px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+                text-align: center; font-family: 'Segoe UI', sans-serif;
+                transform: scale(0.9); transition: transform 0.2s;
+            `;
+            // Animación simple
+            setTimeout(() => card.style.transform = 'scale(1)', 10);
+
+            card.innerHTML = `
+                <div style="font-size: 40px; color: #F59E0B; margin-bottom: 10px;">
+                    <i class='bx bx-error-circle'></i>
+                </div>
+                <h3 style="margin: 0 0 10px; color: #333;">${titulo}</h3>
+                <p style="margin: 0 0 20px; color: #666; font-size: 14px;">${mensaje}</p>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button id="btn-cancel-confirm" style="padding: 8px 16px; border: 1px solid #ccc; background: white; border-radius: 6px; cursor: pointer; color: #555;">Cancelar</button>
+                    <button id="btn-ok-confirm" style="padding: 8px 16px; border: none; background: #EF4444; color: white; border-radius: 6px; cursor: pointer; font-weight: bold;">Sí, Eliminar</button>
+                </div>
+            `;
+
+            overlay.appendChild(card);
+            document.body.appendChild(overlay);
+
+            // Eventos
+            document.getElementById('btn-cancel-confirm').onclick = () => {
+                document.body.removeChild(overlay);
+                resolve(false);
+            };
+            document.getElementById('btn-ok-confirm').onclick = () => {
+                document.body.removeChild(overlay);
+                resolve(true);
+            };
+        });
     }
 
     // INICIO

@@ -39,22 +39,30 @@ exports.obtenerProductos = async (req, res) => {
     }
 };
 
-// 2. CREAR PRODUCTO (CORREGIDO: NO RESTA STOCK DE INGREDIENTES AL CREAR COMBO)
+// 2. CREAR PRODUCTO (VERSION BLINDADA: RESISTENTE A FALLOS Y ALTA CONCURRENCIA)
 exports.crearProducto = async (req, res) => {
     let { nombre, codigo, categoria, tipo, precio, costo, stock, stock_minimo, unidad, imagen, comboDetalles } = req.body;
+    
+    // Validaciones iniciales (Fail-fast para no desperdiciar recursos de DB)
+    if (!nombre || !codigo || !precio) {
+        return res.status(400).json({ msg: 'Nombre, código y precio son obligatorios.' });
+    }
+
     const client = await pool.connect(); 
 
     try {
         await client.query('BEGIN');
+        
+        // Obtenemos datos del usuario inyectados por el middleware de auth
         const sedeId = req.usuario.sede_id;
         const usuarioId = req.usuario.id;
 
-        // Limpieza de tipo
+        // --- MANTENEMOS TU LÓGICA DE LIMPIEZA DE TIPO ---
         let tipoLimpio = (tipo || 'fisico').toLowerCase().trim();
         if (tipoLimpio === 'físico') tipoLimpio = 'fisico';
         if (tipoLimpio.includes('producto')) tipoLimpio = 'fisico';
 
-        // Línea de Negocio
+        // --- MANTENEMOS TU LÓGICA DE LÍNEA DE NEGOCIO ---
         let lineaNegocio = 'CAFETERIA'; 
         const catUpper = categoria ? categoria.toUpperCase() : '';
         if (catUpper === 'TAQUILLA') lineaNegocio = 'TAQUILLA';
@@ -76,15 +84,18 @@ exports.crearProducto = async (req, res) => {
         const stockInicial = parseInt(stock) || 0;
         const minStock = parseInt(stock_minimo) || 5;
 
-        // B. Insertar Stock Inicial (Ahora crea LOTE también)
+        // B. Insertar Stock Inicial y LOTE (Solo si no es servicio)
         if (tipoLimpio !== 'servicio') {
-            // 1. Insertar en tabla resumen
+            
+            // 1. Insertar en tabla resumen de la sede
             await client.query(
-                `INSERT INTO inventario_sedes (sede_id, producto_id, cantidad, stock_minimo_local) VALUES ($1, $2, $3, $4)`,
+                `INSERT INTO inventario_sedes (sede_id, producto_id, cantidad, stock_minimo_local) 
+                 VALUES ($1, $2, $3, $4)`,
                 [sedeId, nuevoId, stockInicial, minStock]
             );
 
-            // 2. 🔥 CREAR EL PRIMER LOTE (CRUCIAL PARA PEPS)
+            // 2. 🔥 CREAR EL PRIMER LOTE (INDISPENSABLE PARA TU SISTEMA PEPS)
+            // Si el stock es 0, igual creamos registro en inventario_sedes pero no lote activo.
             if (stockInicial > 0) {
                 await client.query(
                     `INSERT INTO inventario_lotes (sede_id, producto_id, cantidad_inicial, cantidad_actual, costo_unitario, estado) 
@@ -92,7 +103,7 @@ exports.crearProducto = async (req, res) => {
                     [sedeId, nuevoId, stockInicial, costo]
                 );
 
-                // Registro en Kardex
+                // Registro en Kardex para auditoría
                 await client.query(
                     `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
                      VALUES ($1, $2, $3, 'entrada', $4, $5, 'Stock Inicial', $6)`,
@@ -101,33 +112,40 @@ exports.crearProducto = async (req, res) => {
             }
         }
 
-        // C. LÓGICA DE COMBOS (SOLO GUARDAR RECETA)
-        if (tipoLimpio === 'combo' && comboDetalles && comboDetalles.length > 0) {
-            
-            // 1. Guardar la receta (Relación Padre-Hijo)
+        // C. LÓGICA DE COMBOS (RECETA)
+        // Mantenemos tu corrección: Solo guardamos la receta, no restamos stock aquí.
+        if (tipoLimpio === 'combo' && comboDetalles && Array.isArray(comboDetalles) && comboDetalles.length > 0) {
             for (const item of comboDetalles) {
                 await client.query(
-                    `INSERT INTO productos_combo (producto_padre_id, producto_hijo_id, cantidad) VALUES ($1, $2, $3)`,
+                    `INSERT INTO productos_combo (producto_padre_id, producto_hijo_id, cantidad) 
+                     VALUES ($1, $2, $3)`,
                     [nuevoId, item.id_producto, item.cantidad]
                 );
-
-                // 🔥 CORRECCIÓN: ELIMINADO EL BLOQUE QUE RESTABA STOCK FÍSICO.
-                // Ahora solo se guarda la definición (receta) para usarla al vender.
             }
         }
 
+        // D. AUDITORÍA GLOBAL
+        await client.query(
+            `INSERT INTO auditoria (usuario_id, accion, modulo, registro_id, detalle) 
+             VALUES ($1, 'CREAR', 'INVENTARIO', $2, $3)`,
+            [usuarioId, nuevoId, `Producto creado: ${nombre} (${codigo}) con stock inicial ${stockInicial}`]
+        );
+
         await client.query('COMMIT');
-        res.json({ msg: 'Producto creado exitosamente' });
+        res.json({ success: true, msg: 'Producto creado exitosamente', id: nuevoId });
 
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error(err.message);
+        console.error("Error en crearProducto:", err.message);
+        
+        // Manejo de error de duplicado (Unique Constraint)
         if (err.code === '23505') { 
-            return res.status(400).json({ msg: 'El Código (SKU) ya existe. Usa otro.' });
+            return res.status(400).json({ msg: 'El Código (SKU) ya existe. Por favor usa uno diferente.' });
         }
-        res.status(500).send('Error al guardar producto');
+        
+        res.status(500).json({ msg: 'Error interno al guardar el producto: ' + err.message });
     } finally {
-        client.release();
+        client.release(); // 🛡️ Siempre liberamos la conexión al pool
     }
 };
 
@@ -279,12 +297,13 @@ exports.eliminarProducto = async (req, res) => {
     }
 };
 
-// 4. ACTUALIZAR PRODUCTO (CON CASCADA DE COSTOS PARA COMBOS)
+// 4. ACTUALIZAR PRODUCTO (CORREGIDO: AHORA GUARDA EL SKU/CÓDIGO)
 exports.actualizarProducto = async (req, res) => {
     const { id } = req.params;
-    let { nombre, precio, categoria, costo, stock, stock_minimo, tipo, comboDetalles } = req.body;
+    // Agregamos 'codigo' a la desestructuración
+    let { nombre, codigo, precio, categoria, costo, stock, stock_minimo, tipo, comboDetalles } = req.body;
     
-    console.log(`🔄 Actualizando ID: ${id}`);
+    console.log(`🔄 Actualizando ID: ${id} - Nuevo Código: ${codigo}`);
     
     const sedeId = req.usuario.sede_id;
     const usuarioId = req.usuario.id;
@@ -296,15 +315,15 @@ exports.actualizarProducto = async (req, res) => {
         let tipoLimpio = (tipo || 'fisico').toLowerCase().trim();
         if (tipoLimpio === 'físico') tipoLimpio = 'fisico';
 
-        // 1. Actualizar Datos Globales
+        // 1. Actualizar Datos Globales (CORREGIDO: Se agregó codigo_interno)
         await client.query(
             `UPDATE productos 
-             SET nombre=$1, precio_venta=$2, categoria=$3, costo_compra=$4, tipo_item=$5 
-             WHERE id=$6`,
-            [nombre, precio, categoria, costo, tipoLimpio, id]
+             SET nombre=$1, codigo_interno=$2, precio_venta=$3, categoria=$4, costo_compra=$5, tipo_item=$6 
+             WHERE id=$7`,
+            [nombre, codigo, precio, categoria, costo, tipoLimpio, id]
         );
 
-        // 2. Lógica de Stock (Sin cambios en tu lógica original)
+        // 2. Lógica de Stock (Sin cambios)
         const stockActualRes = await client.query(
             `SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2`,
             [id, sedeId]
@@ -355,7 +374,6 @@ exports.actualizarProducto = async (req, res) => {
         }
 
         // --- 🔥 LÓGICA DE CASCADA: SI CAMBIÓ COSTO, ACTUALIZAR COMBOS PADRES 🔥 ---
-        // (Esto pasa si el producto editado es ingrediente de otros)
         if (tipoLimpio === 'fisico') {
              const combosPadres = await client.query(
                 `SELECT DISTINCT producto_padre_id FROM productos_combo WHERE producto_hijo_id = $1`, 
@@ -383,13 +401,19 @@ exports.actualizarProducto = async (req, res) => {
     } catch (err) {
         await client.query('ROLLBACK');
         console.error("❌ Error en Backend:", err.message);
+        
+        // Manejo específico para código duplicado al editar
+        if (err.code === '23505') { 
+            return res.status(400).json({ msg: 'El Código (SKU) ya existe. Usa otro.' });
+        }
+        
         res.status(500).send('Error al actualizar');
     } finally {
         client.release();
     }
 };
 
-// 5. AGREGAR STOCK (VERSIÓN PEPS / FIFO - CREA LOTES SIN PROMEDIAR)
+// 5. AGREGAR/AJUSTAR STOCK (VERSIÓN PEPS / FIFO BLINDADA)
 exports.ajustarStock = async (req, res) => {
     const { id } = req.params;
     const { cantidad, costo, motivo, tipoAjuste } = req.body;
@@ -399,32 +423,42 @@ exports.ajustarStock = async (req, res) => {
     const cantidadReal = parseInt(cantidad);
     const costoUnitarioIngreso = parseFloat(costo) || 0;
 
-    if (cantidadReal <= 0) return res.status(400).json({ msg: "Cantidad inválida" });
+    // Validación fail-fast
+    if (!cantidadReal || cantidadReal <= 0) {
+        return res.status(400).json({ msg: "La cantidad debe ser un número mayor a cero." });
+    }
 
     const client = await pool.connect();
 
     try {
         await client.query('BEGIN');
 
-        // 1. Obtener datos actuales (Solo para validación y stock total visual)
-        const stockLocalData = await client.query('SELECT cantidad FROM inventario_sedes WHERE producto_id=$1 AND sede_id=$2', [id, sedeId]);
+        /**
+         * 🛡️ PROTECCIÓN DE CONCURRENCIA:
+         * Usamos FOR UPDATE para bloquear las filas de stock de este producto en esta sede.
+         * Esto evita que si hay dos ajustes o una venta al mismo tiempo, los cálculos de 
+         * stock_resultante y saldos de lotes se crucen.
+         */
+        const stockLocalData = await client.query(
+            'SELECT cantidad FROM inventario_sedes WHERE producto_id=$1 AND sede_id=$2 FOR UPDATE', 
+            [id, sedeId]
+        );
         const stockFisicoActual = stockLocalData.rows.length > 0 ? parseInt(stockLocalData.rows[0].cantidad) : 0;
         
         let nuevoStock = stockFisicoActual;
         let costoParaKardex = 0;
 
         if (tipoAjuste === 'entrada') {
-            // --- ENTRADA: CREAMOS UN NUEVO LOTE (No promediamos) ---
+            // --- ENTRADA: CREAMOS UN NUEVO LOTE ---
             
-            // A. Insertar en tabla de Lotes (Tu nueva tabla)
-            // Se guarda con SU propio precio y fecha actual
+            // A. Insertar en tabla de Lotes (Mantenemos tu lógica de lote individual)
             await client.query(
                 `INSERT INTO inventario_lotes (sede_id, producto_id, cantidad_inicial, cantidad_actual, costo_unitario, estado) 
                  VALUES ($1, $2, $3, $3, $4, 'ACTIVO')`,
                 [sedeId, id, cantidadReal, costoUnitarioIngreso]
             );
 
-            // B. Actualizar Stock Total (Tabla resumen para visualización rápida)
+            // B. Actualizar Stock Total (Tabla resumen)
             await client.query(
                 `INSERT INTO inventario_sedes (sede_id, producto_id, cantidad, stock_minimo_local) 
                  VALUES ($1, $2, $3, 5)
@@ -433,25 +467,25 @@ exports.ajustarStock = async (req, res) => {
                 [sedeId, id, cantidadReal]
             );
             
-            // C. Actualizar "Precio de Referencia" en producto (Opcional, solo para saber el último costo de compra)
-            // Esto NO afecta el kardex de salida, solo es informativo para futuras compras.
+            // C. Actualizar "Precio de Referencia" en producto maestro
             if(costoUnitarioIngreso > 0) {
                 await client.query('UPDATE productos SET costo_compra = $1 WHERE id = $2', [costoUnitarioIngreso, id]);
             }
 
             nuevoStock = stockFisicoActual + cantidadReal;
-            costoParaKardex = costoUnitarioIngreso; // En entrada, el costo es el que ingresaste
+            costoParaKardex = costoUnitarioIngreso;
 
         } else {
-            // --- SALIDA (MERMA/AJUSTE MANUAL) ---
-            // Aquí debemos descontar de los lotes más viejos (Lógica inversa a la venta)
+            // --- SALIDA (MERMA/AJUSTE MANUAL/SALIDA) ---
             
-            if (stockFisicoActual < cantidadReal) throw new Error(`Stock insuficiente. Tienes ${stockFisicoActual}.`);
+            if (stockFisicoActual < cantidadReal) {
+                throw new Error(`Stock insuficiente para realizar el ajuste. Disponible: ${stockFisicoActual}.`);
+            }
             
             let cantidadRestante = cantidadReal;
             let costoTotalSalida = 0;
 
-            // Buscar lotes activos ordenados por fecha (El más viejo primero)
+            // Buscar lotes activos (FIFO: El más viejo primero) con bloqueo preventivo
             const lotesRes = await client.query(
                 `SELECT id, cantidad_actual, costo_unitario FROM inventario_lotes 
                  WHERE producto_id = $1 AND sede_id = $2 AND cantidad_actual > 0 
@@ -459,36 +493,41 @@ exports.ajustarStock = async (req, res) => {
                 [id, sedeId]
             );
 
+            if (lotesRes.rows.length === 0) {
+                throw new Error("No se encontraron lotes disponibles para realizar la salida (PEPS).");
+            }
+
             for (const lote of lotesRes.rows) {
                 if (cantidadRestante <= 0) break;
 
                 const aDescontar = Math.min(cantidadRestante, lote.cantidad_actual);
+                const costoLote = parseFloat(lote.costo_unitario);
                 
-                // Actualizar Lote
+                // Actualizar Lote en BD
                 await client.query(
-                    `UPDATE inventario_lotes SET cantidad_actual = cantidad_actual - $1, 
-                     estado = CASE WHEN cantidad_actual - $1 = 0 THEN 'AGOTADO' ELSE estado END
+                    `UPDATE inventario_lotes 
+                     SET cantidad_actual = cantidad_actual - $1, 
+                         estado = CASE WHEN cantidad_actual - $1 = 0 THEN 'AGOTADO' ELSE estado END
                      WHERE id = $2`,
                     [aDescontar, lote.id]
                 );
 
-                costoTotalSalida += (aDescontar * parseFloat(lote.costo_unitario));
+                costoTotalSalida += (aDescontar * costoLote);
                 cantidadRestante -= aDescontar;
             }
 
-            // Actualizar Stock Total
+            // Actualizar Stock Total en la tabla de la sede
             await client.query(
                 `UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3`,
                 [cantidadReal, id, sedeId]
             );
 
             nuevoStock = stockFisicoActual - cantidadReal;
-            // El costo unitario para el Kardex será el promedio REAL de lo que salió (Ponderado de salida)
-            // Ej: Si salieron 2 de 1 sol y 2 de 2 soles = (2+4)/4 = 1.5
+            // Costo promedio ponderado de la salida para el Kardex
             costoParaKardex = cantidadReal > 0 ? (costoTotalSalida / cantidadReal) : 0;
         }
 
-        // 3. REGISTRAR EN KARDEX
+        // 3. REGISTRAR EN KARDEX (MOVIMIENTOS_INVENTARIO)
         const cantidadKardex = tipoAjuste === 'salida' ? -cantidadReal : cantidadReal;
         const tipoMovimientoBD = tipoAjuste === 'salida' ? 'salida_ajuste' : 'entrada_compra';
 
@@ -496,21 +535,38 @@ exports.ajustarStock = async (req, res) => {
             `INSERT INTO movimientos_inventario (
                 sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-            [sedeId, id, usuarioId, tipoMovimientoBD, cantidadKardex, nuevoStock, motivo || (tipoAjuste === 'entrada' ? 'Compra' : 'Merma'), costoParaKardex]
+            [
+                sedeId, 
+                id, 
+                usuarioId, 
+                tipoMovimientoBD, 
+                cantidadKardex, 
+                nuevoStock, 
+                motivo || (tipoAjuste === 'entrada' ? 'Ajuste Entrada' : 'Ajuste Salida'), 
+                costoParaKardex
+            ]
+        );
+
+        // 4. AUDITORÍA GENERAL
+        await client.query(
+            `INSERT INTO auditoria (usuario_id, accion, modulo, registro_id, detalle) 
+             VALUES ($1, 'AJUSTE_STOCK', 'INVENTARIO', $2, $3)`,
+            [usuarioId, id, `Ajuste ${tipoAjuste}: ${cantidadReal} unidades. Nuevo stock total: ${nuevoStock}`]
         );
 
         await client.query('COMMIT');
         
         res.json({ 
-            msg: 'Ajuste realizado correctamente (PEPS).',
+            success: true,
+            msg: 'Ajuste de inventario realizado correctamente (Algoritmo PEPS).',
             nuevo_stock: nuevoStock
         });
 
     } catch (err) {
-        await client.query('ROLLBACK');
-        console.error(err.message);
+        if (client) await client.query('ROLLBACK');
+        console.error("❌ Error en ajustarStock:", err.message);
         res.status(500).json({ msg: err.message });
     } finally {
-        client.release();
+        if (client) client.release(); // 🛡️ Importante para evitar colapso de conexiones
     }
 };

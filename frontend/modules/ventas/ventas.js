@@ -203,34 +203,52 @@
             container.appendChild(card);
         });
     }
-
-    // --- CARRITO ---
+        // --- CARRITO (VERSION OPTIMIZADA CON VALIDACION PREVENTIVA) ---
     function agregarAlCarrito(producto) {
-        const item = carrito.find(i => i.id === producto.id);
-        const cantidadActual = item ? item.cantidad : 0;
+        const itemEnCarrito = carrito.find(i => i.id === producto.id);
+        const cantidadFutura = (itemEnCarrito ? itemEnCarrito.cantidad : 0) + 1;
 
-        if (producto.tipo === 'fisico' && (cantidadActual + 1) > producto.stock) {
-            return alert(`⚠️ Stock insuficiente. Solo quedan ${producto.stock}.`);
+        if (producto.tipo === 'fisico') {
+            if (producto.stock <= 0) {
+                return window.showMiniNotif(`⚠️ El producto ${producto.nombre} está agotado.`, 'error');
+            }
+            if (cantidadFutura > producto.stock) {
+                return window.showMiniNotif(`⚠️ Solo quedan ${producto.stock} unidades.`, 'error');
+            }
         }
 
-        if(item) {
-            item.cantidad++;
+        if(itemEnCarrito) {
+            itemEnCarrito.cantidad++;
         } else {
             carrito.push({ ...producto, cantidad: 1 });
         }
+        
+        // Feedback positivo al añadir
+        window.showMiniNotif(`+1 ${producto.nombre}`);
         renderCarrito();
     }
 
     window.cambiarCantidad = function(id, delta) {
         const item = carrito.find(i => i.id === id);
         if(item) {
+            // 🛡️ VALIDACIÓN DE STOCK CON NOTIFICACIÓN PREMIUM
             if (delta > 0 && item.tipo === 'fisico' && (item.cantidad + 1) > item.stock) {
-                return alert("⚠️ No hay más stock disponible.");
+                // Reemplazamos el alert por la mini notificación roja
+                return window.showMiniNotif(`⚠️ Stock máximo alcanzado para ${item.nombre}`, 'error');
             }
+
             item.cantidad += delta;
+
+            // Si la cantidad llega a cero, eliminamos el item del carrito
             if(item.cantidad <= 0) {
                 carrito = carrito.filter(i => i.id !== id);
+                window.showMiniNotif(`Eliminado: ${item.nombre}`, 'warning');
+            } else {
+                // Feedback sutil si se incrementa o disminuye
+                const accion = delta > 0 ? 'Añadido' : 'Quitado';
+                console.log(`${accion} 1 unidad de ${item.nombre}`);
             }
+
             renderCarrito();
         }
     }
@@ -288,25 +306,35 @@
 
     // --- MODAL Y COBRO ---
     window.abrirModalCobro = function() {
-        console.log("Intentando abrir modal de cobro..."); // Para depuración
+        console.log("Intentando abrir modal de cobro..."); 
 
-        if(carrito.length === 0) return alert("⚠️ Carrito vacío.");
+        // 🛡️ REEMPLAZO DE ALERT POR NOTIFICACIÓN PREMIUM
+        if(carrito.length === 0) {
+            return window.showMiniNotif("⚠️ El carrito está vacío. Añade productos para cobrar.", "error");
+        }
         
         // 1. Resetear datos visuales del modal
-        document.getElementById('modal-convenio').value = "0"; 
+        const convenioSelect = document.getElementById('modal-convenio');
+        if(convenioSelect) convenioSelect.value = "0"; 
         
         // Boleta por defecto
         const radioBoleta = document.querySelector('input[name="tipo_comprobante"][value="Boleta"]');
-        if(radioBoleta) radioBoleta.checked = true;
-        toggleCamposFactura(); 
+        if(radioBoleta) {
+            radioBoleta.checked = true;
+            // Llamamos a la función global para ocultar campos de Factura (RUC/Dirección)
+            if(typeof window.toggleCamposFactura === 'function') window.toggleCamposFactura(); 
+        }
 
         // Efectivo por defecto
         const radioEfectivo = document.querySelector('input[name="pago"][value="Efectivo"]');
-        if(radioEfectivo) radioEfectivo.checked = true;
-        toggleOpcionesTarjeta();
+        if(radioEfectivo) {
+            radioEfectivo.checked = true;
+            // Llamamos a la función global para ocultar opciones de tarjeta
+            if(typeof window.toggleOpcionesTarjeta === 'function') window.toggleOpcionesTarjeta();
+        }
 
-        // 2. 🔥 CORRECCIÓN CRÍTICA PARA MÓVIL:
-        // Si estamos en móvil, OCULTAMOS el panel del carrito para ver el modal
+        // 2. 🔥 MANTENEMOS TU CORRECCIÓN CRÍTICA PARA MÓVIL:
+        // Ocultamos el panel lateral del ticket para que el modal de cobro tenga prioridad visual
         const ticketPanel = document.querySelector('.pos-ticket');
         if(ticketPanel && ticketPanel.classList.contains('active')) {
             ticketPanel.classList.remove('active');
@@ -316,9 +344,11 @@
         const modal = document.getElementById('modal-cobro');
         if(modal) {
             modal.classList.add('active');
+            // Aseguramos que los totales (Subtotal, IGV, Total) se calculen antes de mostrar
             actualizarTotales(totalVentaOriginal); 
         } else {
-            console.error("No se encontró el #modal-cobro en el HTML");
+            console.error("Error Grave: No se encontró el contenedor #modal-cobro en el DOM.");
+            window.showMiniNotif("❌ Error al cargar el panel de cobro.", "error");
         }
     }
 
@@ -354,114 +384,112 @@
             display.style.color = "#6366f1"; 
         }
     }
+
+    // --- PROCESAR VENTA ---
+window.procesarVenta = async function() {
+    if (carrito.length === 0) {
+        return mostrarModalResultado("⚠️ Carrito vacío", "Por favor, añade productos antes de procesar.", "warning");
+    }
+
+    const btn = document.querySelector('.btn-primary.full-width');
+    const originalText = btn.innerText;
     
-// --- 🔥 FUNCIÓN PRINCIPAL: PROCESAR VENTA (CON IMPRESIÓN) ---
-    window.procesarVenta = async function() {
-        if (carrito.length === 0) return alert("⚠️ Carrito vacío.");
+    // 1. Recopilar datos básicos y de comprobante
+    const vendedorId = document.getElementById('modal-vendedor').value;
+    const tipoVenta = document.getElementById('modal-tipo-venta').value;
+    const selectorConvenio = document.getElementById('modal-convenio');
+    const descuentoFactor = parseFloat(selectorConvenio.value) || 0;
+    const nombreConvenio = selectorConvenio.options[selectorConvenio.selectedIndex].text;
+    
+    const metodoPago = document.querySelector('input[name="pago"]:checked').value;
+    let tipoTarjeta = (metodoPago === 'Tarjeta') ? document.querySelector('input[name="tipo_tarjeta"]:checked').value : null;
 
-        const btn = document.querySelector('.btn-primary.full-width');
-        const originalText = btn.innerText;
-        btn.disabled = true;
-        btn.innerText = "Procesando...";
-
-        try {
-            // 1. Recopilar datos básicos
-            const vendedorId = document.getElementById('modal-vendedor').value;
-            const tipoVenta = document.getElementById('modal-tipo-venta').value;
-            const selectorConvenio = document.getElementById('modal-convenio');
-            const descuentoFactor = parseFloat(selectorConvenio.value) || 0;
-            const nombreConvenio = selectorConvenio.options[selectorConvenio.selectedIndex].text;
-            
-            // 2. Recopilar Método de Pago
-            const metodoPago = document.querySelector('input[name="pago"]:checked').value;
-            let tipoTarjeta = null;
-            if (metodoPago === 'Tarjeta') {
-                tipoTarjeta = document.querySelector('input[name="tipo_tarjeta"]:checked').value; 
-            }
-
-            // 3. Recopilar Datos de Comprobante
-            const tipoComprobante = document.querySelector('input[name="tipo_comprobante"]:checked').value;
-            let docCliente = null;
-            let razonSocial = null;
-            let direccion = null;
-            
-            if (tipoComprobante === 'Factura') {
-                docCliente = document.getElementById('cliente-ruc').value;
-                if(!docCliente) {
-                    alert("⚠️ Para FACTURA el RUC es obligatorio.");
-                    btn.disabled = false; btn.innerText = originalText;
-                    return;
-                }
-                razonSocial = document.getElementById('cliente-razon').value;
-                direccion = document.getElementById('cliente-direccion').value;
-            } else {
-                docCliente = document.getElementById('cliente-dni').value;
-            }
-
-            // 4. Preparar Payload
-            const payload = {
-                carrito: carrito.map(i => ({ id: i.id, cantidad: i.cantidad })),
-                vendedor_id: vendedorId,
-                tipo_venta: tipoVenta,
-                metodoPago: metodoPago,
-                
-                tipo_comprobante: tipoComprobante,
-                clienteDni: docCliente, 
-                cliente_razon_social: razonSocial,
-                cliente_direccion: direccion,
-                tipo_tarjeta: tipoTarjeta,
-
-                observaciones: (descuentoFactor > 0) ? `Convenio: ${nombreConvenio}` : "",
-                descuento_factor: descuentoFactor
-            };
-
-            const token = localStorage.getItem('token');
-            const res = await fetch('/api/ventas', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'x-auth-token': token
-                },
-                body: JSON.stringify(payload)
-            });
-
-            const data = await res.json();
-
-            if (res.ok) {
-                // ✅ VENTA EXITOSA
-                let mensaje = `✅ ¡Venta Exitosa!\nTicket: ${data.ticketCodigo || 'OK'}`;
-                
-                // 🔥 SI HAY PDF (Nubefact respondió rápido), ABRIRLO
-                // Intentamos abrir el PDF en una pestaña nueva automáticamente
-                // Esperamos un segundo para que el backend asíncrono termine (si fue muy rápido)
-                // O mejor, le decimos al usuario que vaya al historial si no sale aquí.
-                
-                // NOTA: Como la facturación es ASÍNCRONA en el backend, es probable que 'data.pdf'
-                // no llegue en esta respuesta inmediata. El usuario tendrá que ir al Historial a imprimir.
-                // Sin embargo, si llegara a responder rápido, lo mostramos.
-                
-                alert(mensaje);
-
-                carrito = [];
-                renderCarrito();
-                cerrarModalCobro();
-                
-                const ticketPanel = document.querySelector('.pos-ticket');
-                if(ticketPanel) ticketPanel.classList.remove('active');
-                
-                initPOS(); 
-            } else {
-                alert(`❌ Error: ${data.msg}`);
-            }
-
-        } catch (error) {
-            console.error(error);
-            alert("❌ Error de conexión.");
-        } finally {
-            btn.disabled = false;
-            btn.innerText = originalText;
+    const tipoComprobante = document.querySelector('input[name="tipo_comprobante"]:checked').value;
+    let docCliente = "";
+    let razonSocial = null;
+    let direccion = null;
+    
+    if (tipoComprobante === 'Factura') {
+        docCliente = document.getElementById('cliente-ruc').value.trim();
+        // 🛡️ VALIDACIÓN RETAIL
+        if(!docCliente || docCliente.length !== 11) {
+            return mostrarModalResultado("RUC Inválido", "El RUC debe tener 11 dígitos exactos.", "error");
+        }
+        razonSocial = document.getElementById('cliente-razon').value.trim();
+        direccion = document.getElementById('cliente-direccion').value.trim();
+        if(!razonSocial) {
+            return mostrarModalResultado("Faltan Datos", "La Razón Social es obligatoria para Facturas.", "error");
+        }
+    } else {
+        docCliente = document.getElementById('cliente-dni').value.trim();
+        // 🛡️ VALIDACIÓN RETAIL
+        if(docCliente && docCliente !== 'PUBLICO' && docCliente.length !== 8) {
+            return mostrarModalResultado("DNI Inválido", "El DNI debe tener 8 dígitos.", "error");
         }
     }
+
+    // Bloqueo de botón tras validaciones
+    btn.disabled = true;
+    btn.innerText = "Procesando...";
+
+    try {
+        // 2. Preparar Payload
+        const payload = {
+            carrito: carrito.map(i => ({ id: i.id, cantidad: i.cantidad })),
+            vendedor_id: vendedorId,
+            tipo_venta: tipoVenta,
+            metodoPago: metodoPago,
+            tipo_comprobante: tipoComprobante,
+            clienteDni: docCliente || 'PUBLICO', 
+            cliente_razon_social: razonSocial,
+            cliente_direccion: direccion,
+            tipo_tarjeta: tipoTarjeta,
+            observaciones: (descuentoFactor > 0) ? `Convenio: ${nombreConvenio}` : "",
+            descuento_factor: descuentoFactor
+        };
+
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/ventas', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-auth-token': token
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            // ✅ VENTA EXITOSA
+            const tituloExito = `✅ Venta: ${data.ticketCodigo || 'Exitosa'}`;
+            const cuerpoExito = `La venta se registró correctamente. El comprobante electrónico se está procesando y aparecerá en el Historial en unos segundos.`;
+            
+            mostrarModalResultado(tituloExito, cuerpoExito, "success");
+
+            // Limpieza total
+            carrito = [];
+            renderCarrito();
+            cerrarModalCobro();
+            
+            const ticketPanel = document.querySelector('.pos-ticket');
+            if(ticketPanel) ticketPanel.classList.remove('active');
+            
+            initPOS(); 
+        } else {
+            mostrarModalResultado("❌ Error en Venta", data.msg, "error");
+        }
+
+    } catch (error) {
+        console.error("Error en el flujo de venta:", error);
+        mostrarModalResultado("❌ Error de Conexión", "No se pudo conectar con el servidor. Revisa tu internet.", "error");
+    } finally {
+        btn.disabled = false;
+        btn.innerText = originalText;
+    }
+}
+
+
     // --- JS: AGREGAR SI FALTA ---
 window.toggleCarritoMovil = function() {
     // Busca por clase .pos-ticket (es más seguro que por ID si cambiaste el HTML)
@@ -489,6 +517,38 @@ window.toggleCarritoMovil = function() {
         if(termino) filtrados = filtrados.filter(p => p.nombre.toLowerCase().includes(termino));
         renderProductos(filtrados);
     }
+
+    window.mostrarModalResultado = function(titulo, mensaje, tipo) {
+        // 1. Buscar si ya existe el modal, si no, crearlo
+        let modalResult = document.getElementById('modal-resultado-pos');
+        if (!modalResult) {
+            const div = document.createElement('div');
+            div.id = 'modal-resultado-pos';
+            div.className = 'modal-custom';
+            div.innerHTML = `
+                <div class="modal-content-custom">
+                    <div id="modal-icon-container"></div>
+                    <h2 id="modal-res-titulo"></h2>
+                    <p id="modal-res-mensaje"></p>
+                    <button class="btn-confirmar" onclick="this.closest('.modal-custom').classList.remove('active')">Entendido</button>
+                </div>
+            `;
+            document.body.appendChild(div);
+            modalResult = div;
+        }
+
+        // 2. Personalizar según el tipo (success, error, warning)
+        const iconContainer = document.getElementById('modal-icon-container');
+        const color = tipo === 'success' ? '#22c55e' : (tipo === 'error' ? '#ef4444' : '#f59e0b');
+        const icono = tipo === 'success' ? 'bx-check-circle' : (tipo === 'error' ? 'bx-x-circle' : 'bx-error');
+        
+        iconContainer.innerHTML = `<i class='bx ${icono}' style='color: ${color}; font-size: 80px;'></i>`;
+        document.getElementById('modal-res-titulo').innerText = titulo;
+        document.getElementById('modal-res-mensaje').innerText = mensaje;
+
+        // 3. Mostrar modal
+        modalResult.classList.add('active');
+    };
 
     initPOS();
 })();

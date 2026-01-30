@@ -1,11 +1,10 @@
 // Ubicación: SuperNova/backend/controllers/ventasController.js
 const pool = require('../db');
 const facturacionController = require('./facturacionController'); // 🔥 IMPORTANTE
-// REEMPLAZAR LA FUNCIÓN registrarVenta EXISTENTE POR ESTA:
 
-// 1. REGISTRAR VENTA (CON FACTURACIÓN ELECTRÓNICA)
+// 1. REGISTRAR VENTA (CON FACTURACIÓN ELECTRÓNICA Y PROTECCIÓN CONTRA COLAPSOS)
 exports.registrarVenta = async (req, res) => {
-    // 1. DESESTRUCTURACIÓN CON CAMPOS NUBEFACT
+    // 1. DESESTRUCTURACIÓN
     const { 
         clienteDni, metodoPago, carrito, vendedor_id, tipo_venta, 
         observaciones, descuento_factor,
@@ -15,25 +14,31 @@ exports.registrarVenta = async (req, res) => {
     const usuarioId = req.usuario.id;
     const sedeId = req.usuario.sede_id;
 
+    // Validación previa fuera de la transacción para ahorrar recursos
+    if (!carrito || !Array.isArray(carrito) || carrito.length === 0) {
+        return res.status(400).json({ msg: "El carrito de compras está vacío." });
+    }
+
     const client = await pool.connect();
 
     try {
-        if (!carrito || !Array.isArray(carrito) || carrito.length === 0) {
-            throw new Error("El carrito de compras está vacío o tiene un formato incorrecto.");
-        }
-
         const factor = parseFloat(descuento_factor) || 0; 
         if (factor < 0 || factor > 1) throw new Error("El porcentaje de descuento no es válido.");
 
         const vendedorFinal = vendedor_id ? vendedor_id : usuarioId;
 
+        // INICIO DE TRANSACCIÓN ATÓMICA
         await client.query('BEGIN');
 
-        // A. OBTENER PREFIJO SEDE
-        const sedeRes = await client.query('SELECT prefijo_ticket FROM sedes WHERE id = $1', [sedeId]);
+        // A. BLOQUEO PREVENTIVO (Anti-Deadlock): Ordenar IDs de menor a mayor
+        const carritoOrdenado = [...carrito].sort((a, b) => a.id - b.id);
+
+        // B. OBTENER DATOS DE SEDE Y BLOQUEAR (Para evitar el error de MAX FOR UPDATE)
+        // Bloqueamos la fila de la sede para que otros cajeros esperen su turno de número de ticket
+        const sedeRes = await client.query('SELECT prefijo_ticket FROM sedes WHERE id = $1 FOR UPDATE', [sedeId]);
         const prefijo = sedeRes.rows[0]?.prefijo_ticket || 'GEN';
 
-        // B. CALCULAR CORRELATIVO TICKET INTERNO
+        // C. CALCULAR CORRELATIVO TICKET (Ahora es seguro sin FOR UPDATE aquí porque la sede ya está bloqueada)
         const maxTicketRes = await client.query(
             'SELECT COALESCE(MAX(numero_ticket_sede), 0) as max_num FROM ventas WHERE sede_id = $1',
             [sedeId]
@@ -41,17 +46,22 @@ exports.registrarVenta = async (req, res) => {
         const nuevoNumeroTicket = parseInt(maxTicketRes.rows[0].max_num) + 1;
         const codigoTicketVisual = `${prefijo}-${nuevoNumeroTicket.toString().padStart(4, '0')}`;
 
-        // C. PROCESAR TOTALES
+        // D. PROCESAR TOTALES E ITEMS
         let totalCalculado = 0;
         let detalleInsertar = [];
 
-        for (const item of carrito) {
-            const prodRes = await client.query('SELECT id, precio_venta, costo_compra, nombre, linea_negocio FROM productos WHERE id = $1', [item.id]);
+        for (const item of carritoOrdenado) {
+            // FOR SHARE asegura que nadie cambie el precio mientras procesamos, pero permite lecturas
+            const prodRes = await client.query(
+                'SELECT id, precio_venta, costo_compra, nombre, linea_negocio FROM productos WHERE id = $1 FOR SHARE', 
+                [item.id]
+            );
+            
             if (prodRes.rows.length === 0) throw new Error(`Producto ID ${item.id} no encontrado.`);
             const prod = prodRes.rows[0];
 
-            const precioConDescuento = prod.precio_venta * (1 - factor);
-            const subtotal = precioConDescuento * item.cantidad;
+            const precioConDescuento = Number((prod.precio_venta * (1 - factor)).toFixed(2));
+            const subtotal = Number((precioConDescuento * item.cantidad).toFixed(2));
             totalCalculado += subtotal;
 
             detalleInsertar.push({
@@ -64,15 +74,16 @@ exports.registrarVenta = async (req, res) => {
             });
         }
 
+        // Redondeo final de seguridad para evitar céntimos fantasma
         totalCalculado = Math.round(totalCalculado * 100) / 100;
         const subtotalFactura = totalCalculado / 1.18;
         const igvFactura = totalCalculado - subtotalFactura;
-        const lineaPrincipal = detalleInsertar[0].lineaProd || 'GENERAL';
+        const lineaPrincipal = detalleInsertar[0]?.lineaProd || 'GENERAL';
 
         let obsFinal = observaciones || '';
         if (factor > 0) obsFinal = `[Descuento: ${(factor * 100).toFixed(0)}%] ${obsFinal}`;
 
-        // D. INSERTAR VENTA (Guardamos como PENDIENTE)
+        // E. INSERTAR VENTA (Estado Inicial PENDIENTE)
         const ventaRes = await client.query(
             `INSERT INTO ventas
             (sede_id, usuario_id, vendedor_id, doc_cliente_temporal, metodo_pago, total_venta, subtotal, igv, linea_negocio, numero_ticket_sede, tipo_venta, observaciones,
@@ -86,7 +97,7 @@ exports.registrarVenta = async (req, res) => {
         );
         const ventaId = ventaRes.rows[0].id;
 
-        // E. GUARDAR DETALLES Y STOCK
+        // F. GUARDAR DETALLES Y PROCESAR STOCK (PEPS)
         for (const item of detalleInsertar) {
             await client.query(
                 `INSERT INTO detalle_ventas (venta_id, producto_id, nombre_producto_historico, cantidad, precio_unitario, subtotal, costo_historico)
@@ -94,22 +105,20 @@ exports.registrarVenta = async (req, res) => {
                 [ventaId, item.id, item.nombre, item.cantidad, item.precioReal, item.subtotal, item.costoReal]
             );
 
-            // Combos
+            // Gestión de Combos / Recetas
             const esCombo = await client.query('SELECT producto_hijo_id, cantidad FROM productos_combo WHERE producto_padre_id = $1', [item.id]);
+            
             if (esCombo.rows.length > 0) {
                 for (const hijo of esCombo.rows) {
-                    // Ingredientes: Precio venta 0 (porque se vende el combo, no el ingrediente suelto)
-                    await descontarStock(client, hijo.producto_hijo_id, sedeId, item.cantidad * hijo.cantidad, usuarioId, codigoTicketVisual, `Ingrediente: ${item.nombre}`, 0);
+                    await descontarStock(client, hijo.producto_hijo_id, sedeId, item.cantidad * hijo.cantidad, usuarioId, codigoTicketVisual, `Ingrediente de: ${item.nombre}`, 0);
                 }
-                // Combo Principal: Pasamos el precio real
                 await descontarStock(client, item.id, sedeId, item.cantidad, usuarioId, codigoTicketVisual, 'Venta Combo', item.precioReal);
             } else {
-                // Producto Normal: Pasamos el precio real
                 await descontarStock(client, item.id, sedeId, item.cantidad, usuarioId, codigoTicketVisual, 'Venta Directa', item.precioReal);
             }
         }
 
-        // F. CAJA
+        // G. MOVIMIENTO DE CAJA
         if (totalCalculado > 0) {
             await client.query(
                 `INSERT INTO movimientos_caja (sede_id, usuario_id, tipo_movimiento, categoria, descripcion, monto, metodo_pago, venta_id)
@@ -118,15 +127,21 @@ exports.registrarVenta = async (req, res) => {
             );
         }
 
+        // FIN DE TRANSACCIÓN EN DB
         await client.query('COMMIT');
 
-        // 🔥 LLAMADA ASÍNCRONA AL FACTURADOR (NO AWAIT)
-        // Esto dispara el proceso en paralelo sin bloquear la respuesta al usuario.
-        facturacionController.emitirComprobante({ body: { venta_id: ventaId } }, {
-            json: (data) => console.log("✅ Facturación completada (Async):", data),
-            status: (code) => ({ json: (err) => console.error("❌ Error Facturación (Async):", err) })
+        // H. PROCESO DE FACTURACIÓN (ASÍNCRONO REAL)
+        setImmediate(() => {
+            facturacionController.emitirComprobante(
+                { body: { venta_id: ventaId }, usuario: req.usuario }, 
+                { 
+                    json: (d) => console.log(`[ASYNC-FACT] Éxito Venta ${ventaId}`),
+                    status: (c) => ({ json: (e) => console.error(`[ASYNC-FACT] Error Venta ${ventaId}:`, e) })
+                }
+            );
         });
         
+        // RESPUESTA FINAL AL FRONTEND
         res.json({ 
             msg: 'Venta Procesada Correctamente', 
             ventaId, 
@@ -135,11 +150,11 @@ exports.registrarVenta = async (req, res) => {
         });
 
     } catch (err) {
-        await client.query('ROLLBACK');
-        console.error("Error en registrarVenta:", err.message);
+        if (client) await client.query('ROLLBACK');
+        console.error("❌ Error en registrarVenta:", err.message);
         res.status(400).json({ msg: err.message });
     } finally {
-        client.release();
+        if (client) client.release();
     }
 };
 

@@ -162,21 +162,17 @@ exports.eliminarFactura = async (req, res) => {
     }
 };
 
-
-
-// 4. ACTUALIZAR FACTURA (EDITAR)
+// 4. ACTUALIZAR FACTURA (EDITAR) - ACTUALIZADA
 exports.actualizarFactura = async (req, res) => {
     const { id } = req.params;
     const { 
         proveedorId, glosa, sede, tipo, serie, emision, formaPago, vencimiento, 
         moneda, total, neto, tieneDetraccion, porcentajeDet, montoDet, oc,
-        categoria // <--- CLAVE PARA P&L
+        categoria 
     } = req.body;
     
-    // Obtener el ID del usuario del token para Auditoría
     const usuarioId = req.usuario ? req.usuario.id : null; 
 
-    // 🚨 VALIDACIÓN CRÍTICA DE DATOS PARA P&L
     if (!proveedorId || !emision || !total || !categoria) {
         return res.status(400).json({ msg: 'Faltan campos obligatorios: Proveedor, Fecha Emisión, Monto Total y Categoría de Gasto.' });
     }
@@ -184,26 +180,30 @@ exports.actualizarFactura = async (req, res) => {
         return res.status(400).json({ msg: 'El Monto Total debe ser mayor a cero.' });
     }
 
+    const client = await pool.connect(); // 🛡️ Usamos client para transacción
+
     try {
-        // 1. Ejecutar la actualización
-        const result = await pool.query(
+        await client.query('BEGIN');
+
+        // 🚨 SINCRONIZACIÓN CON CAJA: Si el monto cambió y era Contado, actualizamos el movimiento de caja
+        const checkFac = await client.query('SELECT monto_total, forma_pago FROM facturas WHERE id = $1 FOR UPDATE', [id]);
+        
+        if (checkFac.rows.length > 0 && checkFac.rows[0].forma_pago === 'Contado') {
+            if (Number(checkFac.rows[0].monto_total) !== Number(total)) {
+                await client.query(
+                    'UPDATE movimientos_caja SET monto = $1, categoria = $2 WHERE gasto_id = $3',
+                    [total, categoria, id]
+                );
+            }
+        }
+
+        const result = await client.query(
             `UPDATE facturas SET
-                proveedor_id = $1,
-                sede_id = $2,
-                descripcion = $3,
-                tipo_documento = $4,
-                numero_documento = $5, 
-                fecha_emision = $6,
-                fecha_vencimiento = $7,
-                forma_pago = $8,
-                moneda = $9,
-                monto_total = $10,
-                monto_neto_pagar = $11,
-                tiene_detraccion = $12,
-                porcentaje_detraccion = $13,
-                monto_detraccion = $14,
-                orden_compra = $15,
-                categoria_gasto = $16
+                proveedor_id = $1, sede_id = $2, descripcion = $3, tipo_documento = $4,
+                numero_documento = $5, fecha_emision = $6, fecha_vencimiento = $7,
+                forma_pago = $8, moneda = $9, monto_total = $10, monto_neto_pagar = $11,
+                tiene_detraccion = $12, porcentaje_detraccion = $13, monto_detraccion = $14,
+                orden_compra = $15, categoria_gasto = $16
             WHERE id = $17 RETURNING *`,
             [
                 proveedorId, sede, glosa, tipo, serie, emision, vencimiento, formaPago,
@@ -212,23 +212,23 @@ exports.actualizarFactura = async (req, res) => {
             ]
         );
 
-        if (result.rows.length === 0) return res.status(404).json({ msg: 'Factura no encontrada.' });
+        if (result.rows.length === 0) throw new Error('Factura no encontrada.');
         
-        // 2. 🚨 REGISTRO DE AUDITORÍA (Añadido)
-        await pool.query(
+        await client.query(
             `INSERT INTO auditoria (usuario_id, accion, modulo, registro_id, detalle) 
              VALUES ($1, 'ACTUALIZAR', 'FACTURAS', $2, $3)`,
             [usuarioId, id, `Actualizó factura N° ${result.rows[0].numero_documento}. Total: ${moneda} ${total}.`]
         );
-        
+
+        await client.query('COMMIT');
         res.json({ msg: 'Factura actualizada', factura: result.rows[0] });
+
     } catch (err) {
-        console.error("Error:", err.message);
-        // Si hay un error de FK, lo devolvemos
-        if (err.code === '23503') {
-             return res.status(400).json({ msg: 'Error de integridad: El proveedor o sede no existe.' });
-        }
-        res.status(500).send('Error al actualizar');
+        await client.query('ROLLBACK');
+        console.error("Error en actualizarFactura:", err.message);
+        res.status(500).json({ msg: err.message || 'Error al actualizar' });
+    } finally {
+        client.release(); // 🛡️ Liberamos conexión
     }
 };
 
@@ -261,7 +261,7 @@ exports.subirArchivo = async (req, res) => {
 };
 
 
-// 5. PAGAR FACTURA (ACTUALIZAR ESTADO A 'PAGADO' Y REGISTRAR EN CAJA)
+// 5. PAGAR FACTURA - ACTUALIZADA
 exports.pagarFactura = async (req, res) => {
     const { id } = req.params;
     const { fechaPago } = req.body; 
@@ -274,12 +274,12 @@ exports.pagarFactura = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // A. Obtener datos de factura
-        const facRes = await client.query('SELECT * FROM facturas WHERE id = $1', [id]);
+        // A. Obtener datos de factura con BLOQUEO (FOR UPDATE) para evitar doble pago
+        const facRes = await client.query('SELECT * FROM facturas WHERE id = $1 FOR UPDATE', [id]);
         if (facRes.rows.length === 0) throw new Error('Factura no encontrada');
         const fac = facRes.rows[0];
 
-        if (fac.estado_pago === 'pagado') throw new Error('Ya estaba pagada');
+        if (fac.estado_pago === 'pagado') throw new Error('Esta factura ya ha sido pagada previamente.');
 
         // B. Actualizar estado
         await client.query(
@@ -287,7 +287,7 @@ exports.pagarFactura = async (req, res) => {
             [fechaPago, id]
         );
 
-        // C. Registrar EGRESO en CAJA --- 🚨 ESTO ES LO NUEVO
+        // C. Registrar EGRESO en CAJA
         await client.query(
             `INSERT INTO movimientos_caja (
                 sede_id, usuario_id, tipo_movimiento, categoria, 
@@ -300,7 +300,6 @@ exports.pagarFactura = async (req, res) => {
             ]
         );
         
-        // D. Auditoría
         await client.query(
             `INSERT INTO auditoria (usuario_id, accion, modulo, registro_id, detalle) 
              VALUES ($1, 'PAGAR', 'FACTURAS', $2, $3)`,
@@ -315,6 +314,6 @@ exports.pagarFactura = async (req, res) => {
         console.error("Error pago:", err.message);
         res.status(500).json({ msg: err.message || 'Error al procesar pago.' });
     } finally {
-        client.release();
+        client.release(); // 🛡️ Liberamos conexión
     }
 };

@@ -1,4 +1,4 @@
-// Ubicacion: SuperNova/backend/db.js
+// backend/db.js
 const { Pool } = require('pg');
 require('dotenv').config();
 
@@ -8,15 +8,15 @@ const pool = new Pool({
     database: process.env.DB_NAME,
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT,
+    // --- ADICIONES PARA RESISTENCIA ---
+    max: 20, // Máximo de conexiones simultáneas
+    idleTimeoutMillis: 30000, // Cerrar conexiones inactivas tras 30s
+    connectionTimeoutMillis: 2000, // Error si no conecta en 2s
 });
 
-
-pool.connect((err, client, release) => {
-    if (err) {
-        return console.error('❌ Error adquiriendo cliente de base de datos', err.stack);
-    }
-    console.log('✅ Conexión exitosa a PostgreSQL: db_supernova');
-    release();
+// Manejo de errores en el pool para que el servidor no explote
+pool.on('error', (err) => {
+    console.error('⚠️ Error inesperado en el pool de Postgres', err);
 });
 
 module.exports = pool;
