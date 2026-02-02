@@ -411,7 +411,6 @@ window.procesarVenta = async function() {
     
     if (tipoComprobante === 'Factura') {
         docCliente = document.getElementById('cliente-ruc').value.trim();
-        // 🛡️ VALIDACIÓN RETAIL
         if(!docCliente || docCliente.length !== 11) {
             return mostrarModalResultado("RUC Inválido", "El RUC debe tener 11 dígitos exactos.", "error");
         }
@@ -422,13 +421,12 @@ window.procesarVenta = async function() {
         }
     } else {
         docCliente = document.getElementById('cliente-dni').value.trim();
-        // 🛡️ VALIDACIÓN RETAIL
         if(docCliente && docCliente !== 'PUBLICO' && docCliente.length !== 8) {
             return mostrarModalResultado("DNI Inválido", "El DNI debe tener 8 dígitos.", "error");
         }
     }
 
-    // Bloqueo de botón tras validaciones
+    // Bloqueo de seguridad para evitar doble clic
     btn.disabled = true;
     btn.innerText = "Procesando...";
 
@@ -461,20 +459,32 @@ window.procesarVenta = async function() {
         const data = await res.json();
 
         if (res.ok) {
-            // ✅ VENTA EXITOSA
-            const tituloExito = `✅ Venta: ${data.ticketCodigo || 'Exitosa'}`;
+            // ✅ 1. PREPARAR MODAL DE ÉXITO CON DATOS NUEVOS
+            const tituloExito = `Venta: ${data.ticketCodigo || 'Exitosa'}`;
             const cuerpoExito = `La venta se registró correctamente. El comprobante electrónico se está procesando y aparecerá en el Historial en unos segundos.`;
             
+            // ✅ 2. CERRAR MODALES ANTERIORES PARA EVITAR PARPADEO
+            cerrarModalCobro(); // Cierra el formulario de pago
+
+            // ✅ 3. LIMPIEZA TOTAL DE VARIABLES Y UI
+            carrito = []; // Vaciar carrito en memoria
+            renderCarrito(); // Vaciar lista visual
+            
+            // ✅ 4. RESETEAR FORMULARIO (Evita que el próximo cliente vea datos del anterior)
+            if(document.getElementById('cliente-dni')) document.getElementById('cliente-dni').value = '';
+            if(document.getElementById('cliente-ruc')) document.getElementById('cliente-ruc').value = '';
+            if(document.getElementById('cliente-razon')) document.getElementById('cliente-razon').value = '';
+            if(document.getElementById('cliente-direccion')) document.getElementById('cliente-direccion').value = '';
+            if(document.getElementById('modal-convenio')) document.getElementById('modal-convenio').value = "0";
+
+            // ✅ 5. MOSTRAR RESULTADO FINAL
             mostrarModalResultado(tituloExito, cuerpoExito, "success");
 
-            // Limpieza total
-            carrito = [];
-            renderCarrito();
-            cerrarModalCobro();
-            
+            // ✅ 6. AJUSTE PARA MÓVIL
             const ticketPanel = document.querySelector('.pos-ticket');
             if(ticketPanel) ticketPanel.classList.remove('active');
             
+            // Actualizar stock visual
             initPOS(); 
         } else {
             mostrarModalResultado("❌ Error en Venta", data.msg, "error");
@@ -482,7 +492,7 @@ window.procesarVenta = async function() {
 
     } catch (error) {
         console.error("Error en el flujo de venta:", error);
-        mostrarModalResultado("❌ Error de Conexión", "No se pudo conectar con el servidor. Revisa tu internet.", "error");
+        mostrarModalResultado("❌ Error de Conexión", "No se pudo conectar con el servidor.", "error");
     } finally {
         btn.disabled = false;
         btn.innerText = originalText;
@@ -549,6 +559,8 @@ window.toggleCarritoMovil = function() {
         // 3. Mostrar modal
         modalResult.classList.add('active');
     };
+
+    
 
     initPOS();
 })();

@@ -273,10 +273,10 @@
 .input-group input::placeholder, .input-group textarea::placeholder { color: #9ca3af; }
 
 .btn-primary.full-width {
-    width: 100%; padding: 18px;
+    width: 100%; padding: 9px;
     background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
     color: white; border: none; border-radius: 16px;
-    font-size: 18px; font-weight: 700; cursor: pointer;
+    font-size: 15px; font-weight: 700; cursor: pointer;
     transition: 0.3s; box-shadow: 0 8px 20px -5px rgba(79, 70, 229, 0.3);
 }
 .btn-primary.full-width:hover {
@@ -567,4 +567,219 @@
         width: 95%;
         margin-top: 10px; /* Un poco de aire arriba */
     }
+}
+
+
+/* 1. Fondo difuminado y entrada suave */
+.modal-overlay {
+    display: none; /* Se activa con .active en JS */
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(5px);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+/* Estado Activo del Overlay */
+.modal-overlay.active {
+    display: flex;
+    opacity: 1;
+}
+
+/* 2. Contenido del Modal con efecto 'Pop-up' */
+.modal-overlay.active .modal-content {
+    animation: modalPopUp 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Keyframes para el efecto de rebote suave */
+@keyframes modalPopUp {
+    from {
+        opacity: 0;
+        transform: scale(0.8) translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+/* 3. Estilo específico para el modal de éxito (Círculo Verde) */
+#modal-success .bx-check-circle {
+    animation: iconBounce 0.5s ease 0.2s both;
+}
+
+@keyframes iconBounce {
+    0% { transform: scale(0); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+
+/* 4. Botón 'Entendido' con pulso suave */
+.modal-content .btn-primary {
+    transition: all 0.5s ease;
+    margin-top: 1.2rem;
+}
+
+.modal-content .btn-primary:hover {
+    transform: translateY(-2px);
+    margin-top: 1.4rem;
+    box-shadow: 0 5px 15px rgba(99, 102, 241, 0.4);
+}
+
+/* --- MEJORA DE CENTRADO EN MODALES --- */
+.modal-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Centra todo horizontalmente */
+    text-align: center;
+}
+
+.modal-content .btn-primary {
+    align-self: center; /* Asegura que el botón se centre solo */
+    min-width: 140px;
+    justify-content: center;
+}
+
+/* --- ANIMACIÓN DE PARPADEO PARA SALDO BAJO --- */
+@keyframes flash-red {
+    0% { background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%); }
+    50% { background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); box-shadow: 0 0 20px rgba(239, 68, 68, 0.6); }
+    100% { background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%); }
+}
+
+.low-balance-alert {
+    animation: flash-red 1s infinite ease-in-out;
+}
+
+/* --- MEJORA DE CENTRADO EN EL MODAL --- */
+#modal-success .modal-content, 
+#modal-error .modal-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Centra horizontalmente */
+    text-align: center;
+    padding: 40px;
+}
+
+#modal-success .btn-primary, 
+#modal-error .btn-primary {
+    margin-top: 20px;
+    align-self: center; /* Asegura el centrado del botón */
+    min-width: 150px;
+}
+
+/* --- ANIMACIÓN DIVERTIDA DE SALDO BAJO --- */
+@keyframes parpadeo-alerta {
+    0% { background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%); }
+    50% { background: #ef4444; box-shadow: 0 0 25px rgba(239, 68, 68, 0.7); }
+    100% { background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%); }
+}
+
+.saldo-bajo-animacion {
+    animation: parpadeo-alerta 2s infinite ease-in-out;
+}
+
+/* Parpadeo más rápido cuando es CERO */
+.saldo-card.en-cero {
+    animation: parpadeo-emergencia 0.8s infinite alternate;
+    border: 2px solid white;
+}
+
+@keyframes parpadeo-emergencia {
+    from { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
+    to { background: #7f1d1d; box-shadow: 0 0 30px #ff0000; }
+}
+
+/* =========================================
+   AJUSTES MÓVIL Y TABLET (RESPONSIVE MODALS)
+   ========================================= */
+
+/* 1. Corrección General y Centrado de Contenido */
+.modal-content.center-modal {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important; /* Centra iconos y textos */
+    text-align: center !important;
+    gap: 15px;
+    padding: 30px 20px !important;
+}
+
+/* Centrado del botón "Entendido" en cualquier pantalla */
+.modal-content.center-modal .btn-primary {
+    margin: 20px auto 0 auto !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: fit-content !important;
+    min-width: 160px;
+}
+
+/* 2. Ajustes para Tablets (Pantallas menores a 900px) */
+@media (max-width: 900px) {
+    .modal-content {
+        max-width: 80%;
+        padding: 30px !important;
+    }
+}
+
+/* 3. Ajustes para Móvil (Pantallas menores a 600px) */
+@media (max-width: 600px) {
+    /* Ajuste del contenedor del modal */
+    .modal-content {
+        width: 92% !important;
+        max-width: none !important;
+        margin: auto;
+        padding: 25px 15px !important;
+        border-radius: 20px !important;
+    }
+
+    /* Ajuste del título del modal de registro */
+    .modal-header h3 {
+        font-size: 1.2rem !important;
+    }
+
+    /* Hacer los inputs más fáciles de tocar en móvil */
+    .input-group input, 
+    .input-group select, 
+    .input-group textarea {
+        padding: 14px !important;
+        font-size: 16px !important; /* Evita zoom automático en iOS */
+    }
+
+    /* Ajuste del badge de tipo de movimiento en móvil */
+    .badge-lg {
+        width: 100%;
+        justify-content: center;
+        font-size: 11px !important;
+        padding: 10px !important;
+    }
+
+    /* Botón de guardar movimiento a ancho completo en móvil */
+    .btn-primary.full-width {
+        font-size: 1rem !important;
+        padding: 16px !important;
+    }
+
+    /* Centrado de los iconos de éxito/error en móvil */
+    .modal-content i {
+        font-size: 60px !important;
+        margin-bottom: 10px;
+    }
+}
+
+/* --- EFECTO DE PARPADEO (SALDO BAJO) --- */
+/* Se activa vía JS cuando el saldo es < 200 */
+.low-balance-alert {
+    animation: flash-red-border 1.5s infinite ease-in-out;
+}
+
+@keyframes flash-red-border {
+    0% { border: 2px solid transparent; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+    50% { border: 2px solid #ef4444; box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); }
+    100% { border: 2px solid transparent; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
 }

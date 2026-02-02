@@ -34,7 +34,7 @@ if (userStr && token) {
 } else {
     window.location.href = "index.html";
 }
-
+document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
 // 2. DEFINICIÓN DE MENÚ Y PERMISOS
 const menuItems = [
     { id: 'inicio', icon: 'bx-grid-alt', text: 'Dashboard', roles: ['superadmin', 'admin', 'colaborador', 'gerente', 'logistica'] },
@@ -265,3 +265,22 @@ style.innerHTML = `
     @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
 `;
 document.head.appendChild(style);
+
+// Al cambiar a cualquier módulo, forzamos la limpieza de modales residuales
+function limpiarModalesResiduales() {
+    const modalesParaCerrar = [
+        'modal-success', 
+        'modal-cobro', 
+        'modal-confirmar-anulacion'
+    ];
+    
+    modalesParaCerrar.forEach(id => {
+        const modal = document.getElementById(id);
+        if (modal) {
+            modal.classList.remove('active');
+            // Si usas display: block/none manual:
+            modal.style.display = 'none'; 
+        }
+    });
+}
+

@@ -41,9 +41,16 @@ exports.emitirComprobante = async (req, res) => {
         }
 
         // 3. OBTENER DETALLE DE PRODUCTOS
-        const detalleQuery = `SELECT * FROM detalle_ventas WHERE venta_id = $1`;
+        const detalleQuery = `SELECT * FROM detalle_ventas WHERE venta_id = $1 AND precio_unitario > 0`;
         const detallesRes = await client.query(detalleQuery, [ventaId]);
         const items = detallesRes.rows;
+
+        // 🛡️ BLINDAJE: Si por alguna razón no hay ítems con precio > 0, abortamos para evitar error 3105
+        if (items.length === 0) {
+            console.log("⚠️ Venta sin ítems comerciales (todos son componentes de combo). No se envía a Nubefact.");
+            if (res) return res.json({ msg: 'Venta interna (Combo), no requiere envío individual de componentes.' });
+            return;
+        }
 
         // 4. VALIDACIÓN DE CREDENCIALES MULTISEDE
         if (!venta.nubefact_ruta || !venta.nubefact_token) {

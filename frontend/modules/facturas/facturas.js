@@ -406,19 +406,31 @@ function calcularMontos() {
     const checkDetraccion = document.getElementById('check-detraccion');
     let montoDetraccion = 0;
     
-    if(checkDetraccion && checkDetraccion.checked) {
+    if (checkDetraccion && checkDetraccion.checked) {
         const porcentaje = parseFloat(document.getElementById('fac-porcentaje-det').value) || 0;
-        montoDetraccion = (totalInput * porcentaje) / 100;
+        
+        // 🛡️ BLINDAJE MATEMÁTICO: Redondeo a 2 decimales para evitar errores de precisión de JS
+        // (Monto * Porcentaje) / 100 con corrección de decimales
+        montoDetraccion = Math.round((totalInput * (porcentaje / 100)) * 100) / 100;
     }
 
-    const netoPagar = totalInput - montoDetraccion;
+    // B. Cálculo del Neto
+    // Se resta usando enteros (multiplicando por 100) para garantizar precisión monetaria
+    const netoPagar = Math.round((totalInput - montoDetraccion) * 100) / 100;
 
-    // B. Mostrar montos finales
+    // C. Mostrar montos finales en la UI
     const inputMontoDet = document.getElementById('fac-monto-det');
-    if(inputMontoDet) inputMontoDet.value = montoDetraccion.toFixed(2);
+    if (inputMontoDet) {
+        inputMontoDet.value = montoDetraccion.toFixed(2);
+    }
     
     const inputNeto = document.getElementById('fac-neto');
-    if(inputNeto) inputNeto.value = netoPagar.toFixed(2);
+    if (inputNeto) {
+        inputNeto.value = netoPagar.toFixed(2);
+    }
+
+    // Registro en consola para auditoría rápida en desarrollo
+    console.log(`Cálculo: Total ${totalInput} | Detracc. ${montoDetraccion} | Neto ${netoPagar}`);
 }
 
 // 7. FUNCIÓN PARA LLENAR EL SELECT DE PROVEEDORES
@@ -520,47 +532,78 @@ function cerrarModalFactura() {
     document.getElementById('file-name-display').innerText = "";
 }
 
-// 9. EXPORTAR A EXCEL
+// 9. EXPORTAR A EXCEL (VERSIÓN ACTUALIZADA Y BLINDADA)
 function exportarExcel() {
     if (!facturasData || facturasData.length === 0) {
         return showToast("No hay datos para exportar.", "info");
     }
 
-    // 1. Mapeo y Formato de Datos
-    // Preparamos los datos con nombres de columna legibles y formatos correctos
+    // 1. Mapeo y Formato de Datos Profesional
     const datosFormateados = facturasData.map(fac => {
-        const simbolo = fac.moneda === 'USD' ? '$' : 'S/';
+        // Cálculos de seguridad para el reporte
+        const montoTotal = parseFloat(fac.monto_total) || 0;
+        const montoNeto = parseFloat(fac.monto_neto_pagar || fac.monto_total) || 0;
+        const montoDetraccion = Math.round((montoTotal - montoNeto) * 100) / 100;
         
         return {
-            ID: fac.id,
-            EMISIÓN: fac.fecha_emision ? fac.fecha_emision.slice(0, 10) : '-',
-            PROVEEDOR: fac.proveedor || 'Sin Proveedor',
-            SEDE: fac.sede || 'General', // Importante para el P&L
-            CATEGORÍA: fac.categoria_gasto || '-', // Importante para el P&L
-            OC: fac.orden_compra || '-', // Orden de Compra
-            DESCRIPCIÓN: fac.descripcion,
-            CORRELATIVO: fac.numero_documento || '-',
-            MONEDA: fac.moneda,
-            "MONTO NETO": parseFloat(fac.monto_neto_pagar || fac.monto_total).toFixed(2),
-            "MONTO TOTAL": parseFloat(fac.monto_total).toFixed(2),
-            VENCIMIENTO: fac.fecha_vencimiento ? fac.fecha_vencimiento.slice(0, 10) : '-',
-            ESTADO: fac.estado_pago.toUpperCase()
+            "ID SISTEMA": fac.id,
+            "FECHA EMISIÓN": fac.fecha_emision ? fac.fecha_emision.slice(0, 10) : '-',
+            "PROVEEDOR": (fac.proveedor || 'Sin Proveedor').toUpperCase(),
+            "SEDE / CENTRO COSTO": (fac.sede || 'General').toUpperCase(),
+            "LÍNEA DE NEGOCIO": (fac.categoria_gasto || '-').toUpperCase(),
+            "TIPO DOC": (fac.tipo_documento || 'Factura').toUpperCase(),
+            "SERIE-CORRELATIVO": fac.numero_documento || '-',
+            "ORDEN COMPRA": fac.orden_compra || '-',
+            "DESCRIPCIÓN / GLOSA": fac.descripcion || '',
+            "MONEDA": fac.moneda || 'PEN',
+            "MONTO TOTAL": montoTotal.toFixed(2),
+            "DETRACCIÓN": montoDetraccion.toFixed(2),
+            "NETO A PAGAR": montoNeto.toFixed(2),
+            "FECHA VENCIMIENTO": fac.fecha_vencimiento ? fac.fecha_vencimiento.slice(0, 10) : '-',
+            "ESTADO PAGO": (fac.estado_pago || 'PENDIENTE').toUpperCase(),
+            "N° OPERACIÓN": fac.numero_operacion || '-'
         };
     });
 
     // 2. Crear la Hoja de Trabajo (Worksheet)
-    // Asume que la librería XLSX ya está cargada globalmente (como en dashboard.html)
     const ws = XLSX.utils.json_to_sheet(datosFormateados);
+
+    // 🛡️ BLINDAJE VISUAL: Configurar anchos de columna automáticos para mejor lectura
+    const colWidths = [
+        { wch: 10 }, // ID
+        { wch: 15 }, // Fecha Emisión
+        { wch: 35 }, // Proveedor
+        { wch: 20 }, // Sede
+        { wch: 20 }, // Línea
+        { wch: 12 }, // Tipo Doc
+        { wch: 20 }, // Serie
+        { wch: 15 }, // OC
+        { wch: 40 }, // Descripción
+        { wch: 10 }, // Moneda
+        { wch: 15 }, // Total
+        { wch: 15 }, // Detracción
+        { wch: 15 }, // Neto
+        { wch: 15 }, // Vencimiento
+        { wch: 15 }, // Estado
+        { wch: 15 }  // Operación
+    ];
+    ws['!cols'] = colWidths;
 
     // 3. Crear el Libro de Trabajo (Workbook)
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Registro de Gastos");
+    XLSX.utils.book_append_sheet(wb, ws, "Reporte_Gastos");
 
-    // 4. Generar y Descargar el Archivo
-    const fecha = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `SuperNova_Gastos_${fecha}.xlsx`);
+    // 4. Generar y Descargar el Archivo con nombre fechado
+    const fechaDescarga = new Date().toISOString().slice(0, 10);
+    const nombreArchivo = `SuperNova_Reporte_Gastos_${fechaDescarga}.xlsx`;
     
-    showToast("Exportación completada.", "success");
+    try {
+        XLSX.writeFile(wb, nombreArchivo);
+        showToast("Archivo Excel generado con éxito.", "success", "Exportación");
+    } catch (error) {
+        console.error("Error al exportar Excel:", error);
+        showToast("Error al generar el archivo Excel.", "error");
+    }
 }
 
 // 8. CONFIGURAR SUBIDA DE ARCHIVOS (Visual)
@@ -595,36 +638,91 @@ function exportarExcel() {
         };
     }
 
-    // --- 🆕 FUNCIONES NUEVAS PARA PAGINACIÓN ---
+    // --- FUNCIONES DE PAGINACIÓN ACTUALIZADAS ---
 
 function renderizarPaginacion(totalItems) {
     const contenedor = document.getElementById('facturas-paginacion');
     if (!contenedor) return;
 
+    // 🛡️ BLINDAJE LÓGICO: Recalcular total de páginas
     const totalPaginas = Math.ceil(totalItems / FILAS_POR_PAGINA);
     
+    // Si no hay ítems o solo hay una página, ocultamos los controles
     if (totalPaginas <= 1) {
-        contenedor.innerHTML = ''; // Si es 1 página, no mostramos botones
+        contenedor.innerHTML = '';
         return;
     }
 
+    // 🛡️ SEGURIDAD DE RANGO: Si al filtrar la páginaActual queda fuera de rango, resetear a la última disponible
+    if (paginaActual > totalPaginas) {
+        paginaActual = totalPaginas;
+    }
+    if (paginaActual < 1) {
+        paginaActual = 1;
+    }
+
+    // Renderizado con estilos unificados de SuperNova
     contenedor.innerHTML = `
-        <div style="display:flex; align-items:center; gap:10px; justify-content:flex-end;">
-            <span style="font-size:12px; color:#666;">Página ${paginaActual} de ${totalPaginas}</span>
-            <button class="btn-secondary" onclick="cambiarPaginaFacturas(-1)" ${paginaActual === 1 ? 'disabled' : ''} style="padding:5px 10px;">
-                <i class='bx bx-chevron-left'></i>
-            </button>
-            <button class="btn-secondary" onclick="cambiarPaginaFacturas(1)" ${paginaActual >= totalPaginas ? 'disabled' : ''} style="padding:5px 10px;">
-                <i class='bx bx-chevron-right'></i>
-            </button>
+        <div class="pagination-container">
+            <span>Mostrando página <strong>${paginaActual}</strong> de <strong>${totalPaginas}</strong></span>
+            <div style="display: flex; gap: 8px;">
+                <button 
+                    class="btn-secondary" 
+                    onclick="cambiarPaginaFacturas(-1)" 
+                    ${paginaActual === 1 ? 'disabled' : ''} 
+                    title="Anterior"
+                >
+                    <i class='bx bx-chevron-left'></i>
+                </button>
+                <button 
+                    class="btn-secondary" 
+                    onclick="cambiarPaginaFacturas(1)" 
+                    ${paginaActual >= totalPaginas ? 'disabled' : ''} 
+                    title="Siguiente"
+                >
+                    <i class='bx bx-chevron-right'></i>
+                </button>
+            </div>
         </div>
     `;
 }
 
+// Función auxiliar para el cambio de página (Asegúrate de tenerla así)
 window.cambiarPaginaFacturas = function(delta) {
     paginaActual += delta;
-    renderizarTablaFacturas(facturasData); // Redibujamos la tabla con la nueva página
+    
+    // Al cambiar de página, volvemos arriba de la tabla para mejorar la UX
+    const tablaContenedor = document.querySelector('.table-responsive');
+    if (tablaContenedor) {
+        tablaContenedor.scrollTop = 0;
+    }
+
+    // Redibujar la tabla (usa facturasData que es el array global con los datos cargados)
+    renderizarTablaFacturas(facturasData); 
+};
+
+function filtrarFacturas() {
+    const busqueda = document.getElementById('buscador-facturas').value.toLowerCase();
+    const fechaFiltro = document.getElementById('filtro-fecha').value;
+
+    const filtrados = facturasData.filter(fac => {
+        const coincideTexto = (fac.proveedor || '').toLowerCase().includes(busqueda) || 
+                              (fac.numero_documento || '').toLowerCase().includes(busqueda) ||
+                              (fac.descripcion || '').toLowerCase().includes(busqueda);
+        
+        const coincideFecha = !fechaFiltro || (fac.fecha_emision && fac.fecha_emision.startsWith(fechaFiltro));
+        
+        return coincideTexto && coincideFecha;
+    });
+
+    paginaActual = 1; // Resetear a la primera página al filtrar
+    renderizarTablaFacturas(filtrados);
 }
+
+// Vincular a los inputs en el initFacturas
+document.getElementById('buscador-facturas').addEventListener('input', filtrarFacturas);
+
+document.getElementById('filtro-fecha').addEventListener('change', filtrarFacturas);
 
 // Inicializar al cargar
 initFacturas();

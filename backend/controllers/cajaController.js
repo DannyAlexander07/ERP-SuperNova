@@ -89,7 +89,7 @@ exports.registrarMovimiento = async (req, res) => {
     }
 };
 
-// 3. OBTENER RESUMEN (CORREGIDO PARA LEER CRM Y VENTAS)
+// 3. OBTENER RESUMEN (CORREGIDO: Incluye JOIN con ventas para distinguir tarjetas y evitar errores de alias)
 exports.obtenerResumenCaja = async (req, res) => {
     try {
         if (!req.usuario) return res.status(401).json({msg: "Sin sesión"});
@@ -103,6 +103,7 @@ exports.obtenerResumenCaja = async (req, res) => {
         if (esAdmin && filtroSedeId) sedeConsulta = filtroSedeId; 
         else if (!esAdmin) sedeConsulta = usuarioSedeId; 
 
+        // Consulta del tope autorizado (Marcador NEUTRO)
         const resTope = await pool.query(`
             SELECT descripcion FROM movimientos_caja 
             WHERE categoria = 'AUTORIZACION_TOPE' 
@@ -111,33 +112,41 @@ exports.obtenerResumenCaja = async (req, res) => {
             ORDER BY id DESC LIMIT 1
         `, [sedeConsulta]);
 
-        // Extraemos el número del texto "Tope autorizado hasta: 2000"
-        let topeAutorizado = 1000; // Por defecto empezamos en 1000
+        let topeAutorizado = 1000; 
         if (resTope.rows.length > 0) {
             const texto = resTope.rows[0].descripcion;
-            const numero = parseInt(texto.split(': ')[1]);
-            if (!isNaN(numero)) topeAutorizado = numero;
+            const partes = texto.split(': ');
+            if (partes[1]) {
+                const numero = parseInt(partes[1]);
+                if (!isNaN(numero)) topeAutorizado = numero;
+            }
         }
 
-        // CONSULTA MAESTRA CORREGIDA
-        // Ahora normalizamos el texto del método de pago para que sume todo correctamente
+        // CONSULTA MAESTRA CORREGIDA: Se añade LEFT JOIN ventas v para habilitar el alias 'v'
         const query = `
             WITH MovimientosNormalizados AS (
                 SELECT 
                     mc.fecha_registro,
                     mc.tipo_movimiento,
                     mc.monto,
-                    -- Normalizamos el método de pago a un estándar común
                     CASE 
                         WHEN mc.metodo_pago ILIKE '%efectivo%' THEN 'EFECTIVO'
                         WHEN mc.metodo_pago ILIKE '%yape%' THEN 'YAPE'
                         WHEN mc.metodo_pago ILIKE '%plin%' THEN 'PLIN'
                         WHEN mc.metodo_pago ILIKE '%transferencia%' THEN 'TRANSFERENCIA'
-                        WHEN mc.metodo_pago ILIKE '%debito%' OR mc.metodo_pago ILIKE '%débito%' THEN 'DEBITO'
-                        WHEN mc.metodo_pago ILIKE '%credito%' OR mc.metodo_pago ILIKE '%crédito%' THEN 'CREDITO'
+                        
+                        -- 🔥 CORRECCIÓN CRÍTICA: Mapeo de Tarjetas usando la tabla de ventas (v)
+                        WHEN (mc.metodo_pago ILIKE '%tarjeta%' OR mc.metodo_pago ILIKE '%pago%') 
+                             AND (v.tipo_tarjeta ILIKE '%credito%' OR v.tipo_tarjeta ILIKE '%crédito%') THEN 'CREDITO'
+                        
+                        WHEN mc.metodo_pago ILIKE '%tarjeta%' 
+                             OR v.tipo_tarjeta ILIKE '%debito%' 
+                             OR v.tipo_tarjeta ILIKE '%débito%' THEN 'DEBITO'
+                        
                         ELSE 'OTROS'
                     END AS metodo_normalizado
                 FROM movimientos_caja mc
+                LEFT JOIN ventas v ON mc.venta_id = v.id -- 🛡️ ESTA LÍNEA HABILITA EL USO DE 'v'
                 WHERE ($1::int IS NULL OR mc.sede_id = $1::int)
             )
             SELECT 
@@ -147,7 +156,7 @@ exports.obtenerResumenCaja = async (req, res) => {
                 SUM(CASE WHEN EXTRACT(MONTH FROM fecha_registro) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS neto_mes,
                 SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS neto_anio,
 
-                -- 2. DESGLOSE POR MÉTODO (HOY) - Usamos la columna normalizada
+                -- 2. DESGLOSE HOY
                 SUM(CASE WHEN fecha_registro::date = CURRENT_DATE AND metodo_normalizado = 'EFECTIVO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS efec_hoy,
                 SUM(CASE WHEN fecha_registro::date = CURRENT_DATE AND metodo_normalizado = 'YAPE' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS yape_hoy,
                 SUM(CASE WHEN fecha_registro::date = CURRENT_DATE AND metodo_normalizado = 'PLIN' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS plin_hoy,
@@ -178,7 +187,6 @@ exports.obtenerResumenCaja = async (req, res) => {
                 SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'TRANSFERENCIA' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS transf_anio,
                 SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'DEBITO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS debito_anio,
                 SUM(CASE WHEN EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) AND metodo_normalizado = 'CREDITO' THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS credito_anio
-
             FROM MovimientosNormalizados
         `;
 
@@ -198,15 +206,12 @@ exports.obtenerResumenCaja = async (req, res) => {
         const m = resMerma.rows[0];
 
         res.json({ 
-
             topeAutorizado: topeAutorizado,
-            // Totales Generales
             dia: parseFloat(c.neto_hoy || 0),
             semana: parseFloat(c.neto_semana || 0),
             mes: parseFloat(c.neto_mes || 0),
             anio: parseFloat(c.neto_anio || 0),
             
-            // DESGLOSE DETALLADO
             desglose: {
                 hoy: {
                     efectivo: c.efec_hoy || 0, yape: c.yape_hoy || 0, plin: c.plin_hoy || 0, transferencia: c.transf_hoy || 0, debito: c.debito_hoy || 0, credito: c.credito_hoy || 0
@@ -222,14 +227,13 @@ exports.obtenerResumenCaja = async (req, res) => {
                 }
             },
 
-            // Mermas
             mermas: {
                 hoy: parseFloat(m.merma_hoy || 0),
                 semana: parseFloat(m.merma_semana || 0),
                 mes: parseFloat(m.merma_mes || 0),
                 anio: parseFloat(m.merma_anio || 0)
             },
-            gastos: { hoy:0, semana:0, mes:0, anio:0 } 
+            gastos: { hoy: 0, semana: 0, mes: 0, anio: 0 } 
         });
 
     } catch (err) {
@@ -238,25 +242,29 @@ exports.obtenerResumenCaja = async (req, res) => {
     }
 };
 
+// --- REEMPLAZAR FUNCIÓN autorizarTope EN cajaController.js ---
 exports.autorizarTope = async (req, res) => {
-    // Solo admins pueden autorizar
+    // 1. Verificación de Roles: Solo niveles altos pueden autorizar
     const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
     const esAdmin = ['superadmin', 'admin', 'administrador', 'gerente'].includes(rol);
     
     if (!esAdmin) {
-        return res.status(403).json({ msg: "⛔ Solo administradores pueden autorizar el tope de caja." });
+        return res.status(403).json({ 
+            msg: "⛔ No tienes permisos de nivel superior para autorizar este tope de efectivo." 
+        });
     }
 
     const { nuevoTope, sedeId } = req.body;
-    // Si no mandan sede, usamos la del usuario
+    // Si no viene sedeId, usamos la del usuario que autoriza
     const sedeTarget = sedeId || req.usuario.sede_id;
 
     try {
-        // Guardamos esto en una tabla temporal o configuración de la sede.
-        // Como no tenemos tabla de config, usaremos la tabla 'sedes' agregando una columna al vuelo o actualizando.
-        // OJO: Para hacerlo rápido y sin migrar DB, usaremos una tabla de 'movimientos_caja' con un tipo especial
-        // que servirá de "marcador".
-        
+        // Validación de monto
+        if (!nuevoTope || nuevoTope <= 0) {
+            return res.status(400).json({ msg: "El monto del nuevo tope debe ser un número mayor a cero." });
+        }
+
+        // Insertamos el "marcador" de autorización en la tabla de movimientos
         await pool.query(
             `INSERT INTO movimientos_caja 
             (sede_id, usuario_id, tipo_movimiento, categoria, descripcion, monto, metodo_pago, fecha_registro)
@@ -264,10 +272,12 @@ exports.autorizarTope = async (req, res) => {
             [sedeTarget, req.usuario.id, nuevoTope]
         );
 
-        res.json({ msg: `✅ Tope autorizado hasta S/ ${nuevoTope}` });
+        res.json({ 
+            msg: `✅ Autorización concedida. La caja de la sede ahora puede operar hasta S/ ${nuevoTope}` 
+        });
 
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ msg: "Error al autorizar tope" });
+        console.error("Error en autorizarTope:", err.message);
+        res.status(500).json({ msg: "Error interno al procesar la autorización del tope." });
     }
 };

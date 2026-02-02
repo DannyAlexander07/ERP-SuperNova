@@ -1,6 +1,8 @@
 // Ubicacion: SuperNova/backend/controllers/usuariosController.js
 const pool = require('../db');
 const bcrypt = require('bcryptjs');
+const fs = require('fs'); // 🔥 Módulo necesario para borrar archivos físicos
+const path = require('path'); // Auxiliar para rutas
 
 exports.crearUsuario = async (req, res) => {
     const { nombres, apellidos, dni, celular, direccion, cargo, sede_id, rol, email, password } = req.body;
@@ -98,23 +100,54 @@ exports.obtenerSedes = async (req, res) => {
     }
 };
 
-// 3. ACTUALIZAR USUARIO (COMPLETO Y BLINDADO)
+// 3. ACTUALIZAR USUARIO (VERSIÓN SUPREMA: LIMPIEZA DE DISCO Y SANITIZACIÓN)
 exports.actualizarUsuario = async (req, res) => {
     const { id } = req.params;
     
-    // Capturamos los datos. Nota: 'dni' viene del frontend, pero en la BD es 'documento_id'
-    const { nombres, apellidos, dni, celular, direccion, cargo, sede_id, rol, email, password } = req.body;
+    // Capturamos los datos
+    let { nombres, apellidos, dni, celular, direccion, cargo, sede_id, rol, email, password } = req.body;
     
-    // Validamos la foto
+    // 🛡️ BLINDAJE 1: Sanitización de datos (Limpiar espacios accidentales)
+    if (dni) dni = dni.toString().trim();
+    if (celular) celular = celular.toString().trim();
+    if (email) email = email.toLowerCase().trim();
+
+    // Validamos la ruta de la foto si subieron una nueva
     const fotoNueva = req.file ? `backend/uploads/${req.file.filename}` : null;
 
-    // VALIDACIÓN IMPORTANTE: Si sede_id viene vacío (""), lo pasamos a NULL para que no falle el SQL
+    // Validación de sede_id para evitar fallos de SQL
     const sedeIdFinal = (sede_id && sede_id !== 'null' && sede_id !== '') ? parseInt(sede_id) : null;
 
+    const client = await pool.connect();
+
     try {
+        await client.query('BEGIN');
+
+        // 🛡️ BLINDAJE 2: Gestión Física de Archivos (Borrar foto anterior si hay una nueva)
+        if (fotoNueva) {
+            const userOldData = await client.query('SELECT foto_url FROM usuarios WHERE id = $1', [id]);
+            const fotoViejaPath = userOldData.rows[0]?.foto_url;
+
+            if (fotoViejaPath && fotoViejaPath !== 'null') {
+                // Construimos la ruta absoluta (asumiendo que SuperNova es la raíz)
+                // Usamos path.join para que funcione en Windows y Linux por igual
+                const absolutePath = path.join(__dirname, '../../', fotoViejaPath);
+                
+                fs.access(absolutePath, fs.constants.F_OK, (err) => {
+                    if (!err) {
+                        fs.unlink(absolutePath, (errUnlink) => {
+                            if (errUnlink) console.error("⚠️ No se pudo borrar el archivo físico:", errUnlink);
+                            else console.log("🗑️ Foto anterior eliminada del servidor para ahorrar espacio.");
+                        });
+                    }
+                });
+            }
+        }
+
         // 1. Verificar si el usuario existe
-        const usuarioExistente = await pool.query('SELECT * FROM usuarios WHERE id = $1', [id]);
+        const usuarioExistente = await client.query('SELECT * FROM usuarios WHERE id = $1', [id]);
         if (usuarioExistente.rows.length === 0) {
+            await client.query('ROLLBACK');
             return res.status(404).json({ msg: "Usuario no encontrado." });
         }
 
@@ -123,11 +156,11 @@ exports.actualizarUsuario = async (req, res) => {
             UPDATE usuarios SET 
                 nombres = $1, 
                 apellidos = $2, 
-                documento_id = $3,   -- Mapeamos 'dni' a 'documento_id'
+                documento_id = $3, 
                 celular = $4, 
                 direccion = $5, 
                 cargo = $6, 
-                sede_id = $7,        -- Usamos el ID validado
+                sede_id = $7, 
                 rol = $8, 
                 correo = $9
         `;
@@ -137,17 +170,21 @@ exports.actualizarUsuario = async (req, res) => {
 
         // A. Si hay contraseña nueva, la encriptamos
         if (password && password.trim() !== '') {
+            // Validación de seguridad mínima
+            if (password.length < 8) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ msg: "La contraseña debe tener al menos 8 caracteres por seguridad." });
+            }
             const salt = await bcrypt.genSalt(10);
             const hashPassword = await bcrypt.hash(password, salt);
             
-            query += `, clave = $${contador}`; // Tu columna se llama 'clave'
+            query += `, clave = $${contador}`;
             values.push(hashPassword);
             contador++;
         }
 
         // B. Si hay foto nueva, la actualizamos
         if (fotoNueva) {
-            // Nota: Si esta línea falla, es porque tu tabla no tiene la columna 'foto_url'
             query += `, foto_url = $${contador}`; 
             values.push(fotoNueva);
             contador++;
@@ -158,32 +195,29 @@ exports.actualizarUsuario = async (req, res) => {
         values.push(id);
 
         // 3. Ejecutar actualización
-        await pool.query(query, values);
+        await client.query(query, values);
 
-        res.json({ msg: "Usuario actualizado correctamente." });
+        await client.query('COMMIT');
+        res.json({ msg: "Usuario actualizado y almacenamiento optimizado correctamente." });
 
     } catch (err) {
+        await client.query('ROLLBACK');
         console.error("❌ Error SQL al actualizar:", err.message);
 
-        // --- MANEJO DE ERRORES DE DUPLICADOS (CÓDIGO 23505) ---
         if (err.code === '23505') {
-            if (err.constraint === 'usuarios_documento_id_key') {
-                return res.status(400).json({ msg: "Error: El DNI ingresado ya pertenece a otro usuario." });
+            if (err.constraint.includes('documento_id')) {
+                return res.status(400).json({ msg: "Error: El DNI ya está registrado en otro usuario." });
             }
-            if (err.constraint === 'usuarios_correo_key') { // O el nombre de tu restricción de correo
-                return res.status(400).json({ msg: "Error: El correo ingresado ya está registrado." });
+            if (err.constraint.includes('correo')) {
+                return res.status(400).json({ msg: "Error: El correo ya está registrado." });
             }
         }
 
-        // Error genérico si no es duplicado
-        res.status(500).json({ 
-            msg: "Error interno al actualizar usuario.", 
-            error_detalle: err.message 
-        });
+        res.status(500).json({ msg: "Error interno al actualizar usuario.", error: err.message });
+    } finally {
+        client.release();
     }
 };
-
-// UBICACIÓN: backend/controllers/usuariosController.js
 
 // 4. OBTENER MI PERFIL (MODO DEPURACIÓN ACTIVADO 🕵️‍♂️)
 exports.obtenerPerfil = async (req, res) => {

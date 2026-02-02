@@ -2,7 +2,7 @@
 const pool = require('../db');
 const facturacionController = require('./facturacionController'); // 🔥 IMPORTANTE
 
-// 1. REGISTRAR VENTA (CON FACTURACIÓN ELECTRÓNICA Y PROTECCIÓN CONTRA COLAPSOS)
+// 1. REGISTRAR VENTA (CON FACTURACIÓN ELECTRÓNICA, PROTECCIÓN CONTRA COLAPSOS Y GESTIÓN DE COMBOS)
 exports.registrarVenta = async (req, res) => {
     // 1. DESESTRUCTURACIÓN
     const { 
@@ -33,12 +33,12 @@ exports.registrarVenta = async (req, res) => {
         // A. BLOQUEO PREVENTIVO (Anti-Deadlock): Ordenar IDs de menor a mayor
         const carritoOrdenado = [...carrito].sort((a, b) => a.id - b.id);
 
-        // B. OBTENER DATOS DE SEDE Y BLOQUEAR (Para evitar el error de MAX FOR UPDATE)
+        // B. OBTENER DATOS DE SEDE Y BLOQUEAR
         // Bloqueamos la fila de la sede para que otros cajeros esperen su turno de número de ticket
         const sedeRes = await client.query('SELECT prefijo_ticket FROM sedes WHERE id = $1 FOR UPDATE', [sedeId]);
         const prefijo = sedeRes.rows[0]?.prefijo_ticket || 'GEN';
 
-        // C. CALCULAR CORRELATIVO TICKET (Ahora es seguro sin FOR UPDATE aquí porque la sede ya está bloqueada)
+        // C. CALCULAR CORRELATIVO TICKET
         const maxTicketRes = await client.query(
             'SELECT COALESCE(MAX(numero_ticket_sede), 0) as max_num FROM ventas WHERE sede_id = $1',
             [sedeId]
@@ -48,10 +48,10 @@ exports.registrarVenta = async (req, res) => {
 
         // D. PROCESAR TOTALES E ITEMS
         let totalCalculado = 0;
-        let detalleInsertar = [];
+        let detalleAInsertar = [];
 
         for (const item of carritoOrdenado) {
-            // FOR SHARE asegura que nadie cambie el precio mientras procesamos, pero permite lecturas
+            // FOR SHARE asegura que nadie cambie el precio mientras procesamos
             const prodRes = await client.query(
                 'SELECT id, precio_venta, costo_compra, nombre, linea_negocio FROM productos WHERE id = $1 FOR SHARE', 
                 [item.id]
@@ -64,13 +64,14 @@ exports.registrarVenta = async (req, res) => {
             const subtotal = Number((precioConDescuento * item.cantidad).toFixed(2));
             totalCalculado += subtotal;
 
-            detalleInsertar.push({
-                ...item,
+            detalleAInsertar.push({
+                id: prod.id,
                 nombre: prod.nombre,
+                cantidad: item.cantidad,
                 precioReal: precioConDescuento,
                 costoReal: prod.costo_compra,
                 lineaProd: prod.linea_negocio,
-                subtotal
+                subtotal: subtotal
             });
         }
 
@@ -78,7 +79,7 @@ exports.registrarVenta = async (req, res) => {
         totalCalculado = Math.round(totalCalculado * 100) / 100;
         const subtotalFactura = totalCalculado / 1.18;
         const igvFactura = totalCalculado - subtotalFactura;
-        const lineaPrincipal = detalleInsertar[0]?.lineaProd || 'GENERAL';
+        const lineaPrincipal = detalleAInsertar[0]?.lineaProd || 'GENERAL';
 
         let obsFinal = observaciones || '';
         if (factor > 0) obsFinal = `[Descuento: ${(factor * 100).toFixed(0)}%] ${obsFinal}`;
@@ -97,23 +98,42 @@ exports.registrarVenta = async (req, res) => {
         );
         const ventaId = ventaRes.rows[0].id;
 
-        // F. GUARDAR DETALLES Y PROCESAR STOCK (PEPS)
-        for (const item of detalleInsertar) {
+        // F. GUARDAR DETALLES Y PROCESAR STOCK
+        for (const item of detalleAInsertar) {
+            // 1. Insertar el Producto Principal (Padre)
             await client.query(
                 `INSERT INTO detalle_ventas (venta_id, producto_id, nombre_producto_historico, cantidad, precio_unitario, subtotal, costo_historico)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                 [ventaId, item.id, item.nombre, item.cantidad, item.precioReal, item.subtotal, item.costoReal]
             );
 
-            // Gestión de Combos / Recetas
-            const esCombo = await client.query('SELECT producto_hijo_id, cantidad FROM productos_combo WHERE producto_padre_id = $1', [item.id]);
+            // 2. Gestión de Combos / Recetas (Desglose de stock)
+            const esCombo = await client.query(`
+                SELECT pc.producto_hijo_id, pc.cantidad, p.nombre, p.costo_compra 
+                FROM productos_combo pc 
+                JOIN productos p ON pc.producto_hijo_id = p.id 
+                WHERE pc.producto_padre_id = $1`, 
+                [item.id]
+            );
             
             if (esCombo.rows.length > 0) {
+                // Si es un combo, procesamos los componentes (Hijos)
                 for (const hijo of esCombo.rows) {
+                    // 🛡️ INSERTAR HIJOS EN DETALLE CON PRECIO 0
+                    // Esto evita duplicar ingresos pero deja rastro de qué se entregó
+                    await client.query(
+                        `INSERT INTO detalle_ventas (venta_id, producto_id, nombre_producto_historico, cantidad, precio_unitario, subtotal, costo_historico)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                        [ventaId, hijo.producto_hijo_id, `(Hijo) ${hijo.nombre}`, item.cantidad * hijo.cantidad, 0, 0, hijo.costo_compra]
+                    );
+
+                    // Descontar del Kardex el ingrediente/componente
                     await descontarStock(client, hijo.producto_hijo_id, sedeId, item.cantidad * hijo.cantidad, usuarioId, codigoTicketVisual, `Ingrediente de: ${item.nombre}`, 0);
                 }
+                // Descontar el ítem padre (el combo)
                 await descontarStock(client, item.id, sedeId, item.cantidad, usuarioId, codigoTicketVisual, 'Venta Combo', item.precioReal);
             } else {
+                // Venta de producto individual normal
                 await descontarStock(client, item.id, sedeId, item.cantidad, usuarioId, codigoTicketVisual, 'Venta Directa', item.precioReal);
             }
         }

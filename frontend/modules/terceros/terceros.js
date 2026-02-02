@@ -125,50 +125,79 @@
         });
     }
 
-    // --- 3. CREAR NUEVO ACUERDO ---
-    const form = document.getElementById('form-acuerdo');
-    if(form) {
-        form.addEventListener('submit', async (e) => {
+    // --- 3. CREAR NUEVO ACUERDO (VERSIÓN BLINDADA SIN ALERTS) ---
+    const formAcuerdo = document.getElementById('form-acuerdo');
+    if (formAcuerdo) {
+        formAcuerdo.addEventListener('submit', async (e) => {
             e.preventDefault();
+
+            // 🛡️ RECOLECCIÓN DE DATOS
             const canalId = document.getElementById('new-canal').value;
-            const desc = document.getElementById('new-desc').value;
+            const desc = document.getElementById('new-desc').value.trim();
             const cant = document.getElementById('new-cant').value;
             const precio = document.getElementById('new-precio').value;
-            const prodId = document.getElementById('new-producto').value; 
+            const prodId = document.getElementById('new-producto').value;
             const condicion = document.getElementById('new-condicion').value;
-            
+
             let cuotas = 1;
-            if(condicion === 'custom') {
+            if (condicion === 'custom') {
                 cuotas = document.getElementById('new-num-cuotas').value;
             }
 
-            if(!prodId) return alert("Selecciona un producto.");
-            
+            // 🛡️ VALIDACIONES PREVIAS (BLINDAJE DE INTERFAZ)
+            if (!canalId) return showToast("Debe seleccionar un Canal o Socio comercial.", "warning");
+            if (!desc) return showToast("Ingrese una descripción para el acuerdo.", "warning");
+            if (!cant || cant <= 0) return showToast("La cantidad de entradas debe ser mayor a 0.", "warning");
+            if (!precio || precio <= 0) return showToast("El precio unitario debe ser válido.", "warning");
+            if (!prodId) return showToast("Debe seleccionar un producto del inventario para descontar stock.", "warning");
+
+            // Estado de carga visual en el botón
+            const btnSubmit = formAcuerdo.querySelector('button[type="submit"]');
+            const textoOriginal = btnSubmit.innerHTML;
+            btnSubmit.disabled = true;
+            btnSubmit.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Procesando...";
+
             try {
                 const res = await fetch('/api/terceros/acuerdos', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('token') },
+                    headers: { 
+                        'Content-Type': 'application/json', 
+                        'x-auth-token': localStorage.getItem('token') 
+                    },
                     body: JSON.stringify({
                         canal_id: canalId,
                         descripcion: desc,
-                        cantidad: cant,
-                        precio_unitario: precio,
+                        cantidad: parseInt(cant),
+                        precio_unitario: parseFloat(precio),
                         producto_id: prodId,
-                        numero_cuotas: cuotas
+                        numero_cuotas: parseInt(cuotas)
                     })
                 });
-                if(res.ok) {
-                    alert("✅ Acuerdo registrado. Ahora configura los pagos si es necesario.");
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    // ✅ ÉXITO
+                    showToast("✅ Acuerdo registrado. Ya puede gestionar los pagos y cargar los códigos.", "success", "Acuerdo B2B");
                     cerrarModalAcuerdo();
-                    cargarAcuerdos();
+                    formAcuerdo.reset(); // Limpiar formulario
+                    if (typeof cargarAcuerdos === 'function') await cargarAcuerdos();
                 } else {
-                    alert("Error al guardar");
+                    // ❌ ERROR DE SERVIDOR
+                    showToast(data.error || "No se pudo registrar el acuerdo comercial.", "error");
                 }
-            } catch(e) { console.error(e); alert("Error de conexión"); }
+
+            } catch (e) {
+                console.error("Error al registrar acuerdo:", e);
+                showToast("Error de conexión con el servidor.", "error");
+            } finally {
+                // Restaurar botón
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = textoOriginal;
+            }
         });
     }
 
-    // --- 4. GESTIÓN DE PAGOS Y CUOTAS (TU PEDIDO PRINCIPAL) ---
 // --- 4. GESTIÓN DE PAGOS Y CUOTAS (ACTUALIZADO) ---
     window.abrirModalPagos = async function(id, empresa) {
         const modal = document.getElementById('modal-pagos');
@@ -224,43 +253,70 @@
     // B. GUARDAR CAMBIOS DE EDICIÓN (Llamada al Backend)
     window.guardarEdicionCuota = async function() {
         const id = document.getElementById('edit-cuota-id').value;
-        const nuevoMonto = document.getElementById('edit-monto').value;
-        const nuevaFecha = document.getElementById('edit-fecha').value;
+        const nuevoMontoInput = document.getElementById('edit-monto');
+        const nuevaFechaInput = document.getElementById('edit-fecha');
+        
+        const nuevoMonto = parseFloat(nuevoMontoInput.value);
+        const nuevaFecha = nuevaFechaInput.value;
 
-        if(isNaN(nuevoMonto) || nuevoMonto <= 0) return alert("El monto debe ser mayor a 0.");
-        if(!nuevaFecha) return alert("La fecha es obligatoria.");
+        // 🛡️ BLINDAJE DE INTERFAZ: Validaciones iniciales
+        if (isNaN(nuevoMonto) || nuevoMonto <= 0) {
+            return showToast("El monto debe ser un número válido y mayor a 0.", "warning");
+        }
+        if (!nuevaFecha) {
+            return showToast("La fecha de vencimiento es obligatoria.", "warning");
+        }
 
-        // Feedback visual en el botón
+        // Identificar el botón que disparó el evento para el feedback visual
         const btn = event.currentTarget;
-        const textoOriginal = btn.innerText;
-        btn.innerText = "Guardando...";
+        const textoOriginal = btn.innerHTML;
+        
+        // Bloquear controles mientras procesa
+        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Guardando...";
         btn.disabled = true;
 
         try {
             const res = await fetch(`/api/terceros/cuotas/${id}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('token') },
-                body: JSON.stringify({ nuevo_monto: nuevoMonto, nueva_fecha: nuevaFecha })
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'x-auth-token': localStorage.getItem('token') 
+                },
+                body: JSON.stringify({ 
+                    nuevo_monto: nuevoMonto, 
+                    nueva_fecha: nuevaFecha 
+                })
             });
 
-            if(res.ok) {
-                // Cerrar modal edición
+            const data = await res.json();
+
+            if (res.ok) {
+                // ✅ ÉXITO
                 cerrarModalEdicion();
-                // Cerrar modal lista para obligar al usuario a recargar y ver el recalculo
+                
+                // Cerramos también el modal de lista de pagos para forzar la recarga 
+                // de la lógica de saldos que el backend acaba de recalcular
                 cerrarModalPagos(); 
-                alert("✅ Cuota actualizada. El saldo restante se ha redistribuido a la siguiente cuota.");
+                
+                showToast("✅ Cuota actualizada. El saldo se ha redistribuido correctamente.", "success", "Ajuste de Pagos");
+                
+                // Refrescar la tabla principal por si cambiaron los totales
+                if (typeof cargarAcuerdos === 'function') await cargarAcuerdos();
+                
             } else {
-                const data = await res.json();
-                alert("Error: " + (data.error || "No se pudo actualizar"));
+                // ❌ ERROR DE LÓGICA (Ej: Intentar editar una cuota ya pagada)
+                showToast(data.error || "No se pudo actualizar la cuota.", "error");
             }
-        } catch(e) { 
-            console.error(e); 
-            alert("Error de conexión"); 
+
+        } catch (e) { 
+            console.error("Error al editar cuota:", e); 
+            showToast("Error de conexión con el servidor.", "error"); 
         } finally {
-            btn.innerText = textoOriginal;
+            // Restaurar estado del botón
+            btn.innerHTML = textoOriginal;
             btn.disabled = false;
         }
-    }
+    };
 
     window.cerrarModalEdicion = function() {
         document.getElementById('modal-editar-cuota').classList.remove('active');
@@ -274,18 +330,19 @@
         document.getElementById('modal-confirmar-pago').classList.add('active');
     }
 
-    // D. EJECUTAR EL PAGO REAL (ACTUALIZADO)
+   // D. EJECUTAR EL PAGO REAL (VERSIÓN BLINDADA CON NOTIFICACIONES TOAST)
     window.ejecutarPago = async function() {
         const cuotaId = document.getElementById('conf-cuota-id').value;
-        const btn = event.currentTarget;
         
-        // 1. Estado de carga visual
-        btn.disabled = true;
+        // 🛡️ BLINDAJE 1: Prevención de doble clic y feedback visual
+        const btn = event.currentTarget;
         const textoOriginal = btn.innerHTML;
-        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Procesando...";
+        
+        btn.disabled = true;
+        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Procesando Cobro...";
 
         try {
-            // 2. Petición al Backend
+            // 🚀 2. Petición al Backend
             const res = await fetch(`/api/terceros/cuotas/${cuotaId}/pagar`, {
                 method: 'POST',
                 headers: { 
@@ -293,38 +350,38 @@
                     'x-auth-token': localStorage.getItem('token') 
                 },
                 body: JSON.stringify({ 
-                    metodo_pago: 'TRANSFERENCIA' 
-                    // Nota: Si agregas un select de sede en el HTML, podrías enviar:
-                    // sede_destino: document.getElementById('tu-select-sede').value
+                    metodo_pago: 'TRANSFERENCIA' // Valor por defecto para acuerdos B2B
                 }) 
             });
 
             const data = await res.json();
 
-            if(res.ok) {
-                // ✅ ÉXITO
+            if (res.ok) {
+                // ✅ ÉXITO: El backend ya registró el ingreso en Caja
                 cerrarModalConfirmacion();
-                cerrarModalPagos(); // Cerramos la lista para forzar recarga al volver a abrir
-                alert(data.msg || "✅ Pago registrado exitosamente en Caja.");
+                cerrarModalPagos(); 
                 
-                // Actualizar la tabla principal de acuerdos para reflejar cambios si es necesario
-                if(typeof cargarAcuerdos === 'function') {
-                    cargarAcuerdos(); 
+                // Usamos showToast en lugar de alert
+                showToast(data.msg || "Cobro registrado correctamente en la Caja actual.", "success", "Finanzas B2B");
+                
+                // Actualizar la tabla principal de acuerdos para reflejar los nuevos saldos
+                if (typeof cargarAcuerdos === 'function') {
+                    await cargarAcuerdos(); 
                 }
             } else {
-                // ❌ ERROR DEL BACKEND (Muestra el mensaje real del error 500 si ocurre)
-                alert("Error: " + (data.error || "No se pudo registrar el pago."));
+                // ❌ ERROR: Problemas de validación o servidor
+                showToast("Error: " + (data.error || "No se pudo procesar el ingreso a caja."), "error");
             }
 
-        } catch(e) { 
-            console.error("Error de red:", e); 
-            alert("Error de conexión con el servidor."); 
+        } catch (e) { 
+            console.error("Error crítico en ejecutarPago:", e); 
+            showToast("Error de conexión: No se pudo registrar el pago en el servidor.", "error"); 
         } finally {
-            // 3. Restaurar botón
+            // 🛡️ 3. Restaurar estado del botón
             btn.disabled = false;
             btn.innerHTML = textoOriginal;
         }
-    }
+    };
 
     window.cerrarModalConfirmacion = function() {
         document.getElementById('modal-confirmar-pago').classList.remove('active');
@@ -345,78 +402,141 @@
     }
 
     window.procesarPagoCuota = async function(cuotaId) {
-        if(!confirm("¿Confirmar recepción del dinero?\nSe creará un INGRESO en CAJA.")) return;
+        // 🛡️ BLINDAJE 1: Sustitución de confirm nativo por modal de SuperNova
+        const confirmado = await showConfirm(
+            "¿Confirmar recepción del dinero?\nSe registrará automáticamente un INGRESO en CAJA.",
+            "Confirmar Cobro B2B"
+        );
+
+        if (!confirmado) return;
+
+        // Feedback visual en el botón para evitar múltiples clics (race condition)
+        const btn = event.currentTarget;
+        const textoOriginal = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Cobrando...";
+        }
 
         try {
             const res = await fetch(`/api/terceros/cuotas/${cuotaId}/pagar`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('token') },
-                body: JSON.stringify({ metodo_pago: 'TRANSFERENCIA' }) 
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'x-auth-token': localStorage.getItem('token') 
+                },
+                body: JSON.stringify({ 
+                    metodo_pago: 'TRANSFERENCIA' 
+                }) 
             });
-            if(res.ok) {
-                alert("✅ Pago registrado.");
-                document.getElementById('modal-pagos').classList.remove('active');
+
+            const data = await res.json();
+
+            if (res.ok) {
+                // ✅ ÉXITO
+                showToast("✅ Pago registrado exitosamente en el flujo de caja.", "success");
+                
+                // Cerrar el modal de gestión de pagos
+                const modalPagos = document.getElementById('modal-pagos');
+                if (modalPagos) modalPagos.classList.remove('active');
+                
+                // Refrescar datos de la tabla principal de acuerdos
+                if (typeof cargarAcuerdos === 'function') await cargarAcuerdos();
+                
             } else {
-                alert("Error al registrar pago.");
+                // ❌ ERROR DE LÓGICA
+                showToast(data.error || "No se pudo registrar el pago de la cuota.", "error");
             }
-        } catch(e) { alert("Error de conexión"); }
-    }
+
+        } catch (e) { 
+            console.error("Error al procesar pago de cuota:", e);
+            showToast("Error de conexión: No se pudo comunicar con el módulo de Caja.", "error"); 
+        } finally {
+            // Restaurar botón si no se cerró el modal
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = textoOriginal;
+            }
+        }
+    };
 
     window.cerrarModalPagos = function() {
         document.getElementById('modal-pagos').classList.remove('active');
     }
 
-// --- 5. OTRAS FUNCIONES ---
+    // --- 5. OTRAS FUNCIONES ---
+    let isProcessingCanje = false; 
+
     window.validarCodigo = async function() {
         const input = document.getElementById('input-codigo-canje');
         const resultadoBox = document.getElementById('resultado-validacion');
-        const codigo = input.value.trim();
+        const codigo = input.value.trim().toUpperCase(); // Normalizamos a mayúsculas
         
-        if(!codigo) return;
+        // 🛡️ BLINDAJE 1: Evitar ejecución si no hay código o si ya hay un proceso en marcha
+        if(!codigo || isProcessingCanje) return;
         
-        // Reiniciar estado visual
+        // Activamos el bloqueo
+        isProcessingCanje = true; 
+        
+        // Reiniciar estado visual y bloquear input
         resultadoBox.className = 'result-box hidden';
         input.disabled = true;
 
         try {
             const res = await fetch('/api/terceros/validar', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('token') },
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'x-auth-token': localStorage.getItem('token') 
+                },
                 body: JSON.stringify({ codigo })
             });
             
             const data = await res.json();
 
-            // 🔥 CAMBIO CLAVE AQUÍ:
-            // Ahora verificamos data.success en lugar de res.ok
+            // 🛡️ BLINDAJE 2: Verificamos el éxito basado en la propiedad success del JSON
             if(data.success === true) {
                 // ✅ CASO ÉXITO (VERDE)
                 resultadoBox.className = 'result-box success';
                 resultadoBox.innerHTML = `
                     <span class="result-title"><i class='bx bx-check-circle'></i> ACCESO PERMITIDO</span>
-                    <p>Código válido.</p>
+                    <p>¡El canje se ha registrado correctamente!</p>
                     <div class="result-product">📦 ${data.producto || 'Producto Generico'}</div>
                 `;
-                cargarHistorialCanjes();
-                input.value = ''; // Limpiamos solo si fue éxito
+                
+                // Recargamos el mini-historial lateral
+                if(typeof cargarHistorialCanjes === 'function') {
+                    await cargarHistorialCanjes();
+                }
+                
+                input.value = ''; // Limpiamos el campo solo si fue exitoso
             } else {
                 // ❌ CASO ERROR / YA USADO (ROJO)
-                // El backend devuelve 200 OK, pero con success: false y el mensaje de error
+                // El backend devuelve success: false con el motivo (msg)
                 resultadoBox.className = 'result-box error';
-                resultadoBox.innerHTML = `<span class="result-title"><i class='bx bx-error'></i> DENEGADO</span><p>${data.msg}</p>`;
-                input.select(); // Seleccionamos el texto para que corrijan fácil
+                resultadoBox.innerHTML = `
+                    <span class="result-title"><i class='bx bx-error'></i> DENEGADO</span>
+                    <p>${data.msg || 'El código no es válido para canje.'}</p>
+                `;
+                
+                input.select(); // Seleccionamos el texto fallido para que el usuario pueda corregir o borrar rápido
             }
 
         } catch (e) { 
-            console.error(e); 
+            console.error("Error en Validación:", e); 
             resultadoBox.className = 'result-box error';
-            resultadoBox.innerHTML = `<span class="result-title"><i class='bx bx-wifi-off'></i> ERROR RED</span><p>No se pudo conectar al servidor.</p>`;
+            resultadoBox.innerHTML = `
+                <span class="result-title"><i class='bx bx-wifi-off'></i> ERROR DE RED</span>
+                <p>No se pudo establecer conexión con el servidor de validación.</p>
+            `;
         } 
         finally {
+            // 🛡️ LIBERACIÓN: Desbloqueamos el proceso y el input pase lo que pase
+            isProcessingCanje = false; 
             input.disabled = false; 
-            input.focus();
+            input.focus(); // Devolvemos el foco para el siguiente escaneo
         }
-    }
+    };
 
     window.verCodigosAcuerdo = async function(id) {
         const modal = document.getElementById('modal-lista-codigos');
@@ -499,54 +619,168 @@
     window.cerrarModalDetalle = function() { document.getElementById('modal-detalle-acuerdo').classList.remove('active'); }
 
     window.eliminarAcuerdo = async function(id) {
-        if(!confirm("¿Estás seguro de ELIMINAR este acuerdo?")) return;
+        // 🛡️ BLINDAJE 1: Confirmación de SuperNova con advertencia de impacto
+        const confirmado = await showConfirm(
+            "¿Estás seguro de ELIMINAR este acuerdo?\nEsta acción borrará todos los códigos no usados y el cronograma de pagos pendiente.",
+            "Eliminar Acuerdo Comercial"
+        );
+
+        if (!confirmado) return;
+
+        // Identificar botón para feedback visual
+        const btn = event.currentTarget;
+        const textoOriginal = btn ? btn.innerHTML : '';
+        
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i>";
+        }
+
         try {
-            const res = await fetch(`/api/terceros/acuerdos/${id}`, { method: 'DELETE', headers: { 'x-auth-token': localStorage.getItem('token') } });
+            const res = await fetch(`/api/terceros/acuerdos/${id}`, { 
+                method: 'DELETE', 
+                headers: { 
+                    'x-auth-token': localStorage.getItem('token') 
+                } 
+            });
+            
             const json = await res.json();
-            if(res.ok) { alert(json.msg); cargarAcuerdos(); } else { alert("Error: " + json.error); }
-        } catch(e) { console.error(e); alert("Error de conexión"); }
-    }
+
+            if (res.ok) {
+                // ✅ ÉXITO
+                showToast(json.msg || "Acuerdo eliminado correctamente.", "success");
+                
+                // Recargar la tabla principal para reflejar la eliminación
+                if (typeof cargarAcuerdos === 'function') {
+                    await cargarAcuerdos();
+                }
+            } else {
+                // ❌ ERROR (Ej: El acuerdo ya tiene códigos canjeados y no se puede borrar)
+                showToast(json.error || "No se puede eliminar el acuerdo.", "error");
+            }
+
+        } catch (e) { 
+            console.error("Error al eliminar acuerdo:", e); 
+            showToast("Error de conexión: No se pudo eliminar el registro.", "error"); 
+        } finally {
+            // Restaurar botón si el proceso termina (aunque si fue éxito la fila desaparecerá)
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = textoOriginal;
+            }
+        }
+    };
 
     window.procesarCargaMasiva = async function() {
         const select = document.getElementById('select-acuerdo-carga');
         const acuerdoId = select.value;
-        const texto = document.getElementById('txt-codigos-masivos').value;
-        if(!acuerdoId) return alert("Selecciona un acuerdo primero.");
-        const codigos = texto.split(/\r?\n/).map(c => c.trim()).filter(c => c.length > 0);
-        if(codigos.length === 0) return alert("Pega los códigos primero.");
+        const textarea = document.getElementById('txt-codigos-masivos');
+        const textoRaw = textarea.value;
         
+        // 🛡️ BLINDAJE 1: Validaciones de entrada iniciales
+        if(!acuerdoId) {
+            return showToast("Debe seleccionar un acuerdo comercial primero.", "warning");
+        }
+        
+        // Limpieza profunda de los códigos pegados
+        const codigos = textoRaw.split(/\r?\n/)
+                                .map(c => c.trim().toUpperCase())
+                                .filter(c => c.length > 0);
+
+        if(codigos.length === 0) {
+            return showToast("El campo de códigos está vacío. Pegue su lista de Excel o Txt.", "warning");
+        }
+        
+        // Feedback visual en el botón
         const btn = event.currentTarget;
         const textoOriginal = btn.innerHTML;
-        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Cargando...";
+        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Validando cupos...";
         btn.disabled = true;
 
         try {
+            // 🛡️ BLINDAJE 2: Verificar disponibilidad real en el acuerdo antes de cargar
+            const resDetalle = await fetch(`/api/terceros/acuerdos/${acuerdoId}/detalle`, {
+                headers: { 'x-auth-token': localStorage.getItem('token') }
+            });
+            const detalle = await resDetalle.json();
+
+            if (!resDetalle.ok) throw new Error("No se pudo verificar el estado del acuerdo.");
+
+            const limiteTotal = parseInt(detalle.cantidad_entradas);
+            const yaCargados = parseInt(detalle.total_cargados);
+            const espacioDisponible = limiteTotal - yaCargados;
+
+            // Validar si la cantidad que se intenta pegar sobrepasa lo que falta cargar
+            if (codigos.length > espacioDisponible) {
+                return showToast(
+                    `Límite excedido. Estás intentando cargar ${codigos.length} códigos, pero este acuerdo solo tiene ${espacioDisponible} cupos disponibles (Total: ${limiteTotal}, Ya cargados: ${yaCargados}).`,
+                    "error",
+                    "Validación de Capacidad"
+                );
+            }
+
+            // 🚀 PETICIÓN AL BACKEND (Procede solo si hay espacio)
+            btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Inyectando Códigos...";
             const res = await fetch('/api/terceros/codigos/carga-masiva', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('token') },
-                body: JSON.stringify({ acuerdo_id: acuerdoId, canal_id: 1, codigos: codigos })
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'x-auth-token': localStorage.getItem('token') 
+                },
+                body: JSON.stringify({ 
+                    acuerdo_id: acuerdoId, 
+                    canal_id: 1, 
+                    codigos: codigos 
+                })
             });
+            
             const json = await res.json();
+            
             if(res.ok) {
-                document.getElementById('txt-codigos-masivos').value = "";
+                // ✅ ÉXITO: Limpiar campo y mostrar modal de resultados
+                textarea.value = "";
                 const modalRes = document.getElementById('modal-resultado-carga');
                 document.getElementById('res-insertados').innerText = json.insertados;
                 document.getElementById('res-duplicados').innerText = json.duplicados;
                 
                 const icono = document.getElementById('icon-resultado');
                 const titulo = document.getElementById('titulo-resultado');
+                
                 if(json.duplicados > 0) {
-                    icono.innerHTML = "⚠️"; titulo.innerText = "Carga con Duplicados"; titulo.style.color = "#d97706";
+                    icono.innerHTML = "⚠️"; 
+                    titulo.innerText = "Carga parcial (Duplicados)";
+                    titulo.style.color = "#d97706";
+                    showToast(`Se cargaron ${json.insertados} códigos. ${json.duplicados} omitidos por estar repetidos en el sistema.`, "info");
                 } else {
-                    icono.innerHTML = "🎉"; titulo.innerText = "Carga Exitosa"; titulo.style.color = "#16a34a";
+                    icono.innerHTML = "🎉"; 
+                    titulo.innerText = "¡Carga Exitosa!";
+                    titulo.style.color = "#16a34a";
+                    showToast("Todos los códigos han sido registrados correctamente.", "success");
                 }
-                modalRes.classList.add('active');
-                cargarAcuerdos(); 
-            } else { alert("Error: " + json.error); }
-        } catch(e) { console.error(e); alert("Error de conexión"); } finally { btn.innerHTML = textoOriginal; btn.disabled = false; }
-    }
-    window.cerrarModalResultado = function() { document.getElementById('modal-resultado-carga').classList.remove('active'); }
 
+                modalRes.classList.add('active');
+                
+                if(typeof cargarAcuerdos === 'function') {
+                    await cargarAcuerdos(); 
+                }
+            } else {
+                showToast(json.error || "Hubo un fallo al procesar la lista.", "error");
+            }
+
+        } catch(e) { 
+            console.error("Error Carga Masiva:", e); 
+            showToast(e.message || "Error de conexión con el servidor.", "error"); 
+        } finally { 
+            btn.innerHTML = textoOriginal; 
+            btn.disabled = false; 
+        }
+    };
+
+    // Función para cerrar el modal de resultados (Simple y limpia)
+    window.cerrarModalResultado = function() { 
+        const modal = document.getElementById('modal-resultado-carga');
+        if(modal) modal.classList.remove('active'); 
+    };
     // Utils de carga inicial
     function llenarSelectAcuerdos(lista) {
         const select = document.getElementById('select-acuerdo-carga');
@@ -718,15 +952,18 @@
         cargarTablaHistorialTotal();
     }
 
-// 🔥 FUNCIÓN EXPORTAR EXCEL (CORREGIDA PARA EXCEL ESPAÑOL/LATINO)
-    // 🔥 FUNCIÓN EXPORTAR EXCEL (CORREGIDA PARA LATINOAMÉRICA: USO DE PUNTO Y COMA)
+    // 🔥 FUNCIÓN EXPORTAR EXCEL (CORREGIDA PARA LATINOAMÉRICA Y SIN ALERTS)
     window.exportarHistorialExcel = async function() {
         const btn = event.currentTarget;
         const txtOriginal = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i>";
+        
+        // 🛡️ Evitar múltiples clics
+        if(btn.disabled) return;
 
-        // 1. Recoger filtros
+        btn.disabled = true;
+        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Preparando...";
+
+        // 1. Recoger filtros del DOM
         const inicio = document.getElementById('filtro-hist-inicio').value;
         const fin = document.getElementById('filtro-hist-fin').value;
         const search = document.getElementById('filtro-hist-search').value;
@@ -738,58 +975,68 @@
         });
 
         try {
-            // 2. Pedir datos
+            // 2. Pedir datos al servidor
             const res = await fetch(`/api/terceros/historial-total?${params}`, { 
                 headers: {'x-auth-token': localStorage.getItem('token')} 
             });
+            
+            if (!res.ok) throw new Error("Error en la respuesta del servidor");
+            
             const data = await res.json();
 
-            if(data.length === 0) {
-                alert("No hay datos para exportar.");
+            // 🛡️ REEMPLAZO DE ALERT: Validar si hay datos
+            if(!data || data.length === 0) {
+                showToast("No se encontraron registros con los filtros seleccionados para exportar.", "warning", "Exportación vacía");
                 return;
             }
 
-            // 3. Generar CSV con PUNTO Y COMA (;)
-            let csvContent = "\uFEFF"; // BOM para tildes
+            // 3. Generar CSV optimizado para Excel (Uso de punto y coma para región LATAM)
+            let csvContent = "\uFEFF"; // BOM para asegurar que Excel reconozca tildes y caracteres especiales
             
-            // CABECERAS CON PUNTO Y COMA
+            // Encabezados limpios
             csvContent += "FECHA;HORA;CODIGO;SOCIO/CANAL;PAQUETE;PRODUCTO;USUARIO\n";
 
             data.forEach(row => {
                 const f = new Date(row.fecha_canje);
-                const fecha = f.toLocaleDateString();
-                const hora = f.toLocaleTimeString();
+                const fecha = f.toLocaleDateString('es-PE');
+                const hora = f.toLocaleTimeString('es-PE', { hour12: false });
                 
-                // Limpieza de comillas internas (doble comilla para escapar en CSV)
-                // Envolvemos en comillas por seguridad, pero usamos ; para separar
+                // Limpieza y escape de datos para evitar romper el formato CSV
                 const socio = `"${(row.socio_canal || "").replace(/"/g, '""')}"`;
                 const paquete = `"${(row.nombre_paquete || "").replace(/"/g, '""')}"`;
                 const prod = `"${(row.producto || "").replace(/"/g, '""')}"`;
                 const user = `"${(row.usuario || "").replace(/"/g, '""')}"`;
                 const codigo = `"${row.codigo_unico}"`;
 
-                // UNIMOS CON PUNTO Y COMA
                 csvContent += `${fecha};${hora};${codigo};${socio};${paquete};${prod};${user}\n`;
             });
 
-            // 4. Descargar
+            // 4. Proceso de Descarga
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
+            
+            const fechaArchivo = new Date().toISOString().slice(0,10);
             link.setAttribute("href", url);
-            link.setAttribute("download", `Historial_Canjes_${new Date().toISOString().slice(0,10)}.csv`);
+            link.setAttribute("download", `Historial_Canjes_SuperNova_${fechaArchivo}.csv`);
+            
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            
+            // ✅ NOTIFICACIÓN DE ÉXITO
+            showToast("El archivo se ha generado y descargado correctamente.", "success", "Exportación Exitosa");
 
         } catch(e) {
-            console.error(e);
-            alert("Error al exportar.");
+            console.error("Error al exportar:", e);
+            // ❌ NOTIFICACIÓN DE ERROR
+            showToast("Hubo un problema al intentar generar el archivo de Excel.", "error", "Fallo de exportación");
         } finally {
+            // Restaurar estado del botón
             btn.disabled = false;
             btn.innerHTML = txtOriginal;
         }
-    }
+    };
 
     
     window.toggleModoCarga = function(modo) {
@@ -804,51 +1051,79 @@
 
     window.procesarGeneracionAutomatica = async function() {
         const acuerdoId = document.getElementById('select-acuerdo-carga').value;
-        const cantidad = document.getElementById('gen-cantidad').value;
+        const cantidadInput = document.getElementById('gen-cantidad');
         const prefijo = document.getElementById('gen-prefijo').value;
+        const cantidadAGenerar = parseInt(cantidadInput.value);
 
-        if (!acuerdoId) return alert("Selecciona un acuerdo primero.");
-        if (!cantidad || cantidad <= 0) return alert("Ingresa una cantidad válida.");
-
-        if (!confirm(`¿Generar ${cantidad} códigos nuevos para este acuerdo?`)) return;
+        if (!acuerdoId) return showToast("Seleccione un acuerdo primero.", "warning");
+        if (!cantidadAGenerar || cantidadAGenerar <= 0) return showToast("Ingrese una cantidad válida.", "warning");
 
         const btn = event.currentTarget;
         const txtOriginal = btn.innerHTML;
-        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Generando...";
+        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Validando espacio...";
         btn.disabled = true;
 
         try {
-            const res = await fetch('/api/terceros/codigos/generar', {
+            // 🛡️ BLINDAJE: Consultar detalle del acuerdo para ver disponibilidad real
+            const resDetalle = await fetch(`/api/terceros/acuerdos/${acuerdoId}/detalle`, {
+                headers: { 'x-auth-token': localStorage.getItem('token') }
+            });
+            const detalle = await resDetalle.json();
+
+            if (!resDetalle.ok) throw new Error("No se pudo verificar el acuerdo.");
+
+            const limiteTotal = parseInt(detalle.cantidad_entradas);
+            const yaCargados = parseInt(detalle.total_cargados);
+            const espacioDisponible = limiteTotal - yaCargados;
+
+            // Validar si sobrepasa el límite
+            if (cantidadAGenerar > espacioDisponible) {
+                return showToast(
+                    `Límite excedido. El acuerdo es de ${limiteTotal} tickets, ya tienes ${yaCargados} cargados. Solo puedes generar ${espacioDisponible} más.`,
+                    "error",
+                    "Validación de Cupos"
+                );
+            }
+
+            // Si pasa la validación, procedemos a generar
+            const confirmado = await showConfirm(
+                `¿Generar ${cantidadAGenerar} códigos para "${detalle.descripcion}"?`,
+                "Confirmar Generación"
+            );
+
+            if (!confirmado) return;
+
+            btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Generando...";
+
+            const resGen = await fetch('/api/terceros/codigos/generar', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('token') },
                 body: JSON.stringify({ 
                     acuerdo_id: acuerdoId, 
-                    cantidad: cantidad, 
+                    cantidad: cantidadAGenerar, 
                     prefijo: prefijo || 'GEN' 
                 })
             });
 
-            const data = await res.json();
+            const dataGen = await resGen.json();
 
-            if (res.ok) {
-                alert(`✅ Éxito: Se generaron ${data.generados_reales} códigos.`);
-                cargarAcuerdos(); // Refrescar contadores
-                
-                // Limpiar inputs
-                document.getElementById('gen-cantidad').value = "";
+            if (resGen.ok) {
+                showToast(`✅ Se generaron ${dataGen.generados_reales} códigos con éxito.`, "success");
+                cantidadInput.value = "";
                 document.getElementById('gen-prefijo').value = "";
+                if (typeof cargarAcuerdos === 'function') cargarAcuerdos(); 
             } else {
-                alert("Error: " + data.error);
+                showToast(dataGen.error, "error");
             }
 
         } catch (e) {
             console.error(e);
-            alert("Error de conexión");
+            showToast("Error de conexión al validar cupos.", "error");
         } finally {
             btn.innerHTML = txtOriginal;
             btn.disabled = false;
         }
-    }
+    };
 
     async function cargarCanales() {
         try {
@@ -882,14 +1157,59 @@
         if(divSelect.style.display === 'none') { divSelect.style.display = 'flex'; divInput.style.display = 'none'; } 
         else { divSelect.style.display = 'none'; divInput.style.display = 'flex'; document.getElementById('input-new-canal-nombre').focus(); }
     }
+
+    // Función para guardar un nuevo canal/socio desde el input inline
     window.guardarCanalInline = async function() {
-        const nombre = document.getElementById('input-new-canal-nombre').value;
-        if(!nombre) return;
+        const inputNombre = document.getElementById('input-new-canal-nombre');
+        const nombre = inputNombre.value.trim();
+        
+        // 🛡️ VALIDACIÓN: Evitar que guarden canales sin nombre
+        if(!nombre) {
+            return showToast("Debe ingresar un nombre para el nuevo canal/socio.", "warning");
+        }
+
+        // Bloqueo visual del input mientras procesa
+        inputNombre.disabled = true;
+
         try {
-            const res = await fetch('/api/terceros/canales', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('token') }, body: JSON.stringify({ nombre, tipo: 'CORPORATIVO' }) });
-            if(res.ok) { await cargarCanales(); toggleInputCanal(); const select = document.getElementById('new-canal'); select.selectedIndex = select.options.length - 1; }
-        } catch(e) { alert("Error al crear canal"); }
-    }
+            const res = await fetch('/api/terceros/canales', { 
+                method: 'POST', 
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'x-auth-token': localStorage.getItem('token') 
+                }, 
+                body: JSON.stringify({ 
+                    nombre: nombre, 
+                    tipo: 'CORPORATIVO' 
+                }) 
+            });
+
+            if(res.ok) {
+                // ✅ ÉXITO
+                await cargarCanales(); // Recargar la lista del select
+                toggleInputCanal();   // Volver a mostrar el select y ocultar el input
+                
+                // Seleccionar automáticamente el último canal creado en el dropdown
+                const select = document.getElementById('new-canal');
+                if(select) {
+                    select.selectedIndex = select.options.length - 1;
+                }
+
+                showToast(`Canal "${nombre}" registrado correctamente.`, "success");
+            } else {
+                const data = await res.json();
+                showToast(data.msg || "No se pudo registrar el canal.", "error");
+            }
+
+        } catch(e) { 
+            console.error("Error al crear canal:", e);
+            showToast("Error de conexión con el servidor.", "error"); 
+        } finally {
+            // Liberar el input
+            inputNombre.disabled = false;
+            inputNombre.value = ""; // Limpiar para la próxima vez
+        }
+    };
 
     window.abrirModalNuevoAcuerdo = function() { document.getElementById('modal-acuerdo').classList.add('active'); }
     window.cerrarModalAcuerdo = function() { document.getElementById('modal-acuerdo').classList.remove('active'); }

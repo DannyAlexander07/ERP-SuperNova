@@ -55,6 +55,7 @@
                 <tbody id="tabla-chica-body"></tbody>
             </table>
         </div>
+        <div id="caja-paginacion" style="margin-top: 15px; display:flex; justify-content:flex-end;"></div>
     </div>
 
     <div id="modal-chica" class="modal-overlay">
@@ -97,4 +98,19 @@
         </div>
     </div>
 
+    <div id="modal-success" class="modal-overlay">
+        <div class="modal-content" style="text-align:center;">
+            <i class='bx bx-check-circle' style='font-size: 80px; color: #10b981;'></i>
+            <h3 id="success-msg">Mensaje de éxito</h3>
+            <button class="btn-primary" onclick="this.closest('.modal-overlay').classList.remove('active')">Entendido</button>
+        </div>
+    </div>
+
+    <div id="modal-error" class="modal-overlay">
+        <div class="modal-content" style="text-align:center;">
+            <i class='bx bx-x-circle' style='font-size: 80px; color: #ef4444;'></i>
+            <h3 id="error-msg">Mensaje de error</h3>
+            <button class="btn-primary" style="background:#ef4444;" onclick="this.closest('.modal-overlay').classList.remove('active')">Cerrar</button>
+        </div>
+    </div>
 </div>

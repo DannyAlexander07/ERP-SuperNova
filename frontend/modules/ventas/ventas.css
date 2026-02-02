@@ -1097,3 +1097,75 @@ input[type="radio"]:checked + .comprobante-btn {
     border-radius: 10px; font-weight: 600; cursor: pointer; width: 100%;
 }
 .btn-confirmar:hover { background: #4f46e5; }
+
+/* 1. Ampliamos el ancho mínimo de las tarjetas en la grilla */
+.products-grid {
+    /* Aumentamos de 160px a 185px para dar más espacio horizontal */
+    grid-template-columns: repeat(auto-fill, minmax(185px, 1fr)) !important;
+    gap: 18px !important;
+}
+
+/* 2. Ajuste de la tarjeta para nombres largos */
+.product-card {
+    min-height: 155px !important; /* Un poco más de altura para las 2 líneas */
+    padding: 16px !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+}
+
+/* 3. FIX CRÍTICO: Permitir que el nombre ocupe 2 líneas completas */
+.product-name {
+    font-size: 14.5px !important;
+    line-height: 1 !important;
+    height: 2.4em !important; /* Espacio exacto reservado para 2 líneas */
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important; /* Muestra máximo 2 líneas */
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: normal !important; /* Permite el salto de línea */
+    margin-bottom: 8px !important;
+    font-weight: 600;
+}
+
+/* 4. Alineación del precio y categoría al fondo */
+.product-meta {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+}
+
+.product-price {
+    font-size: 18px !important;
+    margin-top: auto; /* Empuja el precio hacia la parte inferior de su contenedor */
+}
+
+/* 5. Estilo para el badge de stock (más legible) */
+.badge-stock {
+    background: #f1f5f9;
+    color: #475569;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 11px;
+}
+
+/* 6. Ajuste responsivo para celulares pequeños */
+@media (max-width: 480px) {
+    .products-grid {
+        grid-template-columns: repeat(2, 1fr) !important; /* Mantenemos 2 columnas */
+        gap: 12px !important;
+    }
+    .product-name {
+        font-size: 13px !important;
+    }
+}
+
+/* Asegurar que los modales no se vean por error al cargar */
+.modal-overlay:not(.active) {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+}

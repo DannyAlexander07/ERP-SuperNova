@@ -93,7 +93,7 @@
         }
     }
 
-// --- 2. RENDERIZAR TABLA (CON BLOQUEO PARA EVENTOS) ---
+// --- 2. RENDERIZAR TABLA (CON SOPORTE PARA COMBOS Y MOTOR SUNAT) ---
 function renderizarTablaHistorial(datos) {
     const tbody = document.getElementById('tabla-historial-body');
     if (!tbody) return;
@@ -125,32 +125,54 @@ function renderizarTablaHistorial(datos) {
         const vendedorTexto = v.nombre_vendedor ? `${v.nombre_vendedor}`.trim() : '<span style="color:#aaa;">No asignado</span>';
         const cajeroTexto = v.nombre_cajero || v.nombre_usuario || 'Sistema';
 
-        // C. PRECIO (Con etiqueta de descuento)
-        let precioHtml = `S/ ${parseFloat(v.total_venta).toFixed(2)}`;
-        if (v.observaciones && (v.observaciones.includes('Descuento') || v.observaciones.includes('Convenio'))) {
-            precioHtml += `<br><span style="background:#dcfce7; color:#166534; font-size:9px; padding:1px 4px; border-radius:3px;">🏷️ OFF</span>`;
+        // 🔥 C. LÓGICA DE PRECIOS (Blindaje para Combos y Descuentos)
+        const totalVenta = parseFloat(v.total_venta || 0);
+        let precioHtml = "";
+
+        // Si el precio es 0 pero tiene un nombre que indica que es hijo (Ingrediente/Componente)
+        if (totalVenta === 0 && (v.nombre_producto_historico || "").includes("(Hijo)")) {
+            precioHtml = `<span style="color:#94a3b8; font-size:11px; font-weight:700;">[INCLUIDO EN COMBO]</span>`;
+        } else {
+            precioHtml = `<span style="font-weight: 700; color:#16a34a; font-size:15px;">S/ ${totalVenta.toFixed(2)}</span>`;
+            
+            // Etiqueta de Descuento
+            if (v.observaciones && (v.observaciones.includes('Descuento') || v.observaciones.includes('Convenio'))) {
+                precioHtml += `<br><span style="background:#dcfce7; color:#166534; font-size:9px; padding:1px 4px; border-radius:3px; font-weight:700;">🏷️ OFF</span>`;
+            }
         }
 
-        // 🔥 D. TIPO DE COMPROBANTE Y ESTADO SUNAT
+        // D. TIPO DE COMPROBANTE Y ESTADO SUNAT
         let tipoDocHtml = '';
         let estadoSunatHtml = '';
 
-        // Badge del Estado SUNAT
         if (v.sunat_estado && v.sunat_estado !== 'NO_APLICA') {
             let colorEstado = '#64748b'; 
             let iconEstado = '';
+            let btnRefrescar = '';
             
-            if (v.sunat_estado === 'ACEPTADA') { colorEstado = '#10b981'; iconEstado='bx-check'; } 
-            else if (v.sunat_estado === 'PENDIENTE') { colorEstado = '#f59e0b'; iconEstado='bx-time'; }
-            else if (v.sunat_estado === 'ANULADA') { colorEstado = '#ef4444'; iconEstado='bx-x'; } 
-            else if (v.sunat_estado === 'ERROR') { colorEstado = '#dc2626'; iconEstado='bx-error'; }
+            if (v.sunat_estado === 'ACEPTADA') { 
+                colorEstado = '#10b981'; 
+                iconEstado='bx-check'; 
+            } 
+            else if (v.sunat_estado === 'PENDIENTE') { 
+                colorEstado = '#f59e0b'; 
+                iconEstado='bx-time'; 
+                btnRefrescar = `<i class='bx bx-refresh' onclick="consultarEstadoSunat(${v.id})" style="cursor:pointer; margin-left:5px; font-size:14px; vertical-align:middle;" title="Actualizar estado Nubefact"></i>`;
+            }
+            else if (v.sunat_estado === 'ANULADA') { 
+                colorEstado = '#ef4444'; 
+                iconEstado='bx-x'; 
+            } 
+            else if (v.sunat_estado === 'ERROR') { 
+                colorEstado = '#dc2626'; 
+                iconEstado='bx-error'; 
+            }
 
             estadoSunatHtml = `<div style="margin-top:2px; font-size:10px; color:${colorEstado}; font-weight:700;">
-                <i class='bx ${iconEstado}'></i> ${v.sunat_estado}
+                <i class='bx ${iconEstado}'></i> ${v.sunat_estado} ${btnRefrescar}
             </div>`;
         }
 
-        // Badge del Tipo Doc + Serie
         const serieCorr = (v.serie && v.correlativo) ? `<br><small style="color:#666; font-family:monospace;">${v.serie}-${v.correlativo}</small>` : '';
 
         if (v.tipo_comprobante === 'Factura') {
@@ -172,17 +194,15 @@ function renderizarTablaHistorial(datos) {
              metodoHtml = `<span class="badge-pago badge-plin" style="font-size:11px"><i class='bx bx-mobile-alt'></i> Plin</span>`;
         }
 
-        // 🔥 F. ACCIONES Y BOTONES (CON BLOQUEO INTELIGENTE)
+        // F. ACCIONES Y BOTONES
         let botonesAccion = `<div style="display:flex; gap:5px;">`;
         
-        // 1. Ver Detalle
         if (v.origen === 'VENTA_POS' || !v.origen || v.origen === 'CRM_SALDO') {
             botonesAccion += `<button class="btn-icon" title="Ver Detalle" onclick="verDetallesVenta(${v.id}, '${v.codigo_visual}')" style="color:#4f46e5;"><i class='bx bx-show'></i></button>`;
         } else {
             botonesAccion += `<button class="btn-icon" title="${v.observaciones}" style="color:#059669; cursor:help;"><i class='bx bx-info-circle'></i></button>`;
         }
 
-        // 2. PDF/XML
         if (v.enlace_pdf) {
             botonesAccion += `<a href="${v.enlace_pdf}" target="_blank" class="btn-icon" title="Imprimir Ticket" style="color:#dc2626;"><i class='bx bxs-file-pdf'></i></a>`;
         }
@@ -190,26 +210,30 @@ function renderizarTablaHistorial(datos) {
             botonesAccion += `<a href="${v.enlace_xml}" target="_blank" class="btn-icon" title="XML" style="color:#64748b;"><i class='bx bxs-file-code'></i></a>`;
         }
         
-        // 3. BOTÓN BORRAR (LÓGICA ACTUALIZADA)
+        // 3. BOTÓN BORRAR (LÓGICA BLINDADA: LIBERA VENTAS POS DE COMBOS/EVENTOS)
         let btnDeleteHtml = '';
 
-        // CASO A: Es una venta de EVENTOS o CRM -> BLOQUEAMOS
-        if (v.linea_negocio === 'EVENTOS' || v.origen === 'CRM_SALDO') {
-             btnDeleteHtml = `<button class="btn-icon" title="🚫 Gestionar anulación desde CRM (Leads)" style="color:#cbd5e1; cursor:not-allowed;" onclick="mostrarError('Esta venta pertenece a un Evento. Elimina el Lead en el CRM para evitar duplicidad de stock.')">
-                                <i class='bx bxs-lock-alt'></i>
-                              </button>`;
+        // 🛡️ REGLA DE BLOQUEO: Solo bloqueamos si el origen es explícitamente del CRM.
+        // Eliminamos la validación por 'linea_negocio' para que las ventas de caja (POS) no tengan candado.
+        if (v.origen === 'CRM_SALDO') {
+            btnDeleteHtml = `
+                <button class="btn-icon" title="🚫 Gestionar anulación desde CRM (Leads)" style="color:#cbd5e1; cursor:not-allowed;" onclick="mostrarError('Esta venta está vinculada a un pago de evento en CRM. Debe eliminar el Lead en el CRM para liberar el stock.')">
+                    <i class='bx bxs-lock-alt'></i>
+                </button>`;
         } 
-        // CASO B: Ya está anulada en SUNAT -> BLOQUEAMOS
+        // CASO B: Comprobante ya anulado en SUNAT
         else if (v.sunat_estado === 'ANULADA') {
-             btnDeleteHtml = `<button class="btn-icon" title="Ya anulado" style="color:#ccc; cursor:not-allowed;"><i class='bx bx-block'></i></button>`;
+            btnDeleteHtml = `<button class="btn-icon" title="Comprobante ya anulado" style="color:#ccc; cursor:not-allowed;"><i class='bx bx-block'></i></button>`;
         } 
-        // CASO C: Venta normal de mostrador -> PERMITIMOS BORRAR
+        // CASO C: Venta normal de mostrador (POS), incluyendo combos de la categoría 'EVENTOS'
         else if (v.origen === 'VENTA_POS' || !v.origen) {
-             btnDeleteHtml = `<button class="btn-icon delete" title="Anular Venta" onclick="eliminarVenta(${v.id}, '${v.codigo_visual}')" style="color:#ef4444;"><i class='bx bx-trash'></i></button>`;
+            btnDeleteHtml = `<button class="btn-icon delete" title="Anular Venta" onclick="eliminarVenta(${v.id}, '${v.codigo_visual}')" style="color:#ef4444;">
+                                <i class='bx bx-trash'></i>
+                            </button>`;
         } 
-        // CASO D: Otros orígenes (B2B, etc)
+        // CASO D: Otros orígenes (Módulo de Terceros/Canjes)
         else {
-             btnDeleteHtml = `<button class="btn-icon" title="Gestionar en Módulo Terceros" style="color:#cbd5e1; cursor:not-allowed;"><i class='bx bx-block'></i></button>`;
+            btnDeleteHtml = `<button class="btn-icon" title="Gestionar en Módulo de Terceros" style="color:#cbd5e1; cursor:not-allowed;"><i class='bx bx-block'></i></button>`;
         }
 
         botonesAccion += btnDeleteHtml;
@@ -232,7 +256,7 @@ function renderizarTablaHistorial(datos) {
             <td>${tipoDocHtml}</td>
             <td>${clienteInfo}</td>
             <td>${metodoHtml}</td>
-            <td style="font-weight: 700; color:#16a34a; font-size:15px;">${precioHtml}</td>
+            <td style="text-align:right; padding-right:20px;">${precioHtml}</td>
             <td>
                 <div style="display:flex; align-items:center; gap:5px;">
                     <i class='bx bx-user' style="color:#f59e0b;"></i>
@@ -252,6 +276,51 @@ function renderizarTablaHistorial(datos) {
     
     renderizarPaginacion(datos.length, datos);
 }
+
+// --- FUNCIÓN PARA CONSULTAR ESTADO ACTUAL EN NUBEFACT (SIN OMISIONES) ---
+window.consultarEstadoSunat = async function(ventaId) {
+    console.log(`🔍 Consultando estado SUNAT para Venta ID: ${ventaId}`);
+
+    try {
+        const token = localStorage.getItem('token');
+        if (!token) return console.error("No se encontró token de autenticación.");
+
+        // 1. Llamada al endpoint de facturación
+        // Nota: Asegúrate de que este endpoint exista en tu backend
+        const res = await fetch(`${API_BASE}/facturacion/consultar-estado/${ventaId}`, {
+            method: 'GET',
+            headers: { 
+                'x-auth-token': token,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            // ✅ ÉXITO: El estado cambió o se confirmó
+            // Usamos tu función mostrarExito para avisar al usuario
+            const msgFinal = `Estado actualizado: ${data.sunat_estado || 'Procesado'}`;
+            
+            // Si tienes el sistema de notificaciones mini, úsalo, si no, el modal
+            if (window.showMiniNotif) {
+                window.showMiniNotif(msgFinal, 'success');
+            } else {
+                mostrarExito(msgFinal);
+            }
+
+            // 🔄 Recargamos el historial para que aparezcan los botones de PDF/XML y el badge verde
+            await cargarHistorial(); 
+        } else {
+            // ❌ ERROR: Nubefact rechazó o hubo problema de red
+            mostrarError(data.msg || "No se pudo actualizar el estado en este momento.");
+        }
+
+    } catch (error) {
+        console.error("Error en consultarEstadoSunat:", error);
+        mostrarError("Error de conexión al intentar consultar con SUNAT/Nubefact.");
+    }
+};
     
 // --- 3. VER DETALLE (MODAL ACTUALIZADO) ---
 window.verDetallesVenta = async function(ventaId, codigoVisual) {
@@ -350,82 +419,159 @@ window.verDetallesVenta = async function(ventaId, codigoVisual) {
     
     // --- 5. EXPORTAR EXCEL ---
     window.exportarHistorialVentas = function() {
-        if (!historialGlobal || historialGlobal.length === 0) return alert("No hay datos.");
-        if (typeof XLSX === 'undefined') return alert("Librería Excel no cargada.");
+        // 🛡️ BLINDAJE 1: Sustitución de alert por showToast
+        if (!historialGlobal || historialGlobal.length === 0) {
+            return showToast("No hay datos de ventas para exportar.", "warning");
+        }
 
-        const datosFormateados = historialGlobal.map(v => ({
-            "TICKET": v.codigo_visual || v.id,
-            "FECHA": v.fecha_venta ? v.fecha_venta.slice(0, 10) : '-',
-            "HORA": v.fecha_venta ? new Date(v.fecha_venta).toLocaleTimeString() : '-',
-            "SEDE": v.nombre_sede,
-            "DOC": v.tipo_comprobante || 'Boleta',
-            "CLIENTE": v.nombre_cliente_temporal || 'Consumidor Final',
-            "DNI/RUC": v.doc_cliente_temporal || '-',
-            "USUARIO": v.nombre_usuario,
-            "TOTAL (S/)": parseFloat(v.total_venta).toFixed(2),
-            "MÉTODO": v.metodo_pago,
-            "DETALLE PAGO": v.tipo_tarjeta || '-'
-        }));
+        if (typeof XLSX === 'undefined') {
+            return showToast("La librería de exportación no está disponible.", "error");
+        }
 
-        const ws = XLSX.utils.json_to_sheet(datosFormateados);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Ventas");
-        XLSX.writeFile(wb, `Ventas_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    }
+        // 🛡️ BLINDAJE 2: Mapeo con limpieza de caracteres para asegurar compatibilidad
+        const datosFormateados = historialGlobal.map(v => {
+            // Aseguramos que los campos de texto no tengan nulos y se manejen como string
+            const cliente = (v.nombre_cliente_temporal || 'Consumidor Final').trim();
+            const usuario = (v.nombre_usuario || 'Sistema').trim();
+            const sede = (v.nombre_sede || 'General').trim();
+
+            return {
+                "TICKET": v.codigo_visual || v.id,
+                "FECHA": v.fecha_venta ? v.fecha_venta.slice(0, 10) : '-',
+                "HORA": v.fecha_venta ? new Date(v.fecha_venta).toLocaleTimeString('es-PE') : '-',
+                "SEDE": sede,
+                "DOC": v.tipo_comprobante || 'Boleta',
+                "CLIENTE": cliente,
+                "DNI/RUC": v.doc_cliente_temporal || '-',
+                "USUARIO": usuario,
+                "TOTAL (S/)": parseFloat(v.total_venta || 0).toFixed(2),
+                "MÉTODO": (v.metodo_pago || 'EFECTIVO').toUpperCase(),
+                "DETALLE PAGO": v.tipo_tarjeta || '-'
+            };
+        });
+
+        try {
+            // 🚀 PROCESO DE EXPORTACIÓN (Formato XLSX nativo para evitar errores de Ñ)
+            const ws = XLSX.utils.json_to_sheet(datosFormateados);
+            
+            // Ajustar ancho de columnas automáticamente para que se vea premium
+            const wscols = [
+                {wch: 12}, // Ticket
+                {wch: 12}, // Fecha
+                {wch: 12}, // Hora
+                {wch: 20}, // Sede
+                {wch: 15}, // Doc
+                {wch: 30}, // Cliente
+                {wch: 15}, // DNI
+                {wch: 20}, // Usuario
+                {wch: 12}, // Total
+                {wch: 15}, // Método
+                {wch: 15}  // Detalle
+            ];
+            ws['!cols'] = wscols;
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Reporte de Ventas");
+
+            // Generar descarga
+            const fechaActual = new Date().toISOString().slice(0, 10);
+            XLSX.writeFile(wb, `SuperNova_Ventas_${fechaActual}.xlsx`);
+
+            showToast("Reporte de ventas descargado correctamente.", "success", "Exportación Exitosa");
+
+        } catch (error) {
+            console.error("Error al exportar ventas:", error);
+            showToast("Ocurrió un error al generar el archivo Excel.", "error");
+        }
+    };
 
     
     // Variable global dentro del módulo para retener el ID
     let idVentaParaAnular = null; 
 
-    // Paso 1: Abrir Modal
-    window.eliminarVenta = function(id, codigoVisual) {
-        idVentaParaAnular = id; // Guardamos el ID aquí
-        console.log("🛑 ID seleccionado para borrar:", idVentaParaAnular); // Debug
+    // Paso 1: Abrir Modal de Confirmación
+    window.eliminarVenta = async function(id, codigoVisual) {
+        idVentaParaAnular = id; 
+        console.log("🛑 Preparando anulación de venta ID:", idVentaParaAnular);
 
         const modal = document.getElementById('modal-confirmar-anulacion');
         const texto = document.getElementById('texto-confirmar-anulacion');
         
         if (modal && texto) {
-            texto.innerHTML = `Vas a anular la venta <b>${codigoVisual || '#' + id}</b>.<br>Se devolverá el stock y se ajustará la caja.`;
+            // 🛡️ BLINDAJE 1: Actualización de mensaje con advertencia de integridad
+            texto.innerHTML = `
+                ¿Confirmas que deseas anular la venta <b>${codigoVisual || '#' + id}</b>?
+                <br><br>
+                <span style="color:#ef4444; font-size:12px; font-weight:700;">
+                    ⚠️ IMPACTO: Se devolverán los productos (e ingredientes) al stock y se restará el ingreso de la caja chica.
+                </span>`;
             modal.classList.add('active');
         } else {
-            // Si falta el HTML del modal, usamos confirm nativo como respaldo
-            if(confirm(`¿Anular venta #${id}?`)) {
+            // 🛡️ BLINDAJE 2: Sustitución de confirm nativo por modal SuperNova
+            const confirmado = await showConfirm(
+                `¿Deseas anular la venta ${codigoVisual || '#' + id}? Esta acción es irreversible.`,
+                "Confirmar Anulación"
+            );
+            
+            if (confirmado) {
                 confirmarAnulacionBackend();
             }
         }
-    }
+    };
 
     // Paso 2: Ejecutar Borrado
-   window.confirmarAnulacionBackend = async function() {
+    window.confirmarAnulacionBackend = async function() {
         if (!idVentaParaAnular) return;
         
-        cerrarModalConfirmacion(); // Cierra la pregunta "¿Estás seguro?"
+        // Identificamos el botón dentro del modal para dar feedback visual
+        const btnConfirmar = document.querySelector('#modal-confirmar-anulacion .btn-primary');
+        const textoOriginal = btnConfirmar ? btnConfirmar.innerHTML : 'Confirmar';
 
         try {
+            // 🛡️ BLINDAJE 1: Bloqueo de UI para evitar múltiples clics
+            if (btnConfirmar) {
+                btnConfirmar.disabled = true;
+                btnConfirmar.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Procesando...";
+            }
+
             const token = localStorage.getItem('token');
             const res = await fetch(`${API_BASE}/ventas/${idVentaParaAnular}`, {
                 method: 'DELETE',
-                headers: { 'x-auth-token': token }
+                headers: { 
+                    'x-auth-token': token,
+                    'Content-Type': 'application/json'
+                }
             });
             
             const data = await res.json();
 
+            // Cerramos el modal de confirmación antes de mostrar el resultado
+            cerrarModalConfirmacion(); 
+
             if (res.ok) {
-                // ✅ AQUÍ ESTÁ EL CAMBIO: Usamos el modal bonito en vez de alert()
-                mostrarExito(data.msg || "Venta anulada y stock devuelto correctamente.");
-                cargarHistorial(); // Recargar la tabla
+                // ✅ ÉXITO: Los productos e ingredientes han vuelto al stock
+                showToast(data.msg || "Venta anulada. El stock y la caja han sido actualizados.", "success");
+                
+                // Recargar la tabla con los datos frescos del servidor
+                if (typeof cargarHistorial === 'function') {
+                    await cargarHistorial(); 
+                }
             } else {
-                // ❌ Error bonito
-                mostrarError(data.msg || "No se pudo anular la venta.");
+                // ❌ ERROR: Problemas de lógica (ej. venta ya anulada o periodo de cierre de caja)
+                showToast(data.msg || "No se pudo completar la anulación.", "error");
             }
         } catch (e) {
-            console.error(e);
-            mostrarError("Error de conexión con el servidor.");
+            console.error("Error crítico en anulación:", e);
+            showToast("Error de conexión: No se pudo comunicar con el servidor.", "error");
         } finally {
+            // 🛡️ BLINDAJE 2: Limpieza de variables y restauración de UI
             idVentaParaAnular = null;
+            if (btnConfirmar) {
+                btnConfirmar.disabled = false;
+                btnConfirmar.innerHTML = textoOriginal;
+            }
         }
-    }
+    };
 
     window.cerrarModalConfirmacion = function() {
         const modal = document.getElementById('modal-confirmar-anulacion');

@@ -171,7 +171,7 @@ exports.obtenerRecetaCombo = async (req, res) => {
     }
 };
 
-// 3. OBTENER KARDEX (CORREGIDO: PRECIO HISTÓRICO CONGELADO)
+// 1. OBTENER KARDEX (VERSION BLINDADA: COMPONENTES DE COMBO CON PRECIO 0)
 exports.obtenerKardex = async (req, res) => {
     try {
         const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
@@ -192,10 +192,12 @@ exports.obtenerKardex = async (req, res) => {
                 m.motivo,
                 COALESCE(m.costo_unitario_movimiento, 0) as costo_unitario,
                 
-                -- 🔥 CAMBIO CLAVE: Prioridad al precio histórico guardado
-                -- Si existe el precio histórico (ventas nuevas), usa ese. Si no (ventas viejas), usa el actual.
+                -- 🛡️ BLINDAJE DE PRECIO:
+                -- Usamos COALESCE para verificar si existe precio_venta_historico. 
+                -- Si es 0 (como en los ingredientes de combos), se queda en 0.
+                -- Solo si es NULL (ventas muy antiguas) recurre al precio actual del producto.
                 CASE 
-                    WHEN m.precio_venta_historico > 0 THEN m.precio_venta_historico
+                    WHEN m.precio_venta_historico IS NOT NULL THEN m.precio_venta_historico
                     ELSE COALESCE(p.precio_venta, 0)
                 END as precio_venta
 
@@ -209,6 +211,7 @@ exports.obtenerKardex = async (req, res) => {
         const params = [];
         let paramIndex = 1;
 
+        // Filtro por Sede según Rol
         if (esSuperAdmin) {
             if (filtroSedeId) {
                 query += ` AND m.sede_id = $${paramIndex}`;
@@ -221,13 +224,14 @@ exports.obtenerKardex = async (req, res) => {
             paramIndex++;
         }
 
-        query += ` ORDER BY m.fecha DESC LIMIT 100`;
+        // Filtros opcionales de fecha o producto podrían ir aquí
+        query += ` ORDER BY m.fecha DESC LIMIT 150`;
 
         const result = await pool.query(query, params);
         res.json(result.rows);
 
     } catch (err) {
-        console.error(err);
+        console.error("❌ Error en obtenerKardex:", err.message);
         res.status(500).send('Error al obtener kardex');
     }
 };

@@ -68,7 +68,7 @@
         cargarMovimientos();
     }
 
-// --- 1. CARGAR KPIS Y RESUMEN ---
+// --- 1. CARGAR RESUMEN DE CAJA ---
     async function cargarResumen() {
         try {
             const token = localStorage.getItem('token');
@@ -80,31 +80,38 @@
                 const data = await res.json();
                 resumenGlobal = data.desglose;
                 
+                // 🛡️ Sincronización de Seguridad: Tope y Alerta
                 topeActual = data.topeAutorizado || 1000;
                 efectivoActual = parseFloat(data.desglose.hoy.efectivo || 0);
 
-                // 🔥 2. VERIFICAR ALERTA INMEDIATAMENTE
+                // 🔥 Verificamos si debemos mostrar la pantalla roja de alerta
                 verificarAlertaEfectivo();
 
-                // Pintar los cuadros de arriba (Total General)
+                // Función interna para pintar KPIs con lógica de color
                 const setKpi = (id, valor) => {
                     const el = document.getElementById(id);
                     if(!el) return;
                     const val = parseFloat(valor || 0);
-                    el.innerText = `S/ ${val.toFixed(2)}`;
-                    el.style.color = val >= 0 ? '#1e293b' : '#dc2626'; 
+                    
+                    // Formato de moneda peruana
+                    el.innerText = `S/ ${val.toLocaleString('es-PE', {minimumFractionDigits: 2})}`;
+                    
+                    // 🎨 Blindaje Visual: Rojo si el balance es negativo (pérdida)
+                    el.style.color = val >= 0 ? '#1e293b' : '#ef4444'; 
                 };
 
+                // Actualizamos los 4 cuadros principales
                 setKpi('kpi-dia', data.dia);
                 setKpi('kpi-semana', data.semana);
                 setKpi('kpi-mes', data.mes);
                 setKpi('kpi-anio', data.anio);
                 
-                // ❌ AQUÍ BORRASTE TODO EL BLOQUE DE 'const setPerdida' y sus llamadas
-
+                // Actualizamos el desglose por métodos (Efectivo, Yape, etc.)
                 actualizarVistaDesglose('hoy'); 
             }
-        } catch (e) { console.error("Error KPIs:", e); }
+        } catch (e) { 
+            console.error("Error al cargar resumen de caja:", e); 
+        }
     }
 
     // --- FUNCIONES PARA LAS PESTAÑAS DE DESGLOSE ---
@@ -196,7 +203,7 @@
         updateVal('val-plin', datos.plin);
         updateVal('val-transferencia', datos.transferencia);
         updateVal('val-debito', datos.debito);
-        updateVal('val-credito', datos.credito);
+        updateVal('val-credito', datos.credito); // <-- Este es el que ahora recibirá los S/ 10.40
     }
 
     // --- 2. CARGAR MOVIMIENTOS (TABLA) ---

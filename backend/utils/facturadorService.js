@@ -7,8 +7,22 @@ const axios = require('axios');
  */
 const enviarFactura = async (data) => {
     try {
-        // 1. Mapear los items con precisión financiera
-        const itemsMapeados = data.detalles.map((item, index) => {
+        // 🛡️ BLINDAJE 1: Filtrar componentes de combo (Precio 0) antes del mapeo
+        // SUNAT no acepta ítems con total 0 en operaciones gravadas (Error 3105).
+        const detallesValidos = data.detalles.filter(item => Number(item.precio_unitario) > 0);
+
+        // 🛡️ BLINDAJE 2: Validar si quedó al menos un ítem con valor comercial
+        if (detallesValidos.length === 0) {
+            console.warn(`[FACTURACIÓN] ⚠️ Venta ID ${data.id_venta} no tiene ítems con precio > 0. Abortando envío a Nubefact.`);
+            return { 
+                errors: false, 
+                message: "Comprobante interno: No contiene ítems gravados para SUNAT.",
+                ignorar_actualizacion: true 
+            };
+        }
+
+        // 1. Mapear los items con precisión financiera (Solo los válidos)
+        const itemsMapeados = detallesValidos.map((item, index) => {
             const precioConIgv = Number(item.precio_unitario);
             const cantidad = Number(item.cantidad);
             
@@ -17,8 +31,6 @@ const enviarFactura = async (data) => {
             const igvUnitario = precioConIgv - valorUnitario;
             
             const descripcion = item.nombre_producto_historico || item.nombre_producto || "Producto Varios";
-            
-            // El código de ítem debe ser consistente, usamos el ID del producto si existe
             const codigoProducto = item.producto_id ? `P-${item.producto_id}` : `REF-${index + 1}`;
 
             return {
@@ -39,22 +51,17 @@ const enviarFactura = async (data) => {
             };
         });
 
-        /**
-         * 🛡️ PROTECCIÓN DE IDEMPOTENCIA
-         * Usamos el ID de la venta de la base de datos para evitar duplicados.
-         * Si data.id_venta no viene, lanzamos error para proteger la integridad.
-         */
         if (!data.id_venta) {
             throw new Error("El ID de venta es obligatorio para garantizar la unicidad del comprobante.");
         }
         const codigoUnicoDocumento = `SUPERNOVA-V${data.id_venta}`;
 
-        // 2. Construir el Payload según documentación Nubefact
+        // 2. Construir el Payload
         const payload = {
             operacion: "generar_comprobante",
-            tipo_de_comprobante: data.tipo_de_comprobante, // 1=Factura, 2=Boleta
+            tipo_de_comprobante: data.tipo_de_comprobante, 
             serie: data.serie,
-            numero: null, // Autogenerado por Nubefact
+            numero: null, 
             sunat_transaction: 1,
             cliente_tipo_de_documento: data.cliente_tipo_de_documento,
             cliente_numero_de_documento: data.cliente_numero_de_documento,
@@ -62,7 +69,7 @@ const enviarFactura = async (data) => {
             cliente_direccion: data.cliente_direccion ? data.cliente_direccion.toUpperCase() : "",
             cliente_email: data.cliente_email || "",
             fecha_de_emision: new Date().toISOString().split('T')[0],
-            moneda: 1, // Soles
+            moneda: 1, 
             porcentaje_de_igv: 18.00,
             total_gravada: Number(data.total_gravada).toFixed(2),
             total_igv: Number(data.total_igv).toFixed(2),
@@ -73,10 +80,8 @@ const enviarFactura = async (data) => {
             enviar_automaticamente_al_cliente: !!data.cliente_email
         };
 
-        console.log(`[FACTURACIÓN] 📤 Intentando emitir comprobante: ${codigoUnicoDocumento} para sede: ${data.sede_id || 'N/A'}`);
-
         const response = await axios.post(data.ruta, payload, {
-            timeout: 15000, // 15 segundos máximo de espera
+            timeout: 15000,
             headers: {
                 'Authorization': `Bearer ${data.token}`,
                 'Content-Type': 'application/json'
@@ -87,14 +92,9 @@ const enviarFactura = async (data) => {
 
     } catch (error) {
         let errorDetalle = error.message;
-        
         if (error.response) {
-            // Error retornado por la API de Nubefact (ej. RUC no válido)
             errorDetalle = JSON.stringify(error.response.data);
             console.error("❌ Error API Nubefact:", errorDetalle);
-        } else if (error.code === 'ECONNABORTED') {
-            errorDetalle = "Tiempo de espera agotado al conectar con Nubefact.";
-            console.error("❌ Timeout:", errorDetalle);
         } else {
             console.error("❌ Error Interno Service:", errorDetalle);
         }

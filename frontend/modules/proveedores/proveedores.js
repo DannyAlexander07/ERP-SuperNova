@@ -1,11 +1,14 @@
 // Ubicacion: SuperNova/frontend/modules/proveedores/proveedores.js
 
 (function() {
-    console.log("Modulo Proveedores Activo 🚚");
+    console.log("Modulo Proveedores Blindado 🛡️🚚");
 
     let proveedoresData = [];
+    let proveedoresFiltrados = [];
+    let paginaActual = 1;
+    const filasPorPagina = 10;
 
-    // 1. CARGAR DATOS
+    // --- 1. CARGA DE DATOS ---
     async function initProveedores() {
         try {
             const token = localStorage.getItem('token');
@@ -15,126 +18,133 @@
 
             if(res.ok) {
                 proveedoresData = await res.json();
+                proveedoresFiltrados = [...proveedoresData];
                 renderTabla();
             } else {
-                console.error("Error al cargar proveedores");
+                showToast("Error al obtener la lista de socios comerciales.", "error");
             }
-        } catch (error) { console.error(error); }
+        } catch (error) { 
+            console.error(error);
+            showToast("Fallo de conexión con el servidor.", "error");
+        }
     }
 
-    // 2. RENDERIZAR TABLA
+    // --- 2. RENDERIZADO PROFESIONAL ---
     function renderTabla() {
         const tbody = document.getElementById('tabla-proveedores-body');
         if(!tbody) return;
         tbody.innerHTML = '';
 
-        if(proveedoresData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px;">No hay proveedores registrados.</td></tr>';
+        const inicio = (paginaActual - 1) * filasPorPagina;
+        const fin = inicio + filasPorPagina;
+        const datosPagina = proveedoresFiltrados.slice(inicio, fin);
+
+        if(datosPagina.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:#888;">No se encontraron registros.</td></tr>';
             return;
         }
 
-        proveedoresData.forEach(prov => {
+        datosPagina.forEach(prov => {
             const tr = document.createElement('tr');
             
-            // Etiquetas de colores para categorías
-            let catClass = 'bg-default';
-            if(prov.categoria === 'alimentos') catClass = 'bg-green'; // Verdecito
-            if(prov.categoria === 'servicios') catClass = 'bg-blue'; // Azulito
-            
-            const catLabel = prov.categoria ? prov.categoria.charAt(0).toUpperCase() + prov.categoria.slice(1) : '-';
+            // Lógica de Categorías (Coherente con CSS)
+            let catLabel = (prov.categoria || 'Varios').toUpperCase();
+            let statusClass = prov.estado === 'activo' ? 'status-active' : 'status-inactive';
 
             tr.innerHTML = `
-                <td style="font-family:monospace; font-weight:600;">${prov.ruc}</td>
-                <td style="font-weight:bold; color:#333;">${prov.razon_social}</td>
-                <td><span class="badge ${catClass}">${catLabel}</span></td>
+                <td style="font-family: 'Courier New', monospace; font-weight:700;">${prov.ruc}</td>
+                <td style="font-weight:600; color:var(--text-color-main);">${prov.razon_social}</td>
+                <td><span class="status-badge" style="background:#f0f4ff; color:#3f51b5; border:1px solid #d1d9ff;">${catLabel}</span></td>
                 <td>
-                    <div style="font-size:13px;">${prov.nombre_contacto || '-'}</div>
-                    <div style="font-size:11px; color:#888;">${prov.telefono || ''}</div>
+                    <div class="client-contact">
+                        <span><i class='bx bxs-user-circle'></i> ${prov.nombre_contacto || '-'}</span>
+                        <span style="font-size:11px;"><i class='bx bxs-phone'></i> ${prov.telefono || '-'}</span>
+                    </div>
                 </td>
-                <td style="text-align:center;">${prov.dias_credito} días</td>
-                <td><span class="status-active">Activo</span></td>
+                <td style="text-align:center; font-weight:700; color:#555;">${prov.dias_credito} <small>DÍAS</small></td>
+                <td><span class="status-badge ${statusClass}">${prov.estado || 'Activo'}</span></td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn-action edit" data-id="${prov.id}"><i class='bx bx-edit-alt'></i></button>
-                        <button class="btn-action delete" data-id="${prov.id}"><i class='bx bx-trash'></i></button>
+                        <button class="btn-action edit" onclick="window.editarProveedor(${prov.id})" title="Editar"><i class='bx bx-edit-alt'></i></button>
+                        <button class="btn-action delete" onclick="window.eliminarProveedor(${prov.id})" title="Eliminar"><i class='bx bx-trash'></i></button>
                     </div>
                 </td>
             `;
             tbody.appendChild(tr);
         });
 
-        // Eventos
-        tbody.onclick = (e) => {
-            const btnEdit = e.target.closest('.edit');
-            const btnDel = e.target.closest('.delete');
-            if (btnEdit) editarProveedor(parseInt(btnEdit.dataset.id));
-            if (btnDel) eliminarProveedor(parseInt(btnDel.dataset.id));
-        };
+        actualizarPaginacion();
     }
 
-    // 3. FORMULARIO (CREAR / EDITAR)
-    window.abrirModalProveedor = function() {
-        document.getElementById('modal-proveedor').classList.add('active');
-        document.getElementById('form-nuevo-proveedor').reset();
-        document.getElementById('prov-id').value = "";
-        document.querySelector('.modal-header h3').innerText = "Nuevo Socio Comercial";
-        document.getElementById('prov-dias').value = "0"; // Default contado
-    }
-
-    window.cerrarModalProveedor = function() {
-        document.getElementById('modal-proveedor').classList.remove('active');
-    }
-
+    // --- 3. VALIDACIÓN Y GUARDADO ---
     window.guardarProveedor = async function() {
         const id = document.getElementById('prov-id').value;
-        const ruc = document.getElementById('prov-ruc').value;
-        const razon = document.getElementById('prov-razon').value;
+        const ruc = document.getElementById('prov-ruc').value.trim();
+        const razon = document.getElementById('prov-razon').value.trim();
         const categoria = document.getElementById('prov-categoria').value;
         const dias = document.getElementById('prov-dias').value;
-        
-        if(!ruc || !razon || !categoria) return alert("Faltan datos obligatorios (RUC, Razón, Categoría)");
+        const email = document.getElementById('prov-email').value.trim();
+        const telefono = document.getElementById('prov-telefono').value.trim();
+
+        // 🛡️ BLINDAJE DE INPUTS (VALIDACIÓN AVANZADA)
+        if (!ruc || (ruc.length !== 11 && ruc.length !== 8)) {
+            return showToast("RUC inválido. Debe tener 11 dígitos (o 8 para DNI).", "error");
+        }
+        if (!razon) return showToast("La Razón Social es obligatoria.", "error");
+        if (!categoria) return showToast("Debe seleccionar una categoría.", "error");
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return showToast("El formato de correo no es válido.", "error");
+        }
+        if (telefono && telefono.length < 7) {
+            return showToast("El número de teléfono es demasiado corto.", "error");
+        }
 
         const data = {
             ruc, 
             razon, 
-            direccion: document.getElementById('prov-direccion').value,
+            direccion: document.getElementById('prov-direccion').value.trim(),
             categoria,
             dias: parseInt(dias) || 0,
-            contacto: document.getElementById('prov-contacto').value,
-            email: document.getElementById('prov-email').value,
-            telefono: document.getElementById('prov-telefono').value,
-            banco: document.getElementById('prov-banco').value
+            contacto: document.getElementById('prov-contacto').value.trim(),
+            email: email || null,
+            telefono: telefono || null,
+            banco: document.getElementById('prov-banco').value.trim(),
+            estado: 'activo'
         };
 
         try {
-            let url = '/api/proveedores';
-            let method = 'POST';
-            if(id) { url = `/api/proveedores/${id}`; method = 'PUT'; }
+            const token = localStorage.getItem('token');
+            const url = id ? `/api/proveedores/${id}` : '/api/proveedores';
+            const method = id ? 'PUT' : 'POST';
 
             const res = await fetch(url, {
                 method: method,
-                headers: { 'Content-Type': 'application/json', 'x-auth-token': localStorage.getItem('token') },
+                headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
                 body: JSON.stringify(data)
             });
 
             const resp = await res.json();
             
             if(res.ok) {
-                alert("✅ " + resp.msg);
-                cerrarModalProveedor();
+                showToast(resp.msg, "success");
+                window.cerrarModalProveedor();
                 initProveedores();
             } else {
-                alert("❌ Error: " + resp.msg);
+                showToast(resp.msg, "error");
             }
-        } catch (e) { console.error(e); alert("Error conexión"); }
-    }
+        } catch (e) { 
+            console.error(e); 
+            showToast("Error de comunicación con el servidor.", "error"); 
+        }
+    };
 
-    function editarProveedor(id) {
+    // --- 4. CRUD AUXILIARES ---
+    window.editarProveedor = function(id) {
         const prov = proveedoresData.find(p => p.id === id);
         if(!prov) return;
 
-        abrirModalProveedor();
-        document.querySelector('.modal-header h3').innerText = "Editar Proveedor";
+        window.abrirModalProveedor();
+        document.querySelector('.modal-header h3').innerText = "Actualizar Socio Comercial";
         
         document.getElementById('prov-id').value = prov.id;
         document.getElementById('prov-ruc').value = prov.ruc;
@@ -146,52 +156,62 @@
         document.getElementById('prov-email').value = prov.correo_contacto || '';
         document.getElementById('prov-telefono').value = prov.telefono || '';
         document.getElementById('prov-banco').value = prov.cuenta_bancaria || '';
-    }
+    };
 
-    async function eliminarProveedor(id) {
-        if(!confirm("¿Eliminar este proveedor?")) return;
+    window.eliminarProveedor = async function(id) {
+        const confirmado = await showConfirm("¿Estás seguro? Los proveedores con facturas registradas serán archivados en lugar de eliminados.", "Confirmar Eliminación");
+        
+        if(!confirmado) return;
+
         try {
             const res = await fetch(`/api/proveedores/${id}`, {
                 method: 'DELETE',
                 headers: { 'x-auth-token': localStorage.getItem('token') }
             });
-            if(res.ok) initProveedores();
-        } catch(e) {}
+            const data = await res.json();
+            
+            if(res.ok) {
+                showToast(data.msg, "success");
+                initProveedores();
+            } else {
+                showToast(data.msg, "error");
+            }
+        } catch(e) {
+            showToast("Error al procesar la solicitud.", "error");
+        }
+    };
+
+    // --- 5. INTERFAZ Y BÚSQUEDA ---
+    window.abrirModalProveedor = function() {
+        document.getElementById('modal-proveedor').classList.add('active');
+        document.getElementById('form-nuevo-proveedor').reset();
+        document.getElementById('prov-id').value = "";
+    };
+
+    window.cerrarModalProveedor = function() {
+        document.getElementById('modal-proveedor').classList.remove('active');
+    };
+
+    function actualizarPaginacion() {
+        const totalPaginas = Math.ceil(proveedoresFiltrados.length / filasPorPagina);
+        const info = document.querySelector('.pagination .page-info');
+        if(info) info.innerText = `Página ${paginaActual} de ${totalPaginas || 1}`;
+        
+        // El HTML debe tener botones con onclick="window.cambiarPagina(1)" etc.
     }
 
-    // Buscador Simple
     const buscador = document.getElementById('buscador-proveedores');
     if(buscador) {
-        buscador.onkeyup = (e) => {
+        buscador.oninput = (e) => {
             const term = e.target.value.toLowerCase();
-            const filtrados = proveedoresData.filter(p => 
+            proveedoresFiltrados = proveedoresData.filter(p => 
                 p.razon_social.toLowerCase().includes(term) || p.ruc.includes(term)
             );
-            // Reutilizamos lógica de renderizado simple pasando datos filtrados
-            // (Nota: renderTabla usa la variable global por defecto, hay que adaptarla un poco si queremos filtrar)
-            // Para MVP rápido:
-            renderTablaFiltrada(filtrados);
+            paginaActual = 1;
+            renderTabla();
         };
     }
 
-    function renderTablaFiltrada(lista) {
-        const original = proveedoresData;
-        proveedoresData = lista; // Truco temporal
-        renderTabla();
-        proveedoresData = original; // Restaurar
-    }
-
-    // Estilos CSS extra para badges
-    const style = document.createElement('style');
-    style.innerHTML = `
-        .bg-green { background: #e6fffa; color: #047857; }
-        .bg-blue { background: #ebf8ff; color: #2b6cb0; }
-        .bg-default { background: #f7fafc; color: #4a5568; }
-        .badge { padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
-    `;
-    document.head.appendChild(style);
-
-    // Inicio
     initProveedores();
 
 })();

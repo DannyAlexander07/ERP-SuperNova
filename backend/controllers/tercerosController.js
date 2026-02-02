@@ -1,7 +1,5 @@
 //Ubicacion: backend/controllers/tercerosController.js
 
-// Ubicacion: backend/controllers/tercerosController.js
-
 const pool = require('../db');
 
 // 1. LISTAR CANALES (Para llenar el select en el frontend)
@@ -93,24 +91,40 @@ exports.listarAcuerdos = async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 };
-// 4. CARGA MASIVA DE CÓDIGOS (Lista Blanca)
+
+// 4. CARGA MASIVA DE CÓDIGOS (Lista Blanca) - VERSIÓN BLINDADA 🛡️
 exports.cargarCodigos = async (req, res) => {
     let { acuerdo_id, canal_id, codigos, producto_id } = req.body; 
     
+    if (!acuerdo_id || !codigos || !Array.isArray(codigos)) {
+        return res.status(400).json({ error: "Datos incompletos o formato de códigos incorrecto." });
+    }
+
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
         
-        // Si no nos envían producto_id manual, buscamos el del acuerdo
-        if (!producto_id) {
-            const resAcuerdo = await client.query('SELECT producto_asociado_id FROM acuerdos_comerciales WHERE id = $1', [acuerdo_id]);
-            if (resAcuerdo.rows.length > 0) {
-                producto_id = resAcuerdo.rows[0].producto_asociado_id;
-            }
-        }
+        // 1. Obtener límites y producto del acuerdo
+        const resAcuerdo = await client.query(`
+            SELECT producto_asociado_id, cantidad_entradas 
+            FROM acuerdos_comerciales 
+            WHERE id = $1
+        `, [acuerdo_id]);
 
-        if (!producto_id) {
-            throw new Error("No se especificó un producto para descontar inventario.");
+        if (resAcuerdo.rows.length === 0) throw new Error("El acuerdo no existe.");
+
+        const { producto_asociado_id, cantidad_entradas } = resAcuerdo.rows[0];
+        const prodIdFinal = producto_id || producto_asociado_id;
+
+        if (!prodIdFinal) throw new Error("No hay un producto asociado para descontar inventario.");
+
+        // 🛡️ BLINDAJE: Validar espacio disponible antes de insertar
+        const resConteo = await client.query('SELECT COUNT(*) FROM codigos_externos WHERE acuerdo_id = $1', [acuerdo_id]);
+        const yaCargados = parseInt(resConteo.rows[0].count);
+        const cuposRestantes = cantidad_entradas - yaCargados;
+
+        if (codigos.length > cuposRestantes) {
+            throw new Error(`Operación denegada. El acuerdo solo permite ${cuposRestantes} códigos más, pero intentas cargar ${codigos.length}.`);
         }
         
         let insertados = 0;
@@ -121,23 +135,28 @@ exports.cargarCodigos = async (req, res) => {
                 `INSERT INTO codigos_externos (canal_id, acuerdo_id, codigo_unico, producto_asociado_id)
                  VALUES ($1, $2, $3, $4) 
                  ON CONFLICT (codigo_unico) DO NOTHING RETURNING id`,
-                [canal_id, acuerdo_id, cod, producto_id]
+                [canal_id || 1, acuerdo_id, cod.trim().toUpperCase(), prodIdFinal]
             );
             if (res.rows.length > 0) insertados++;
             else duplicados++;
         }
 
         await client.query('COMMIT');
-        res.json({ msg: "Proceso terminado", insertados, duplicados });
+        res.json({ 
+            msg: "Proceso de carga terminado", 
+            insertados, 
+            duplicados,
+            total_actual: yaCargados + insertados 
+        });
 
     } catch (err) {
         await client.query('ROLLBACK');
+        console.error("❌ Error en cargarCodigos:", err.message);
         res.status(500).json({ error: err.message });
     } finally {
         client.release();
     }
 };
-
 // 5. 🔥 VALIDACIÓN EN PUERTA (MODIFICADO: STATUS 200 SIEMPRE)
 exports.validarYCanjear = async (req, res) => {
     const { codigo } = req.body;
@@ -611,48 +630,72 @@ exports.obtenerHistorialTotal = async (req, res) => {
     }
 };
 
-// 15. 🔥 GENERAR CÓDIGOS AUTOMÁTICOS (NUEVO)
+// 15. 🔥 GENERAR CÓDIGOS AUTOMÁTICOS (VERSIÓN BLINDADA CON LÍMITE DE ACUERDO)
 exports.generarCodigosAutomaticos = async (req, res) => {
     const { acuerdo_id, cantidad, prefijo } = req.body;
     
-    // Validaciones básicas
+    // 🛡️ VALIDACIÓN INICIAL DE DATOS
     if (!acuerdo_id || !cantidad || cantidad <= 0) {
         return res.status(400).json({ error: "Datos inválidos (Falta acuerdo o cantidad)." });
     }
     
     const PREFIJO = (prefijo || "GEN").toUpperCase().trim();
-    const CANTIDAD = parseInt(cantidad);
+    const CANTIDAD_A_GENERAR = parseInt(cantidad);
     
-    // Límite de seguridad para no colgar el servidor
-    if (CANTIDAD > 5000) return res.status(400).json({ error: "Máximo 5000 códigos por lote." });
+    // Límite de seguridad para evitar sobrecarga del servidor en una sola petición
+    if (CANTIDAD_A_GENERAR > 5000) {
+        return res.status(400).json({ error: "El límite máximo por lote es de 5,000 códigos." });
+    }
 
     const client = await pool.connect();
+    
     try {
         await client.query('BEGIN');
 
-        // 1. Obtener datos del acuerdo para saber qué producto es
-        const resAcuerdo = await client.query('SELECT producto_asociado_id, canal_id FROM acuerdos_comerciales WHERE id = $1', [acuerdo_id]);
-        
-        if (resAcuerdo.rows.length === 0) throw new Error("Acuerdo no encontrado.");
-        
-        const { producto_asociado_id, canal_id } = resAcuerdo.rows[0];
+        // 🛡️ BLINDAJE LÓGICO INTEGRADO: 
+        // Obtenemos el límite del acuerdo y el conteo actual de códigos (manuales + auto) en una sola consulta
+        // Usamos FOR SHARE para evitar que se modifique el acuerdo mientras contamos
+        const resValidacion = await client.query(`
+            SELECT 
+                a.cantidad_entradas, 
+                a.producto_asociado_id, 
+                a.canal_id,
+                (SELECT COUNT(*) FROM codigos_externos WHERE acuerdo_id = a.id) as ya_cargados
+            FROM acuerdos_comerciales a
+            WHERE a.id = $1
+            FOR SHARE
+        `, [acuerdo_id]);
 
-        // 2. Generar Array de Códigos en Memoria
-        // Usamos Set para garantizar unicidad en memoria antes de intentar insertar
+        if (resValidacion.rows.length === 0) {
+            throw new Error("El acuerdo comercial especificado no existe.");
+        }
+
+        const { cantidad_entradas, producto_asociado_id, canal_id, ya_cargados } = resValidacion.rows[0];
+        const limiteAcuerdo = parseInt(cantidad_entradas);
+        const conteoActual = parseInt(ya_cargados);
+        const espacioDisponible = limiteAcuerdo - conteoActual;
+
+        // 🚨 BLOQUEO DE SEGURIDAD: Validar si la nueva cantidad excede el cupo total del acuerdo
+        if (CANTIDAD_A_GENERAR > espacioDisponible) {
+            throw new Error(`Límite excedido. El acuerdo permite ${limiteAcuerdo} códigos. Actualmente ya existen ${conteoActual} registrados. Solo puede generar ${espacioDisponible} adicionales.`);
+        }
+
+        // 2. Generar Array de Códigos en Memoria con Garantía de Unicidad
         const codigosGenerados = new Set();
         
-        while (codigosGenerados.size < CANTIDAD) {
-            // Generamos parte aleatoria: 4 letras + 4 números (Ej: A7X2-9M1P)
-            const randomPart = Math.random().toString(36).substring(2, 10).toUpperCase();
+        while (codigosGenerados.size < CANTIDAD_A_GENERAR) {
+            // Estructura: PREFIJO-XXXX-YYYY (Ej: BCP-A7X2-9M1P)
+            const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase() + "-" + 
+                               Math.random().toString(36).substring(2, 6).toUpperCase();
             const codigoFinal = `${PREFIJO}-${randomPart}`;
             codigosGenerados.add(codigoFinal);
         }
 
-        // 3. Insertar en Base de Datos (Bulk Insert optimizado)
+        // 3. Inserción Masiva Protegida
         let insertados = 0;
         
         for (const codigo of codigosGenerados) {
-            // Intentamos insertar. Si existe (colisión rara), simplemente lo ignoramos.
+            // ON CONFLICT asegura que si por azar extremo se repite un código, no rompa la transacción
             const resInsert = await client.query(
                 `INSERT INTO codigos_externos (canal_id, acuerdo_id, codigo_unico, producto_asociado_id, estado)
                  VALUES ($1, $2, $3, $4, 'DISPONIBLE') 
@@ -666,16 +709,19 @@ exports.generarCodigosAutomaticos = async (req, res) => {
         await client.query('COMMIT');
         
         res.json({ 
-            msg: "Generación completada", 
-            solicitados: CANTIDAD, 
-            generados_reales: insertados 
+            msg: "Generación completada exitosamente.", 
+            solicitados: CANTIDAD_A_GENERAR, 
+            generados_reales: insertados,
+            total_actual_acuerdo: conteoActual + insertados,
+            limite_acuerdo: limiteAcuerdo
         });
 
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error(err);
-        res.status(500).json({ error: "Error generando códigos: " + err.message });
+        console.error("❌ Error en generarCodigosAutomaticos:", err.message);
+        res.status(500).json({ error: err.message || "Error interno al generar códigos." });
     } finally {
         client.release();
     }
 };
+
