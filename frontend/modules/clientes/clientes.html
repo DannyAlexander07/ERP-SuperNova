@@ -1,11 +1,11 @@
 <div class="table-module-container">
     
-    <div class="module-header">
+    <div class="module-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;">
         <div class="header-titles">
             <h2>Directorio de Clientes (CRM)</h2>
             <p>Gestiona la base de datos de padres y cumpleañeros.</p>
         </div>
-        <button class="btn-primary" onclick="abrirModalCliente()">
+        <button class="btn-primary" onclick="abrirModalCliente()" style="width: auto; padding: 10px 20px;">
             <i class='bx bx-user-plus'></i> Nuevo Cliente
         </button>
     </div>
@@ -66,15 +66,28 @@
                         <label>Nombre Completo</label>
                     </div>
 
-                    <div class="row-grid">
-                        <div class="input-group">
-                            <input type="text" id="cli-dni" required placeholder=" " maxlength="15">
-                            <label>DNI / CE</label>
+                    <div class="row-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        
+                        <div class="input-group" style="position: relative;">
+                            <input type="text" id="cli-dni" required placeholder=" " maxlength="8" style="padding-right: 40px;">
+                            <label>DNI</label>
+                            <button type="button" onclick="buscarDatosClienteModal()" 
+                                    title="Buscar en RENIEC"
+                                    style="position: absolute; right: 5px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #6366f1; font-size: 20px; z-index: 10;">
+                                <i class='bx bx-search-alt'></i>
+                            </button>
                         </div>
-                        <div class="input-group">
-                            <input type="text" id="cli-ruc" placeholder=" " maxlength="11">
+
+                        <div class="input-group" style="position: relative;">
+                            <input type="text" id="cli-ruc" placeholder=" " maxlength="11" style="padding-right: 40px;">
                             <label>RUC (Opcional)</label>
+                            <button type="button" onclick="buscarDatosClienteModal()" 
+                                    title="Buscar en SUNAT"
+                                    style="position: absolute; right: 5px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #be123c; font-size: 20px; z-index: 10;">
+                                <i class='bx bx-search-alt'></i>
+                            </button>
                         </div>
+
                     </div>
 
                     <div class="row-grid">

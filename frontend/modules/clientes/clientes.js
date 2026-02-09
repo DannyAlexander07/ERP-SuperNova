@@ -353,6 +353,86 @@
     const inputFecha = document.getElementById('cli-nacimiento');
     if(inputFecha) inputFecha.addEventListener('change', window.calcularEdad);
 
+    // Función para buscar datos de cliente por DNI o RUC con UX mejorada
+    window.buscarDatosClienteModal = async function() {
+        // 1. Detectar si buscamos por DNI o por RUC
+        // Prioridad: Si hay algo escrito en RUC, busca RUC. Si no, busca DNI.
+        const inputDni = document.getElementById('cli-dni');
+        const inputRuc = document.getElementById('cli-ruc');
+        const dniVal = inputDni.value.trim();
+        const rucVal = inputRuc.value.trim();
+
+        let numero = "";
+        let tipo = "";
+
+        if (rucVal.length === 11) {
+            numero = rucVal;
+            tipo = "ruc";
+        } else if (dniVal.length === 8) {
+            numero = dniVal;
+            tipo = "dni";
+        } else {
+            return showToast("Ingrese un DNI (8 dígitos) o RUC (11 dígitos) válido para buscar.", "warning");
+        }
+
+        // 2. Efecto Visual Profesional (Sin saltos)
+        const btn = event.currentTarget; // El botón lupa presionado
+        const icon = btn.querySelector('i');
+        const originalClass = icon ? icon.className : '';
+        
+        if(icon) icon.className = 'bx bx-loader-alt bx-spin'; // Spinner
+        btn.disabled = true;
+
+        // 3. Bloqueo de campos mientras busca
+        const inputNombre = document.getElementById('cli-nombre');
+        const inputDireccion = document.getElementById('cli-direccion');
+        
+        inputNombre.placeholder = "Consultando...";
+        inputNombre.style.backgroundColor = "#f1f5f9";
+
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`/api/consultas/${numero}`, {
+                headers: { 'x-auth-token': token }
+            });
+            const data = await res.json();
+
+            if (res.ok && data.success) {
+                showToast(`✅ Encontrado: ${data.nombre}`, "success");
+                
+                // Llenar datos
+                inputNombre.value = data.nombre;
+                inputNombre.style.backgroundColor = "#dcfce7"; // Verde éxito
+
+                // Si es RUC, llenamos dirección
+                if (tipo === "ruc" && data.direccion) {
+                    inputDireccion.value = data.direccion;
+                }
+
+                // Advertencia SUNAT si no está activo
+                if (data.estado && data.estado !== 'ACTIVO') {
+                    showToast(`⚠️ Estado SUNAT: ${data.estado}`, "warning");
+                }
+
+            } else {
+                showToast("ℹ️ No encontrado. Ingrese los datos manualmente.", "info");
+                inputNombre.value = "";
+                inputNombre.style.backgroundColor = "#fff";
+                inputNombre.focus();
+            }
+
+        } catch (error) {
+            console.error("Error búsqueda cliente:", error);
+            showToast("Error de conexión al buscar datos.", "error");
+            inputNombre.style.backgroundColor = "#fff";
+        } finally {
+            // 4. Restaurar botón
+            if(icon) icon.className = originalClass;
+            btn.disabled = false;
+            inputNombre.placeholder = " ";
+        }
+    };
+
     initClientes();
 
 })();

@@ -9,6 +9,7 @@ let currentUser = {
 
 const userStr = localStorage.getItem('user');
 const token = localStorage.getItem('token');
+const APP_VERSION = '1.0.0';
 
 // 🛡️ SEGURIDAD INICIAL: Si no hay token o usuario, rebotar al login
 if (userStr && token) {
@@ -34,7 +35,7 @@ if (userStr && token) {
 } else {
     window.location.href = "index.html";
 }
-document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
+
 // 2. DEFINICIÓN DE MENÚ Y PERMISOS
 const menuItems = [
     { id: 'inicio', icon: 'bx-grid-alt', text: 'Dashboard', roles: ['superadmin', 'admin', 'colaborador', 'gerente', 'logistica'] },
@@ -101,7 +102,7 @@ function renderMenu() {
             const li = document.createElement('li');
             li.className = 'nav-link';
             li.innerHTML = `
-                <a href="#" onclick="loadModule('${item.id}'); activarLink(this)">
+                <a href="javascript:void(0)" onclick="loadModule('${item.id}'); activarLink(this)">
                     <i class='bx ${item.icon} icon'></i>
                     <span class="text nav-text">${item.text}</span>
                 </a>
@@ -136,6 +137,9 @@ let currentModuleJs = null;
 
 // --- FUNCIÓN PRINCIPAL DE CARGA DE MÓDULOS (VERSION REFORZADA) ---
 async function loadModule(moduleId) {
+    // 🛡️ 1. LIMPIEZA PREVENTIVA DE MODALES (Anti-Zombis)
+    limpiarModalesResiduales();
+
     // 🛡️ Cerrar menu movil si esta abierto
     if (window.innerWidth < 768) {
         sidebar.classList.remove("mobile-active");
@@ -145,15 +149,14 @@ async function loadModule(moduleId) {
     const menuItem = menuItems.find(item => item.id === moduleId);
     if(tituloModulo) tituloModulo.innerText = menuItem ? menuItem.text : 'Módulo';
 
-    // 1. LIMPIEZA DE RECURSOS (Garbage Collection Manual para evitar que se caiga el navegador)
+    // 2. GARBAGE COLLECTION MANUAL
     if (currentModuleCss) currentModuleCss.remove();
     if (currentModuleJs) {
-        // Al remover el script del DOM ayudamos a liberar memoria
         currentModuleJs.remove();
         currentModuleJs = null;
     }
     
-    // Si el módulo anterior dejó una función de limpieza, la ejecutamos
+    // Ejecutar destructor del módulo anterior si existe
     if (typeof window.destroyCurrentModule === 'function') {
         try { window.destroyCurrentModule(); } catch(e) {}
         window.destroyCurrentModule = null;
@@ -166,21 +169,21 @@ async function loadModule(moduleId) {
         </div>`;
 
     try {
-        // 2. Carga HTML (Añadimos version para evitar cache viejo)
-        const htmlResponse = await fetch(`modules/${moduleId}/${moduleId}.html?v=${Date.now()}`);
+        // 3. CARGA DE HTML (Con versionado para evitar caché)
+        const htmlResponse = await fetch(`modules/${moduleId}/${moduleId}.html?v=${APP_VERSION}`);
         if (!htmlResponse.ok) throw new Error("Módulo no encontrado");
         
         const htmlContent = await htmlResponse.text();
         contenedorDinamico.innerHTML = htmlContent;
 
-        // 3. Carga CSS
+        // 4. CARGA DE CSS
         currentModuleCss = document.createElement('link');
         currentModuleCss.rel = 'stylesheet';
-        currentModuleCss.href = `modules/${moduleId}/${moduleId}.css?v=${Date.now()}`;
+        currentModuleCss.href = `modules/${moduleId}/${moduleId}.css?v=${APP_VERSION}`; // <--- AQUÍ
         document.head.appendChild(currentModuleCss);
 
-        // 4. Carga JS con cache-busting
-        const jsUrl = `modules/${moduleId}/${moduleId}.js?v=${Date.now()}`;
+        // 5. CARGA DE JS
+        const jsUrl = `modules/${moduleId}/${moduleId}.js?v=${APP_VERSION}`;
         
         currentModuleJs = document.createElement('script');
         currentModuleJs.src = jsUrl;
@@ -189,7 +192,7 @@ async function loadModule(moduleId) {
         currentModuleJs.onload = () => {
             console.log(`[SuperNova] 🚀 Módulo ${moduleId} cargado satisfactoriamente.`);
             
-            // 🔥 MAPEO DE INICIALIZADORES (Mantenemos tu lógica pero centralizada)
+            // 🔥 MAPEO COMPLETO DE INICIALIZADORES
             const moduleInitializers = {
                 'inicio': 'initDashboard',
                 'facturas': 'initFacturas',
@@ -198,12 +201,25 @@ async function loadModule(moduleId) {
                 'historial': 'initHistorial',
                 'crm': 'initCRM',
                 'inventario': 'initInventario',
-                'terceros': 'initTerceros'
+                'terceros': 'initTerceros',
+                // AGREGADOS QUE FALTABAN:
+                'caja_chica': 'initCajaChica',
+                'caja': 'initCaja', // Flujo de caja
+                'proveedores': 'initProveedores',
+                'configuracion': 'initConfiguracion',
+                'perfil': 'initPerfil',
+                'calendario': 'initCalendario',
+                'ventas': 'initPOS' // Asegurando que ventas también se inicie si se llama 'initPOS' o 'initVentas'
             };
 
+            // Intentamos ejecutar el inicializador
             const initFuncName = moduleInitializers[moduleId];
+            
             if (initFuncName && typeof window[initFuncName] === 'function') {
                 window[initFuncName](); 
+            } else if (typeof window[`init${moduleId.charAt(0).toUpperCase() + moduleId.slice(1)}`] === 'function') {
+                // Fallback inteligente: si no está en el mapa, intenta initModulo (ej: initProveedores)
+                window[`init${moduleId.charAt(0).toUpperCase() + moduleId.slice(1)}`]();
             }
         };
 
@@ -212,6 +228,10 @@ async function loadModule(moduleId) {
         };
 
         document.body.appendChild(currentModuleJs);
+
+        if (!window.isHistoryNavigation) {
+            history.pushState({ module: moduleId }, "", `#${moduleId}`);
+        }
 
     } catch (error) {
         console.error("Error crítico de carga:", error);
@@ -236,7 +256,7 @@ function cerrarSesion() {
 // --- SISTEMA DE NOTIFICACIONES SUPERNOVA ---
 
 window.showMiniNotif = function(mensaje, tipo = 'success') {
-    // Si ya existe una, la quitamos
+    // Si ya existe una, la quitamos para evitar acumulación
     const actual = document.querySelector('.mini-notif');
     if(actual) actual.remove();
 
@@ -244,43 +264,96 @@ window.showMiniNotif = function(mensaje, tipo = 'success') {
     notif.className = `mini-notif ${tipo}`;
     notif.style.cssText = `
         position: fixed; top: 20px; right: 20px; padding: 15px 25px;
-        background: ${tipo === 'success' ? '#28a745' : '#dc3545'};
+        background: ${tipo === 'success' ? '#28a745' : (tipo === 'error' ? '#dc3545' : '#f59e0b')};
         color: white; border-radius: 8px; z-index: 99999;
         box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-weight: 500;
         animation: slideIn 0.3s ease forwards;
+        display: flex; align-items: center; gap: 10px;
     `;
-    notif.innerHTML = `<i class='bx ${tipo === 'success' ? 'bx-check-circle' : 'bx-error'}'></i> ${mensaje}`;
+    
+    const icono = tipo === 'success' ? 'bx-check-circle' : (tipo === 'error' ? 'bx-x-circle' : 'bx-error');
+    notif.innerHTML = `<i class='bx ${icono}' style="font-size: 20px;"></i> ${mensaje}`;
+    
     document.body.appendChild(notif);
 
+    // Auto-cierre
     setTimeout(() => {
-        notif.style.animation = 'slideOut 0.3s ease forwards';
-        setTimeout(() => notif.remove(), 300);
-    }, 3000);
+        if(notif.parentNode) {
+            notif.style.animation = 'slideOut 0.3s ease forwards';
+            setTimeout(() => notif.remove(), 300);
+        }
+    }, 3500);
 };
 
 // Estilos rápidos para las animaciones
-const style = document.createElement('style');
-style.innerHTML = `
-    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-    @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
-`;
-document.head.appendChild(style);
+if (!document.getElementById('notif-styles')) {
+    const style = document.createElement('style');
+    style.id = 'notif-styles';
+    style.innerHTML = `
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
+    `;
+    document.head.appendChild(style);
+}
 
 // Al cambiar a cualquier módulo, forzamos la limpieza de modales residuales
 function limpiarModalesResiduales() {
-    const modalesParaCerrar = [
-        'modal-success', 
-        'modal-cobro', 
-        'modal-confirmar-anulacion'
-    ];
-    
-    modalesParaCerrar.forEach(id => {
-        const modal = document.getElementById(id);
-        if (modal) {
-            modal.classList.remove('active');
-            // Si usas display: block/none manual:
-            modal.style.display = 'none'; 
-        }
+    // 1. Quitar clase active de todos los modales comunes
+    const modales = document.querySelectorAll('.modal, .modal-custom, .modal-overlay, #modal-cobro, #modal-success');
+    modales.forEach(m => {
+        m.classList.remove('active');
+        m.style.display = ''; // Limpiar estilos inline si los hubiera
     });
+
+    // 2. Eliminar backdrops residuales de bootstrap si usaras, o overlays manuales
+    const overlays = document.querySelectorAll('.overlay-movil');
+    overlays.forEach(o => o.classList.remove('active'));
 }
 
+
+// Bandera para saber si el cambio viene del botón Atrás/Adelante
+window.isHistoryNavigation = false;
+
+document.addEventListener('DOMContentLoaded', () => {
+    initSidebar();
+    renderMenu();
+    
+    // Leemos el hash de la URL (ej: #ventas)
+    const hash = window.location.hash.replace('#', '');
+    if (hash) {
+        loadModule(hash);
+        // Marcamos visualmente el menú activo
+        setTimeout(() => {
+            const link = document.querySelector(`a[onclick*="'${hash}'"]`);
+            if(link) activarLink(link);
+        }, 500); // Pequeña espera para asegurar que el menú se renderizó
+    } else {
+        loadModule('inicio');
+    }
+});
+
+// Detectar clic en Atrás/Adelante
+window.addEventListener('popstate', (event) => {
+    // Activamos bandera para que loadModule no guarde historial duplicado
+    window.isHistoryNavigation = true;
+
+    if (event.state && event.state.module) {
+        // Si el navegador recuerda el módulo, lo cargamos
+        loadModule(event.state.module);
+        
+        // Actualizamos el menú visualmente
+        const link = document.querySelector(`a[onclick*="'${event.state.module}'"]`);
+        if(link) activarLink(link);
+    } else {
+        // Si no hay estado, verificamos el hash por si acaso
+        const hash = window.location.hash.replace('#', '');
+        if (hash) {
+            loadModule(hash);
+        } else {
+            loadModule('inicio');
+        }
+    }
+    
+    // Desactivamos la bandera
+    setTimeout(() => { window.isHistoryNavigation = false; }, 100);
+});

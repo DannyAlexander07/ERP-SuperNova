@@ -557,25 +557,27 @@ async function cargarVendedores() {
         }
     }
 
-    // --- 9. MODAL COBRO FINAL (CORREGIDO: VARIABLE GLOBAL) ---
-    let leadActualParaCobro = null; // Variable para guardar el lead temporalmente
+    // --- 9. MODAL COBRO FINAL (CORREGIDO: ASYNC) ---
+    let leadActualParaCobro = null; 
 
-    window.abrirModalCobroFinal = function() {
+    // 🔥 AGREGAMOS "async" AQUÍ 👇
+    window.abrirModalCobroFinal = async function() {
         // 1. Obtener ID del Lead actual
         const leadId = document.getElementById('lead-id').value;
         if (!leadId) return showAlert("Error: No se detectó el ID del Lead.", "error");
 
-        // 2. Buscar datos del lead en memoria (leadsGlobales)
+        // 2. Buscar datos del lead en memoria
         const lead = leadsGlobales.find(l => l.id == leadId);
         if (!lead) return showAlert("Error: Lead no encontrado en memoria.", "error");
 
-        leadActualParaCobro = lead; // Guardamos para usarlo en los cálculos
+        leadActualParaCobro = lead; 
 
         // 3. Referencias al DOM
         const modal = document.getElementById('modal-cobrar-saldo');
         const inputId = document.getElementById('cobro-lead-id');
         const inputNinos = document.getElementById('cobro-ninos');
         const selectPaquete = document.getElementById('cobro-paquete');
+        const mainPaqueteSelect = document.getElementById('lead-paquete'); // Select del otro modal
         
         if (!modal) return console.error("❌ Error: Falta #modal-cobrar-saldo");
 
@@ -583,15 +585,20 @@ async function cargarVendedores() {
         inputId.value = leadId;
         inputNinos.value = document.getElementById('lead-cantidad-ninos').value; 
 
+        // 🔥 CORRECCIÓN CRÍTICA: Si el select principal está vacío, lo llenamos primero
+        // Como usamos 'await', la función padre debe ser 'async'
+        if (mainPaqueteSelect.options.length <= 1) {
+            await cargarProductosEnSelect(); 
+        }
+
         // Copiar opciones del select de paquetes
-        const mainPaqueteSelect = document.getElementById('lead-paquete');
         selectPaquete.innerHTML = mainPaqueteSelect.innerHTML;
         selectPaquete.value = mainPaqueteSelect.value;
 
-        // 🔥 BLOQUEO DE SEGURIDAD: NO PERMITIR CAMBIar EL PAQUETE AQUÍ 🔥
+        // Bloqueo de seguridad visual
         selectPaquete.disabled = true; 
-        selectPaquete.style.backgroundColor = "#e2e8f0"; // Gris claro visual
-        selectPaquete.style.cursor = "not-allowed";      // Cursor de prohibido
+        selectPaquete.style.backgroundColor = "#e2e8f0"; 
+        selectPaquete.style.cursor = "not-allowed"; 
 
         // 5. Calcular saldos iniciales
         recalcularSaldoVisual();

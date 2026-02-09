@@ -186,13 +186,32 @@ exports.actualizarFactura = async (req, res) => {
         await client.query('BEGIN');
 
         // 🚨 SINCRONIZACIÓN CON CAJA: Si el monto cambió y era Contado, actualizamos el movimiento de caja
-        const checkFac = await client.query('SELECT monto_total, forma_pago FROM facturas WHERE id = $1 FOR UPDATE', [id]);
+        const checkFac = await client.query(
+            'SELECT monto_total, forma_pago, descripcion, numero_documento FROM facturas WHERE id = $1 FOR UPDATE', 
+            [id]
+        );
         
         if (checkFac.rows.length > 0 && checkFac.rows[0].forma_pago === 'Contado') {
-            if (Number(checkFac.rows[0].monto_total) !== Number(total)) {
+            // Verificamos si cambió algo relevante para la caja (Monto, Glosa o Serie)
+            const old = checkFac.rows[0];
+            if (
+                Number(old.monto_total) !== Number(total) || 
+                old.descripcion !== glosa ||
+                old.numero_documento !== serie
+            ) {
+                // Actualizamos Monto, Categoría Y DESCRIPCIÓN para mantener la coherencia
                 await client.query(
-                    'UPDATE movimientos_caja SET monto = $1, categoria = $2 WHERE gasto_id = $3',
-                    [total, categoria, id]
+                    `UPDATE movimientos_caja 
+                     SET monto = $1, 
+                         categoria = $2,
+                         descripcion = $3 
+                     WHERE gasto_id = $4`,
+                    [
+                        total, 
+                        categoria, 
+                        `Pago Contado Fac. ${serie} (${glosa})`, // Nueva descripción sincronizada
+                        id
+                    ]
                 );
             }
         }

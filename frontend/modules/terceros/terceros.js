@@ -267,6 +267,12 @@
             return showToast("La fecha de vencimiento es obligatoria.", "warning");
         }
 
+        const fechaHoy = new Date().toISOString().split('T')[0];
+        if (nuevaFecha < fechaHoy) {
+             // Opcional: Advertencia suave en lugar de error
+             showToast("⚠️ Estás asignando una fecha pasada. Asegúrate de que sea correcto.", "warning");
+        }
+
         // Identificar el botón que disparó el evento para el feedback visual
         const btn = event.currentTarget;
         const textoOriginal = btn.innerHTML;

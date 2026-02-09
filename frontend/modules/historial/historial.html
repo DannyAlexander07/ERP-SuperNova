@@ -32,16 +32,16 @@
         <table class="premium-table">
             <thead>
                 <tr>
-                    <th>Fecha</th>
-                    <th>Sede</th>
-                    <th>Ticket</th>
-                    <th>Doc.</th> 
-                    <th>Cliente</th>
-                    <th>Método</th>
-                    <th>Total</th>
-                    <th>Vendedor</th> 
-                    <th>Usuario (Cajero)</th>
-                    <th>Acciones</th> 
+                    <th style="text-align: center;">Fecha</th>
+                    <th style="text-align: center;">Sede</th>
+                    <th style="text-align: center;">Ticket</th>
+                    <th style="text-align: center;">Doc.</th> 
+                    <th style="text-align: center;">Cliente</th>
+                    <th style="text-align: center;">Método</th>
+                    <th style="text-align: center;">Total</th>
+                    <th style="text-align: center;">Vendedor</th> 
+                    <th style="text-align: center;">Usuario (Cajero)</th>
+                    <th style="text-align: center;">Acciones</th> 
                 </tr>
             </thead>
             <tbody id="tabla-historial-body">
@@ -60,7 +60,7 @@
             <button class="btn-close" onclick="cerrarModalDetalle()"><i class='bx bx-x'></i></button>
         </div>
         <div class="modal-body" id="detalle-venta-body">
-            </div>
+        </div>
     </div>
 </div>
 
@@ -85,6 +85,66 @@
             <button class="btn-danger" onclick="confirmarAnulacionBackend()" style="padding: 10px 20px; background-color: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer;">
                 Sí, Anular
             </button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-envio-correo" class="modal-overlay">
+    <div class="modal-content center-modal" style="max-width: 400px; padding: 25px;">
+        <div class="modal-header" style="border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 15px;">
+            <h3 style="color: #6366f1; display: flex; align-items: center; gap: 10px; margin: 0;">
+                <i class='bx bx-envelope'></i> Enviar Comprobante
+            </h3>
+            <button class="btn-close" onclick="cerrarModalCorreo()" style="background:none; border:none; font-size: 20px; cursor: pointer; color: #666;"><i class='bx bx-x'></i></button>
+        </div>
+        <div class="modal-body" style="text-align: left;">
+            <p style="color: #64748b; margin-bottom: 10px; font-size: 14px;">Ingresa el correo del destinatario:</p>
+            
+            <div style="position: relative; margin-bottom: 20px;">
+                <i class='bx bx-at' style="position: absolute; left: 10px; top: 12px; color: #94a3b8;"></i>
+                <input type="email" id="input-email-envio" placeholder="cliente@ejemplo.com" 
+                       style="width: 100%; padding: 10px 10px 10px 35px; border: 1px solid #e2e8f0; border-radius: 8px; outline: none; font-size: 14px;">
+            </div>
+
+            <input type="hidden" id="hidden-venta-id-correo">
+            
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="btn-secondary" onclick="cerrarModalCorreo()" style="padding: 8px 16px; border: 1px solid #cbd5e1; background: white; border-radius: 6px; cursor: pointer;">Cancelar</button>
+                <button class="btn-primary" onclick="confirmarEnvioCorreo()" style="padding: 8px 16px; background: #6366f1; color: white; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                    <i class='bx bx-send'></i> Enviar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-envio-whatsapp" class="modal-overlay">
+    <div class="modal-content center-modal" style="max-width: 400px; padding: 25px;">
+        <div class="modal-header" style="border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 15px;">
+            <h3 style="color: #25D366; display: flex; align-items: center; gap: 10px; margin: 0;">
+                <i class='bx bxl-whatsapp'></i> Enviar por WhatsApp
+            </h3>
+            <button class="btn-close" onclick="cerrarModalWhatsapp()" style="background:none; border:none; font-size: 20px; cursor: pointer; color: #666;"><i class='bx bx-x'></i></button>
+        </div>
+        <div class="modal-body" style="text-align: left;">
+            <p style="color: #64748b; margin-bottom: 10px; font-size: 14px;">Ingresa el número (sin código de país):</p>
+            
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <div style="background: #f1f5f9; padding: 10px 15px; border-radius: 8px; color: #64748b; font-weight: bold; border: 1px solid #e2e8f0; display:flex; align-items:center;">
+                    🇵🇪 +51
+                </div>
+                <input type="tel" id="input-wsp-envio" placeholder="999000111" maxlength="9"
+                       style="flex-grow: 1; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; outline: none; font-size: 16px; letter-spacing: 1px;">
+            </div>
+
+            <input type="hidden" id="hidden-link-pdf-wsp">
+            <input type="hidden" id="hidden-cliente-wsp">
+            <input type="hidden" id="hidden-ticket-wsp"> <input type="hidden" id="hidden-total-wsp">  <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="btn-secondary" onclick="cerrarModalWhatsapp()" style="padding: 8px 16px; border: 1px solid #cbd5e1; background: white; border-radius: 6px; cursor: pointer;">Cancelar</button>
+                <button class="btn-primary" onclick="confirmarEnvioWhatsapp()" style="padding: 8px 16px; background: #25D366; color: white; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                    <i class='bx bxs-paper-plane'></i> Enviar WhatsApp
+                </button>
+            </div>
         </div>
     </div>
 </div>

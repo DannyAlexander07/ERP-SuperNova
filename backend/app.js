@@ -10,9 +10,12 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Middlewares
-app.use(cors());
-app.use(express.json()); // Permite leer JSON del frontend
+// --- MIDDLEWARES (Solo los necesarios para velocidad) ---
+app.use(cors()); // Permite que el frontend hable con el backend
+
+// Límite alto para fotos y datos
+app.use(express.json({ limit: '50mb' })); 
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // --- IMPORTAR RUTAS ---
 const authRoutes = require('./routes/authRoutes');
@@ -26,7 +29,10 @@ const ventasRoutes = require('./routes/ventasRoutes');
 const cajaRoutes = require('./routes/cajaRoutes');
 const analiticaRoutes = require('./routes/analiticaRoutes'); 
 const sedesRoutes = require('./routes/sedesRoutes');
-const tercerosRoutes = require('./routes/tercerosRoutes'); // <--- AGREGAR ESTO
+const tercerosRoutes = require('./routes/tercerosRoutes');
+const cajaChicaRoutes = require('./routes/cajaChicaRoutes');
+const facturacionRoutes = require('./routes/facturacionRoutes');
+const consultasRoutes = require('./routes/consultasRoutes');
 
 // --- DEFINIR ENDPOINTS API ---
 app.use('/api/auth', authRoutes);
@@ -40,32 +46,50 @@ app.use('/api/ventas', ventasRoutes);
 app.use('/api/caja', cajaRoutes);
 app.use('/api/analitica', analiticaRoutes);
 app.use('/api/sedes', sedesRoutes);
+app.use('/api/terceros', tercerosRoutes);
+app.use('/api/caja-chica', cajaChicaRoutes);
+app.use('/api/facturacion', facturacionRoutes);
+app.use('/api/consultas', consultasRoutes);
+
+// --- ARCHIVOS ESTÁTICOS ---
 app.use('/backend/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use('/api/caja-chica', require('./routes/cajaChicaRoutes'));
-app.use('/api/terceros', tercerosRoutes); // <--- AGREGAR ESTO
-app.use('/api/facturacion', require('./routes/facturacionRoutes'));
-
-// --- SERVIR FRONTEND ---
-app.use(express.static(path.join(__dirname, '../frontend')));
-app.use(express.static(path.join(__dirname, '../'))); // Para index.html raiz
-
-
-// --- SERVIR ARCHIVOS SUBIDOS ---
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Servir el Frontend
+app.use(express.static(path.join(__dirname, '../frontend')));
+app.use(express.static(path.join(__dirname, '../'))); 
 
-// Rutas de Vistas
+// --- RUTAS DE VISTAS (SPA / HTML) ---
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../index.html'));
+    res.sendFile(path.join(__dirname, '../index.html'));
 });
 
 app.get('/dashboard', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/dashboard.html'));
+    res.sendFile(path.join(__dirname, '../frontend/dashboard.html'));
+});
+
+// MANEJO DE RUTAS NO ENCONTRADAS (404 API)
+app.use('/api', (req, res) => {
+    res.status(404).json({ 
+        success: false, 
+        message: 'Endpoint no encontrado (404)' 
+    });
+});
+
+// MANEJADOR DE ERRORES GLOBAL
+app.use((err, req, res, next) => {
+    console.error("❌ ERROR:", err.stack);
+    res.status(500).json({ 
+        success: false, 
+        message: 'Error interno del servidor.',
+        error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
 });
 
 // Arrancar Servidor
 app.listen(port, () => {
-    console.log(`\n==================================================`);
-    console.log(`🚀 SERVIDOR LISTO EN: http://localhost:${port}`);
-    console.log(`==================================================\n`);
+    console.log(`\n==================================================`);
+    console.log(`🚀 SUPERNOVA (LITE) LISTO EN: http://localhost:${port}`);
+    console.log(`⚡ Modo Rápido: Sin restricciones de Helmet`);
+    console.log(`==================================================\n`);
 });

@@ -121,24 +121,39 @@
         actualizarVistaDesglose(periodo);
     }
 
+    // Reemplaza tu función actual con esta corregida:
     window.verificarAlertaEfectivo = function() {
         const alerta = document.getElementById('alerta-arqueo');
         const msg = document.getElementById('mensaje-alerta-arqueo');
 
+        // 🔥 CORRECCIÓN ANTI-CAÍDAS:
+        // Si por alguna razón el HTML no tiene el elemento "alerta-arqueo",
+        // detenemos la función aquí para que NO salga el error rojo.
+        if (!alerta) return; 
+
         // Solo alerta si el efectivo supera el tope autorizado
         if (efectivoActual >= topeActual) {
             alerta.style.display = 'flex'; // MOSTRAR PANTALLA ROJA
-            msg.innerText = `El efectivo actual (S/ ${efectivoActual.toFixed(2)}) ha superado el límite de S/ ${topeActual}.`;
+            
+            if(msg) {
+                msg.innerText = `El efectivo actual (S/ ${efectivoActual.toFixed(2)}) ha superado el límite de S/ ${topeActual}.`;
+            }
             
             // Calculamos el siguiente nivel (Ej: si tope es 1000 -> 2000)
             const siguienteNivel = Math.ceil((efectivoActual + 1) / 1000) * 1000;
-            document.getElementById('monto-actual-alerta').innerText = `S/ ${efectivoActual.toFixed(2)}`;
-            document.getElementById('nuevo-tope-propuesto').innerText = `S/ ${siguienteNivel}.00`;
+            
+            const txtMonto = document.getElementById('monto-actual-alerta');
+            if(txtMonto) txtMonto.innerText = `S/ ${efectivoActual.toFixed(2)}`;
+            
+            const txtNuevoTope = document.getElementById('nuevo-tope-propuesto');
+            if(txtNuevoTope) txtNuevoTope.innerText = `S/ ${siguienteNivel}.00`;
             
             // Guardamos el dato para usarlo en el botón
             window.nuevoTopeParaAutorizar = siguienteNivel;
+            document.body.style.overflow = 'hidden';
         } else {
             alerta.style.display = 'none'; // OCULTAR
+            document.body.style.overflow = 'auto';
         }
     }
 

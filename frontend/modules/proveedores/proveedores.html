@@ -64,8 +64,22 @@
                     <h4 class="form-subtitle">Datos Fiscales</h4>
                     
                     <div class="input-group">
-                        <input type="text" id="prov-ruc" required placeholder=" " maxlength="11" pattern="[0-9]*">
-                        <label>RUC / DNI</label>
+                        <div style="position: relative;">
+                            <input type="text" id="prov-ruc" required placeholder=" " maxlength="11" pattern="[0-9]*" 
+                                style="padding-right: 40px; font-weight: 600;"> 
+                            
+                            <label>RUC / DNI</label>
+                            
+                            <i class='bx bx-search-alt' 
+                            onclick="buscarDatosSunat('prov-ruc', 'prov-razon', 'prov-direccion')" 
+                            title="Consultar en SUNAT/RENIEC"
+                            style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); 
+                                    cursor: pointer; color: #4f46e5; font-size: 22px; z-index: 10; padding: 4px;">
+                            </i>
+                        </div>
+                        <small style="color: #64748b; font-size: 11px; margin-top: 4px; display: block;">
+                            <i class='bx bx-info-circle'></i> Clic en la lupa para autocompletar datos.
+                        </small>
                     </div>
 
                     <div class="input-group">

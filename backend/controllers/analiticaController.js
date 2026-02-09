@@ -1,7 +1,7 @@
 // Ubicación: SuperNova/backend/controllers/analiticaController.js
 const pool = require('../db');
 
-// 1. P&L Detallado
+// 1. P&L Detallado (Corregido para excluir anulaciones)
 exports.obtenerPyL = async (req, res) => {
     const rol = req.usuario ? req.usuario.rol.toLowerCase() : '';
     const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
@@ -28,7 +28,7 @@ exports.obtenerPyL = async (req, res) => {
 
                 UNION ALL
 
-                -- B. VENTAS POS (Tickets)
+                -- B. VENTAS POS (Tickets) - ACTUALIZADO CON FILTRO DE ANULACIÓN
                 SELECT
                     v.sede_id, s.nombre AS nombre_sede,
                     CASE 
@@ -43,6 +43,7 @@ exports.obtenerPyL = async (req, res) => {
                 JOIN sedes s ON v.sede_id = s.id
                 WHERE v.fecha_venta >= $1::date AND v.fecha_venta < ($2::date + interval '1 day')
                 AND v.estado IN ('completado', 'pagado', 'cerrado')
+                AND v.sunat_estado != 'ANULADA' 
                 AND ($3::int IS NULL OR v.sede_id = $3::int)
 
                 UNION ALL
@@ -212,37 +213,30 @@ exports.obtenerResumenGlobal = async (req, res) => {
     }
 };
 
-// 4. RESUMEN DEL DÍA (CORREGIDO: FECHA EXACTA LIMA)
+// 4. RESUMEN DEL DÍA (OPTIMIZADO VELOCIDAD EXTREMA)
 exports.obtenerResumenDia = async (req, res) => {
     const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
     const esAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
     const sedeId = req.usuario.sede_id; 
-    
-    // 🔥 CORRECCIÓN CRÍTICA DE FECHA
-    // Usamos Intl para forzar la fecha exacta en Lima sin conversión UTC automática
-    const formatter = new Intl.DateTimeFormat('en-CA', { 
-        timeZone: 'America/Lima', 
-        year: 'numeric', 
-        month: '2-digit', 
-        day: '2-digit' 
-    });
-    const hoy = formatter.format(new Date()); // Retorna "2026-01-23" EXACTO
 
-    console.log("================ DEPURACIÓN DASHBOARD V2 ================");
-    console.log("1. Hora Real Servidor:", new Date().toISOString());
-    console.log("2. FECHA LIMA FORZADA:", hoy); // <--- ESTO DEBE DECIR 2026-01-23
-    console.log("=========================================================");
+    // 1. Calculamos el Rango de Fechas (Inicio y Fin del día en Perú)
+    // Esto evita usar funciones pesadas dentro del WHERE
+    const now = new Date();
+    const inicioDia = new Date(now.toLocaleDateString("en-US", {timeZone: "America/Lima"}));
+    const finDia = new Date(inicioDia);
+    finDia.setDate(finDia.getDate() + 1);
 
     try {
-        const filtroSede = esAdmin ? "" : "AND sede_id = $2";
-        const params = esAdmin ? [hoy] : [hoy, sedeId];
+        const filtroSede = esAdmin ? "" : "AND sede_id = $3";
+        const params = esAdmin ? [inicioDia, finDia] : [inicioDia, finDia, sedeId];
 
-        // Consulta de Ventas (Usamos la fecha ya formateada correctamente)
+        // Consulta de Ventas (Usando rango >= y < para aprovechar índices)
         const ventasQuery = `
             SELECT COALESCE(SUM(total_venta), 0) as total 
             FROM ventas 
-            WHERE (fecha_venta AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima')::date = $1 
+            WHERE fecha_venta >= $1 AND fecha_venta < $2
             AND UPPER(estado) IN ('COMPLETADO', 'PAGADO', 'CERRADO')
+            AND sunat_estado != 'ANULADA'
             ${filtroSede}
         `;
         
@@ -250,7 +244,7 @@ exports.obtenerResumenDia = async (req, res) => {
         const eventosQuery = `
             SELECT COUNT(*) as cantidad 
             FROM eventos 
-            WHERE (fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima')::date = $1 
+            WHERE fecha_inicio >= $1 AND fecha_inicio < $2
             AND estado != 'cancelado' 
             ${filtroSede}
         `;
@@ -260,12 +254,10 @@ exports.obtenerResumenDia = async (req, res) => {
             pool.query(eventosQuery, params)
         ]);
 
-        console.log("💰 Ventas Encontradas:", resVentas.rows[0].total);
-
         res.json({
             ventasHoy: parseFloat(resVentas.rows[0].total),
             eventosHoy: parseInt(resEventos.rows[0].cantidad),
-            fechaServer: hoy
+            fechaServer: inicioDia.toISOString().split('T')[0]
         });
 
     } catch (err) {

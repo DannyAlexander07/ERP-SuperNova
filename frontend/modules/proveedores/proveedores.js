@@ -188,6 +188,94 @@
         document.getElementById('prov-id').value = "";
     };
 
+    // --- 6. UTILIDAD DE PAGINACIÓN ---
+    window.cambiarPaginaProv = function(delta) {
+        const totalPaginas = Math.ceil(proveedoresFiltrados.length / filasPorPagina);
+        const nuevaPagina = paginaActual + delta;
+        
+        if (nuevaPagina >= 1 && nuevaPagina <= totalPaginas) {
+            paginaActual = nuevaPagina;
+            renderTabla();
+        }
+    };
+// --- FUNCIÓN DE BÚSQUEDA INTEGRADA ---
+    window.buscarDatosSunat = async function(idDoc, idNombre, idDireccion) {
+        console.log("🔍 Iniciando búsqueda SUNAT...");
+
+        // 1. Obtener elementos del DOM
+        const inputDoc = document.getElementById(idDoc);
+        const inputNombre = document.getElementById(idNombre);
+        const inputDireccion = document.getElementById(idDireccion);
+        const iconBtn = document.getElementById('btn-search-prov'); // El icono de la lupa
+
+        if (!inputDoc || !inputNombre) return console.error("Error: Inputs no encontrados en el HTML");
+
+        const numero = inputDoc.value.trim();
+
+        // 2. Validaciones
+        if (numero.length !== 8 && numero.length !== 11) {
+            return alert("⚠️ El documento debe tener 8 (DNI) u 11 (RUC) dígitos.");
+        }
+
+        // 3. Feedback Visual (Loading)
+        if(iconBtn) {
+            iconBtn.className = 'bx bx-loader-alt bx-spin'; // Cambiar lupa por spinner
+            iconBtn.style.color = '#f59e0b'; // Color naranja
+        }
+        inputNombre.placeholder = "Buscando en SUNAT...";
+        inputNombre.value = "";
+        
+        try {
+            const token = localStorage.getItem('token');
+            console.log(`📡 Consultando API: /api/consultas/${numero}`);
+
+            // 4. Petición al Backend
+            const res = await fetch(`/api/consultas/${numero}`, {
+                headers: { 'x-auth-token': token }
+            });
+
+            const data = await res.json();
+            console.log("📥 Respuesta recibida:", data);
+
+            if (res.ok && data.success) {
+                // ✅ ÉXITO: Llenar campos
+                inputNombre.value = data.nombre; // Usamos el campo unificado
+                
+                // Efecto visual verde
+                inputNombre.style.backgroundColor = "#dcfce7";
+                setTimeout(() => inputNombre.style.backgroundColor = "#fff", 1500);
+
+                // Si es RUC, llenar dirección
+                if (data.tipo === 'RUC' && inputDireccion) {
+                    inputDireccion.value = data.direccion || '';
+                    
+                    // Alerta si el RUC no está bien
+                    if (data.estado !== 'ACTIVO' || data.condicion !== 'HABIDO') {
+                        alert(`⚠️ ALERTA: RUC ${data.estado} / ${data.condicion}`);
+                    }
+                }
+
+            } else {
+                // ❌ ERROR API
+                inputNombre.value = "";
+                inputNombre.removeAttribute('readonly');
+                inputNombre.placeholder = "No encontrado. Escriba manualmente.";
+                inputNombre.focus();
+                alert("⚠️ " + (data.msg || "No se encontraron datos."));
+            }
+
+        } catch (error) {
+            console.error("❌ Error JS:", error);
+            alert("Error de conexión con el servidor.");
+        } finally {
+            // 5. Restaurar Icono
+            if(iconBtn) {
+                iconBtn.className = 'bx bx-search-alt';
+                iconBtn.style.color = '#4f46e5';
+            }
+        }
+    };
+
     window.cerrarModalProveedor = function() {
         document.getElementById('modal-proveedor').classList.remove('active');
     };

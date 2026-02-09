@@ -1,3 +1,4 @@
+// Ubicacion: frontend/modules/analitica/analitica.js
 (function() {
     console.log("Modulo Analítica Avanzada Cargado 🚀");
 

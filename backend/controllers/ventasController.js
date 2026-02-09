@@ -2,19 +2,30 @@
 const pool = require('../db');
 const facturacionController = require('./facturacionController'); // 🔥 IMPORTANTE
 
-// 1. REGISTRAR VENTA (CON FACTURACIÓN ELECTRÓNICA, PROTECCIÓN CONTRA COLAPSOS Y GESTIÓN DE COMBOS)
+// 1. REGISTRAR VENTA (CORREGIDO: ACTUALIZA EL NOMBRE SI EL CLIENTE YA EXISTE)
 exports.registrarVenta = async (req, res) => {
     // 1. DESESTRUCTURACIÓN
     const { 
-        clienteDni, metodoPago, carrito, vendedor_id, tipo_venta, 
-        observaciones, descuento_factor,
-        tipo_comprobante, cliente_razon_social, cliente_direccion, tipo_tarjeta
+        clienteDni, 
+        metodoPago, 
+        carrito, 
+        vendedor_id, 
+        tipo_venta, 
+        observaciones, 
+        descuento_factor,
+        tipo_comprobante, 
+        cliente_razon_social, 
+        cliente_direccion, 
+        tipo_tarjeta,
+        formato_pdf,
+        cliente_nombre_completo,
+        cliente_email,
+        uuid_unico 
     } = req.body;
 
     const usuarioId = req.usuario.id;
     const sedeId = req.usuario.sede_id;
 
-    // Validación previa fuera de la transacción para ahorrar recursos
     if (!carrito || !Array.isArray(carrito) || carrito.length === 0) {
         return res.status(400).json({ msg: "El carrito de compras está vacío." });
     }
@@ -22,6 +33,23 @@ exports.registrarVenta = async (req, res) => {
     const client = await pool.connect();
 
     try {
+        // --- 🛡️ 0. DEFENSA IDEMPOTENCIA (Anti-Caída de Internet) ---
+        if (uuid_unico) {
+            const ventaExiste = await client.query(
+                'SELECT id, numero_ticket_sede, total_venta FROM ventas WHERE uuid_frontend = $1', 
+                [uuid_unico]
+            );
+            if (ventaExiste.rows.length > 0) {
+                console.log(`♻️ Venta duplicada prevenida (UUID: ${uuid_unico})`);
+                return res.json({ 
+                    msg: 'Venta recuperada (Ya procesada anteriormente)', 
+                    ventaId: ventaExiste.rows[0].id, 
+                    ticketCodigo: ventaExiste.rows[0].numero_ticket_sede, 
+                    total: ventaExiste.rows[0].total_venta 
+                });
+            }
+        }
+
         const factor = parseFloat(descuento_factor) || 0; 
         if (factor < 0 || factor > 1) throw new Error("El porcentaje de descuento no es válido.");
 
@@ -30,28 +58,77 @@ exports.registrarVenta = async (req, res) => {
         // INICIO DE TRANSACCIÓN ATÓMICA
         await client.query('BEGIN');
 
-        // A. BLOQUEO PREVENTIVO (Anti-Deadlock): Ordenar IDs de menor a mayor
+        // --- 🚩 1. FASE SOBERANÍA: GESTIÓN INTELIGENTE DEL CLIENTE ---
+        let clienteIdFinal = null;
+        
+        // Limpiamos el documento para evitar nulos o espacios
+        const documentoLimpio = (clienteDni && clienteDni !== 'PUBLICO' && clienteDni.trim() !== '') 
+            ? clienteDni.toString().trim() 
+            : '00000000';
+
+        // 🔥 DEFINIR EL NOMBRE CORRECTO ANTES DE BUSCAR
+        // Esto asegura que tengamos el nombre listo tanto para CREAR como para ACTUALIZAR
+        const nombreParaRegistro = (tipo_comprobante === 'Factura' && cliente_razon_social) 
+            ? cliente_razon_social 
+            : (cliente_nombre_completo || 'NUEVO CLIENTE');
+
+        if (documentoLimpio !== '00000000') {
+            // A. BUSCAR SI EL CLIENTE YA EXISTE (SIN IMPORTAR EL ESTADO)
+            const buscarCliente = await client.query(
+                `SELECT id FROM clientes 
+                 WHERE documento_id = $1 OR ruc = $1 
+                 LIMIT 1`,
+                [documentoLimpio]
+            );
+
+            if (buscarCliente.rows.length > 0) {
+                // ✅ CASO 1: CLIENTE ENCONTRADO -> LO REUTILIZAMOS Y ACTUALIZAMOS SU NOMBRE
+                clienteIdFinal = buscarCliente.rows[0].id;
+                
+                // Actualizamos nombre, correo, dirección y estado
+                await client.query(
+                    `UPDATE clientes 
+                     SET nombre_completo = $1,  -- 🔥 AQUÍ SE CORRIGE EL NOMBRE "CLIENTE DNI..."
+                         correo = COALESCE($2, correo), 
+                         direccion = COALESCE($3, direccion),
+                         estado = 'ACTIVO' 
+                     WHERE id = $4`,
+                    [nombreParaRegistro, cliente_email || null, cliente_direccion || null, clienteIdFinal]
+                );
+            } else {
+                // ✅ CASO 2: NO EXISTE EN ABSOLUTO -> LO CREAMOS
+                const esRuc = documentoLimpio.length === 11;
+
+                const nuevoClienteRes = await client.query(
+                    `INSERT INTO clientes (
+                        nombre_completo, documento_id, ruc, correo, direccion, telefono, estado, categoria
+                    ) VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVO', 'nuevo') RETURNING id`,
+                    [
+                        nombreParaRegistro,                  // $1
+                        esRuc ? null : documentoLimpio,      // $2 (DNI)
+                        esRuc ? documentoLimpio : null,      // $3 (RUC)
+                        cliente_email || null,               // $4
+                        cliente_direccion || null,           // $5
+                        '-'                                  // $6 (Teléfono por defecto)
+                    ]
+                );
+                clienteIdFinal = nuevoClienteRes.rows[0].id;
+            }
+        } else {
+            // CASO 3: CLIENTE GENÉRICO (Venta rápida sin DNI)
+            const clienteVarios = await client.query("SELECT id FROM clientes WHERE documento_id = '00000000' LIMIT 1");
+            if (clienteVarios.rows.length > 0) {
+                clienteIdFinal = clienteVarios.rows[0].id;
+            }
+        }
+
+        // --- 2. FASE CÁLCULO Y BLOQUEOS ---
         const carritoOrdenado = [...carrito].sort((a, b) => a.id - b.id);
 
-        // B. OBTENER DATOS DE SEDE Y BLOQUEAR
-        // Bloqueamos la fila de la sede para que otros cajeros esperen su turno de número de ticket
-        const sedeRes = await client.query('SELECT prefijo_ticket FROM sedes WHERE id = $1 FOR UPDATE', [sedeId]);
-        const prefijo = sedeRes.rows[0]?.prefijo_ticket || 'GEN';
-
-        // C. CALCULAR CORRELATIVO TICKET
-        const maxTicketRes = await client.query(
-            'SELECT COALESCE(MAX(numero_ticket_sede), 0) as max_num FROM ventas WHERE sede_id = $1',
-            [sedeId]
-        );
-        const nuevoNumeroTicket = parseInt(maxTicketRes.rows[0].max_num) + 1;
-        const codigoTicketVisual = `${prefijo}-${nuevoNumeroTicket.toString().padStart(4, '0')}`;
-
-        // D. PROCESAR TOTALES E ITEMS
         let totalCalculado = 0;
         let detalleAInsertar = [];
 
         for (const item of carritoOrdenado) {
-            // FOR SHARE asegura que nadie cambie el precio mientras procesamos
             const prodRes = await client.query(
                 'SELECT id, precio_venta, costo_compra, nombre, linea_negocio FROM productos WHERE id = $1 FOR SHARE', 
                 [item.id]
@@ -60,8 +137,11 @@ exports.registrarVenta = async (req, res) => {
             if (prodRes.rows.length === 0) throw new Error(`Producto ID ${item.id} no encontrado.`);
             const prod = prodRes.rows[0];
 
-            const precioConDescuento = Number((prod.precio_venta * (1 - factor)).toFixed(2));
+            const precioOriginal = parseFloat(prod.precio_venta);
+            const descuentoPorUnidad = Number((precioOriginal * factor).toFixed(2));
+            const precioConDescuento = Number((precioOriginal - descuentoPorUnidad).toFixed(2));
             const subtotal = Number((precioConDescuento * item.cantidad).toFixed(2));
+            
             totalCalculado += subtotal;
 
             detalleAInsertar.push({
@@ -75,39 +155,64 @@ exports.registrarVenta = async (req, res) => {
             });
         }
 
-        // Redondeo final de seguridad para evitar céntimos fantasma
-        totalCalculado = Math.round(totalCalculado * 100) / 100;
-        const subtotalFactura = totalCalculado / 1.18;
-        const igvFactura = totalCalculado - subtotalFactura;
+        totalCalculado = Number(totalCalculado.toFixed(2));
+        const subtotalFactura = Number((totalCalculado / 1.18).toFixed(2));
+        const igvFactura = Number((totalCalculado - subtotalFactura).toFixed(2));
         const lineaPrincipal = detalleAInsertar[0]?.lineaProd || 'GENERAL';
 
         let obsFinal = observaciones || '';
         if (factor > 0) obsFinal = `[Descuento: ${(factor * 100).toFixed(0)}%] ${obsFinal}`;
+        const sedeRes = await client.query('SELECT prefijo_ticket FROM sedes WHERE id = $1 FOR UPDATE', [sedeId]);
+        const prefijo = sedeRes.rows[0]?.prefijo_ticket || 'GEN';
 
-        // E. INSERTAR VENTA (Estado Inicial PENDIENTE)
+        const maxTicketRes = await client.query(
+            'SELECT COALESCE(MAX(numero_ticket_sede), 0) as max_num FROM ventas WHERE sede_id = $1',
+            [sedeId]
+        );
+        const nuevoNumeroTicket = parseInt(maxTicketRes.rows[0].max_num) + 1;
+        const codigoTicketVisual = `${prefijo}-${nuevoNumeroTicket.toString().padStart(4, '0')}`;
+
+        // --- 3. INSERTAR VENTA ---
         const ventaRes = await client.query(
             `INSERT INTO ventas
-            (sede_id, usuario_id, vendedor_id, doc_cliente_temporal, metodo_pago, total_venta, subtotal, igv, linea_negocio, numero_ticket_sede, tipo_venta, observaciones,
-             tipo_comprobante, cliente_razon_social, cliente_direccion, tipo_tarjeta, sunat_estado) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'PENDIENTE') 
+            (sede_id, usuario_id, vendedor_id, cliente_id, doc_cliente_temporal, metodo_pago, total_venta, subtotal, igv, linea_negocio, numero_ticket_sede, tipo_venta, observaciones,
+             tipo_comprobante, cliente_razon_social, cliente_direccion, tipo_tarjeta, sunat_estado, uuid_frontend, nombre_cliente_temporal) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'PENDIENTE', $18, $19) 
              RETURNING id`,
             [
-                sedeId, usuarioId, vendedorFinal, clienteDni || 'PUBLICO', metodoPago, totalCalculado, subtotalFactura, igvFactura, lineaPrincipal, nuevoNumeroTicket, tipo_venta || 'Unitaria', obsFinal,
-                tipo_comprobante || 'Boleta', cliente_razon_social || null, cliente_direccion || null, tipo_tarjeta || null
+                sedeId, 
+                usuarioId, 
+                vendedorFinal, 
+                clienteIdFinal, 
+                documentoLimpio, 
+                metodoPago, 
+                totalCalculado, 
+                subtotalFactura, 
+                igvFactura, 
+                lineaPrincipal, 
+                nuevoNumeroTicket, 
+                tipo_venta || 'Unitaria', 
+                obsFinal,
+                tipo_comprobante || 'Boleta', 
+                cliente_razon_social || null, 
+                cliente_direccion || null, 
+                tipo_tarjeta || null,
+                uuid_unico || null,
+                // 🔥 Guardamos el nombre tal cual se usó en la venta para el historial
+                nombreParaRegistro 
             ]
         );
         const ventaId = ventaRes.rows[0].id;
 
-        // F. GUARDAR DETALLES Y PROCESAR STOCK
+        // --- 4. GUARDAR DETALLES Y PROCESAR STOCK ---
         for (const item of detalleAInsertar) {
-            // 1. Insertar el Producto Principal (Padre)
             await client.query(
                 `INSERT INTO detalle_ventas (venta_id, producto_id, nombre_producto_historico, cantidad, precio_unitario, subtotal, costo_historico)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                 [ventaId, item.id, item.nombre, item.cantidad, item.precioReal, item.subtotal, item.costoReal]
             );
 
-            // 2. Gestión de Combos / Recetas (Desglose de stock)
+            // Gestión de Combos
             const esCombo = await client.query(`
                 SELECT pc.producto_hijo_id, pc.cantidad, p.nombre, p.costo_compra 
                 FROM productos_combo pc 
@@ -117,28 +222,21 @@ exports.registrarVenta = async (req, res) => {
             );
             
             if (esCombo.rows.length > 0) {
-                // Si es un combo, procesamos los componentes (Hijos)
                 for (const hijo of esCombo.rows) {
-                    // 🛡️ INSERTAR HIJOS EN DETALLE CON PRECIO 0
-                    // Esto evita duplicar ingresos pero deja rastro de qué se entregó
                     await client.query(
                         `INSERT INTO detalle_ventas (venta_id, producto_id, nombre_producto_historico, cantidad, precio_unitario, subtotal, costo_historico)
                          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                         [ventaId, hijo.producto_hijo_id, `(Hijo) ${hijo.nombre}`, item.cantidad * hijo.cantidad, 0, 0, hijo.costo_compra]
                     );
-
-                    // Descontar del Kardex el ingrediente/componente
                     await descontarStock(client, hijo.producto_hijo_id, sedeId, item.cantidad * hijo.cantidad, usuarioId, codigoTicketVisual, `Ingrediente de: ${item.nombre}`, 0);
                 }
-                // Descontar el ítem padre (el combo)
                 await descontarStock(client, item.id, sedeId, item.cantidad, usuarioId, codigoTicketVisual, 'Venta Combo', item.precioReal);
             } else {
-                // Venta de producto individual normal
                 await descontarStock(client, item.id, sedeId, item.cantidad, usuarioId, codigoTicketVisual, 'Venta Directa', item.precioReal);
             }
         }
 
-        // G. MOVIMIENTO DE CAJA
+        // --- 5. MOVIMIENTO DE CAJA ---
         if (totalCalculado > 0) {
             await client.query(
                 `INSERT INTO movimientos_caja (sede_id, usuario_id, tipo_movimiento, categoria, descripcion, monto, metodo_pago, venta_id)
@@ -147,13 +245,20 @@ exports.registrarVenta = async (req, res) => {
             );
         }
 
-        // FIN DE TRANSACCIÓN EN DB
+        // CIERRE DE TRANSACCIÓN
         await client.query('COMMIT');
 
-        // H. PROCESO DE FACTURACIÓN (ASÍNCRONO REAL)
+        // --- 6. PROCESO DE FACTURACIÓN ASÍNCRONO ---
         setImmediate(() => {
             facturacionController.emitirComprobante(
-                { body: { venta_id: ventaId }, usuario: req.usuario }, 
+                { 
+                    body: { 
+                        venta_id: ventaId,
+                        formato_pdf: formato_pdf || '3', 
+                        cliente_email: cliente_email 
+                    }, 
+                    usuario: req.usuario 
+                }, 
                 { 
                     json: (d) => console.log(`[ASYNC-FACT] Éxito Venta ${ventaId}`),
                     status: (c) => ({ json: (e) => console.error(`[ASYNC-FACT] Error Venta ${ventaId}:`, e) })
@@ -161,9 +266,8 @@ exports.registrarVenta = async (req, res) => {
             );
         });
         
-        // RESPUESTA FINAL AL FRONTEND
         res.json({ 
-            msg: 'Venta Procesada Correctamente', 
+            msg: 'Venta Procesada y Cliente Actualizado', 
             ventaId, 
             ticketCodigo: codigoTicketVisual, 
             total: totalCalculado 
@@ -172,6 +276,14 @@ exports.registrarVenta = async (req, res) => {
     } catch (err) {
         if (client) await client.query('ROLLBACK');
         console.error("❌ Error en registrarVenta:", err.message);
+        
+        // Manejo amigable de errores SQL
+        if (err.code === '23505') { 
+             return res.status(409).json({ msg: "Conflicto de datos: El cliente ya existe. Intente de nuevo." });
+        }
+        if (err.code === '40P01') { 
+            return res.status(409).json({ msg: "Sistema ocupado, por favor reintente la venta." });
+        }
         res.status(400).json({ msg: err.message });
     } finally {
         if (client) client.release();
@@ -335,94 +447,129 @@ exports.obtenerDetalleVenta = async (req, res) => {
     }
 };
 
-// 4. ANULAR VENTA (INTELIGENTE: Detecta eventos y repone stock masivo)
+// 4. ANULAR VENTA (Versión Blindada: Mantiene montos históricos y sincroniza con Nubefact)
 exports.eliminarVenta = async (req, res) => {
     const { id } = req.params;
     const usuarioId = req.usuario.id;
     
-    // Normalización de Roles
-    const rolRaw = req.usuario.rol || '';
-    const rolUsuario = rolRaw.toLowerCase().trim();
-    // Solo estos roles pueden anular
+    // Normalización de Roles para permisos
+    const rolUsuario = (req.usuario.rol || '').toLowerCase().trim();
     const rolesPermitidos = ['superadmin', 'admin', 'administrador', 'super admin', 'gerente'];
 
     const client = await pool.connect();
     try {
+        // Validar permisos
         if (!rolesPermitidos.includes(rolUsuario)) {
-            throw new Error('⛔ ACCESO DENEGADO: Permisos insuficientes.');
+            throw new Error('⛔ ACCESO DENEGADO: Permisos insuficientes para anular.');
         }
 
         await client.query('BEGIN');
         
-        // 3. Verificar venta
-        const ventaRes = await client.query('SELECT * FROM ventas WHERE id = $1', [id]);
+        // A. Verificar existencia y bloquear fila para evitar colisiones
+        const ventaRes = await client.query('SELECT * FROM ventas WHERE id = $1 FOR UPDATE', [id]);
         if (ventaRes.rows.length === 0) throw new Error('Venta no encontrada.');
+        
         const venta = ventaRes.rows[0];
+        if (venta.sunat_estado === 'ANULADA') throw new Error('Esta venta ya se encuentra anulada.');
 
-        // 4. RECUPERAR STOCK INTELIGENTE
+        // 🛡️ B. PROCESO LEGAL NUBEFACT (Operación 3: Generar Anulación)
+        if (venta.serie && venta.correlativo) {
+            try {
+                // Buscamos credenciales en la tabla de configuración
+                const configRes = await client.query(
+                    'SELECT api_url, api_token FROM nufect_config WHERE sede_id = $1 AND estado = TRUE LIMIT 1', 
+                    [venta.sede_id]
+                );
+
+                if (configRes.rows.length > 0) {
+                    const config = configRes.rows[0];
+                    const facturadorService = require('../utils/facturadorService');
+
+                    const datosAnulacion = {
+                        ruta: config.api_url,   
+                        token: config.api_token,
+                        tipo_de_comprobante: venta.tipo_comprobante === 'Factura' ? 1 : 2,
+                        serie: venta.serie,
+                        numero: venta.correlativo,
+                        motivo: "ERROR EN DIGITACION O CANCELACION DE PEDIDO", // Requisito Manual
+                        codigo_unico: `SUPERNOVA-V${venta.id}`
+                    };
+
+                    // Llamada al service con la Operación 3
+                    const nubefactRes = await facturadorService.anularComprobante(datosAnulacion);
+                    
+                    if (nubefactRes.errors) {
+                        throw new Error(`Nubefact: ${nubefactRes.message || 'Error al comunicar la baja.'}`);
+                    }
+                    
+                    // Actualizamos estado y guardamos ticket sin borrar el monto (total_venta se queda igual)
+                    await client.query(
+                        `UPDATE ventas 
+                         SET sunat_ticket_anulacion = $1, 
+                             sunat_estado = 'ANULADA',
+                             observaciones = observaciones || ' [ANULADA SUNAT TICKET: ' || $1 || ']'
+                         WHERE id = $2`,
+                        [nubefactRes.sunat_ticket_numero, id]
+                    );
+                } else {
+                    // Si no hay API, anulación local manteniendo montos
+                    await client.query(`UPDATE ventas SET sunat_estado = 'ANULADA' WHERE id = $1`, [id]);
+                }
+            } catch (dbErr) {
+                console.warn("⚠️ Advertencia: No se pudo conectar con Nubefact. Anulando localmente.");
+                await client.query(`UPDATE ventas SET sunat_estado = 'ANULADA' WHERE id = $1`, [id]);
+            }
+        } else {
+            // Ticket interno: marcar como anulada
+            await client.query(`UPDATE ventas SET sunat_estado = 'ANULADA' WHERE id = $1`, [id]);
+        }
+
+        // C. RECUPERAR STOCK (Combos e Ingredientes)
         const detallesRes = await client.query('SELECT producto_id, cantidad FROM detalle_ventas WHERE venta_id = $1', [id]);
         
         for (const item of detallesRes.rows) {
-            let cantidadAReponer = parseInt(item.cantidad) || 0; // Forzamos a que sea un número
+            if (!item.producto_id) continue;
 
-            // 🔥 CORRECCIÓN: Si es una venta de EVENTO, la cantidad real no está en el detalle, sino en el Lead.
-            if (venta.linea_negocio === 'EVENTOS' && venta.cliente_id) {
-                const leadRes = await client.query(
-                    `SELECT cantidad_ninos FROM leads WHERE cliente_asociado_id = $1 ORDER BY id DESC LIMIT 1`,
-                    [venta.cliente_id]
-                );
-                
-                // Si encontramos un lead asociado con cantidad de niños, esa es la cantidad real a reponer.
-                if (leadRes.rows.length > 0 && leadRes.rows[0].cantidad_ninos) {
-                    const cantidadNinos = parseInt(leadRes.rows[0].cantidad_ninos);
-                    if (!isNaN(cantidadNinos) && cantidadNinos > 0) {
-                        cantidadAReponer = cantidadNinos;
-                    }
-                }
-            }
-
-            if (!item.producto_id) continue; // Si no hay producto, no se puede reponer stock
-
-            // Verificamos si es combo (Receta)
             const esCombo = await client.query('SELECT producto_hijo_id, cantidad FROM productos_combo WHERE producto_padre_id = $1', [item.producto_id]);
             
             if (esCombo.rows.length > 0) {
-                // A. Reponer Ingredientes (Multiplicado por la cantidad real)
+                // Reponer Ingredientes
                 for (const hijo of esCombo.rows) {
-                    const totalInsumo = parseInt(hijo.cantidad) * cantidadAReponer;
-                    await reponerStock(client, hijo.producto_hijo_id, venta.sede_id, totalInsumo, usuarioId, id, `Anulación Evento (Ingrediente)`);
+                    const totalInsumo = Number(hijo.cantidad) * Number(item.cantidad);
+                    await reponerStock(client, hijo.producto_hijo_id, venta.sede_id, totalInsumo, usuarioId, id, `Anulación (Ingrediente)`);
                 }
-                
-                // B. Reponer Combo Principal (Si aplica y controla stock)
-                await reponerStock(client, item.producto_id, venta.sede_id, cantidadAReponer, usuarioId, id, `Anulación Evento (Combo)`);
-            } else {
-                // Producto Normal (Ej: Pulsera suelta) - Repone la cantidad real
-                await reponerStock(client, item.producto_id, venta.sede_id, cantidadAReponer, usuarioId, id, `Anulación Venta Directa`);
             }
+            // Reponer Producto Principal
+            await reponerStock(client, item.producto_id, venta.sede_id, item.cantidad, usuarioId, id, `Anulación Venta`);
         }
 
-        // 5. Eliminar Registros Financieros
-        await client.query('DELETE FROM movimientos_caja WHERE venta_id = $1', [id]);
-        await client.query('DELETE FROM detalle_ventas WHERE venta_id = $1', [id]);
-        await client.query('DELETE FROM ventas WHERE id = $1', [id]);
+        // D. REVERTIR MOVIMIENTOS FINANCIEROS (Aquí sí ponemos monto 0 porque el dinero sale de caja física)
+        await client.query(
+            `UPDATE movimientos_caja 
+             SET descripcion = '(ANULADO) ' || descripcion, 
+                 monto = 0 
+             WHERE venta_id = $1`, 
+            [id]
+        );
         
-        // Opcional: Reabrir el evento en el CRM
+        // E. REABRIR EVENTOS/LEADS SI ES VENTA DE CRM
         if (venta.origen === 'CRM_SALDO' && venta.cliente_id) {
-             // Restauramos el evento a "confirmado" para que se pueda volver a cobrar bien
-             // Usamos costo_total si total_venta no existe en la tabla eventos
              await client.query(`UPDATE eventos SET estado = 'confirmado', saldo = costo_total WHERE cliente_id = $1 AND estado = 'finalizado'`, [venta.cliente_id]);
              await client.query(`UPDATE leads SET estado = 'seguimiento' WHERE cliente_asociado_id = $1`, [venta.cliente_id]);
         }
 
         await client.query('COMMIT');
-        res.json({ msg: `Venta anulada y stock devuelto correctamente.` });
+        res.json({ 
+            success: true, 
+            msg: `Venta anulada legalmente. El historial conserva el monto pero el Dashboard lo ignorará.` 
+        });
 
     } catch (err) {
-        await client.query('ROLLBACK');
-        const status = err.message.includes('ACCESO DENEGADO') ? 403 : 400;
-        res.status(status).json({ msg: err.message });
+        if (client) await client.query('ROLLBACK');
+        console.error("❌ Error en anulación:", err.message);
+        res.status(400).json({ msg: err.message });
     } finally {
-        client.release();
+        if (client) client.release();
     }
 };
 

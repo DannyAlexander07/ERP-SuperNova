@@ -936,6 +936,7 @@ window.toggleTipoProducto = function() {
     // 1. Filtrar mientras escribes
     window.filtrarBusquedaCombo = function() {
         const input = document.getElementById('combo-search');
+        if (!input) return;
         const lista = document.getElementById('combo-results');
         const texto = input.value.toLowerCase();
 

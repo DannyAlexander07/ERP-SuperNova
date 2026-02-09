@@ -93,7 +93,7 @@
         }
     }
 
-// --- 2. RENDERIZAR TABLA (CON SOPORTE PARA COMBOS Y MOTOR SUNAT) ---
+// --- 2. RENDERIZAR TABLA (FINAL: SIN DUPLICADOS, CON % Y WHATSAPP FULL) ---
 function renderizarTablaHistorial(datos) {
     const tbody = document.getElementById('tabla-historial-body');
     if (!tbody) return;
@@ -125,23 +125,26 @@ function renderizarTablaHistorial(datos) {
         const vendedorTexto = v.nombre_vendedor ? `${v.nombre_vendedor}`.trim() : '<span style="color:#aaa;">No asignado</span>';
         const cajeroTexto = v.nombre_cajero || v.nombre_usuario || 'Sistema';
 
-        // 🔥 C. LÓGICA DE PRECIOS (Blindaje para Combos y Descuentos)
+        // 🔥 C. PRECIOS Y DESCUENTOS (% DINÁMICO)
         const totalVenta = parseFloat(v.total_venta || 0);
         let precioHtml = "";
 
-        // Si el precio es 0 pero tiene un nombre que indica que es hijo (Ingrediente/Componente)
         if (totalVenta === 0 && (v.nombre_producto_historico || "").includes("(Hijo)")) {
             precioHtml = `<span style="color:#94a3b8; font-size:11px; font-weight:700;">[INCLUIDO EN COMBO]</span>`;
         } else {
             precioHtml = `<span style="font-weight: 700; color:#16a34a; font-size:15px;">S/ ${totalVenta.toFixed(2)}</span>`;
             
-            // Etiqueta de Descuento
+            // Lógica para mostrar etiqueta de descuento
             if (v.observaciones && (v.observaciones.includes('Descuento') || v.observaciones.includes('Convenio'))) {
-                precioHtml += `<br><span style="background:#dcfce7; color:#166534; font-size:9px; padding:1px 4px; border-radius:3px; font-weight:700;">🏷️ OFF</span>`;
+                // Intenta extraer el número del porcentaje (ej: "Descuento: 20%")
+                const matchPorcentaje = v.observaciones.match(/(\d+)%/);
+                const etiquetaTexto = matchPorcentaje ? `-${matchPorcentaje[1]}%` : 'OFF';
+                
+                precioHtml += `<br><span style="background:#dcfce7; color:#15803d; font-size:10px; padding:1px 6px; border-radius:4px; font-weight:800; border:1px solid #bbf7d0;">🏷️ ${etiquetaTexto}</span>`;
             }
         }
 
-        // D. TIPO DE COMPROBANTE Y ESTADO SUNAT
+        // D. Estado SUNAT y Tipo Doc
         let tipoDocHtml = '';
         let estadoSunatHtml = '';
 
@@ -150,23 +153,13 @@ function renderizarTablaHistorial(datos) {
             let iconEstado = '';
             let btnRefrescar = '';
             
-            if (v.sunat_estado === 'ACEPTADA') { 
-                colorEstado = '#10b981'; 
-                iconEstado='bx-check'; 
-            } 
+            if (v.sunat_estado === 'ACEPTADA') { colorEstado = '#10b981'; iconEstado='bx-check'; } 
             else if (v.sunat_estado === 'PENDIENTE') { 
-                colorEstado = '#f59e0b'; 
-                iconEstado='bx-time'; 
+                colorEstado = '#f59e0b'; iconEstado='bx-time'; 
                 btnRefrescar = `<i class='bx bx-refresh' onclick="consultarEstadoSunat(${v.id})" style="cursor:pointer; margin-left:5px; font-size:14px; vertical-align:middle;" title="Actualizar estado Nubefact"></i>`;
             }
-            else if (v.sunat_estado === 'ANULADA') { 
-                colorEstado = '#ef4444'; 
-                iconEstado='bx-x'; 
-            } 
-            else if (v.sunat_estado === 'ERROR') { 
-                colorEstado = '#dc2626'; 
-                iconEstado='bx-error'; 
-            }
+            else if (v.sunat_estado === 'ANULADA') { colorEstado = '#ef4444'; iconEstado='bx-x'; } 
+            else if (v.sunat_estado === 'ERROR') { colorEstado = '#dc2626'; iconEstado='bx-error'; }
 
             estadoSunatHtml = `<div style="margin-top:2px; font-size:10px; color:${colorEstado}; font-weight:700;">
                 <i class='bx ${iconEstado}'></i> ${v.sunat_estado} ${btnRefrescar}
@@ -175,84 +168,68 @@ function renderizarTablaHistorial(datos) {
 
         const serieCorr = (v.serie && v.correlativo) ? `<br><small style="color:#666; font-family:monospace;">${v.serie}-${v.correlativo}</small>` : '';
 
-        if (v.tipo_comprobante === 'Factura') {
-            tipoDocHtml = `<span class="badge" style="background:#e0e7ff; color:#4338ca; border:1px solid #c7d2fe;">FACTURA</span>${serieCorr}${estadoSunatHtml}`;
-        } else if (v.tipo_comprobante === 'Recibo Interno') {
-            tipoDocHtml = `<span class="badge" style="background:#fff7ed; color:#c2410c; border:1px solid #fdba74;">RECIBO</span>`;
-        } else {
-            tipoDocHtml = `<span class="badge" style="background:#f3f4f6; color:#4b5563; border:1px solid #e5e7eb;">BOLETA</span>${serieCorr}${estadoSunatHtml}`;
-        }
+        if (v.tipo_comprobante === 'Factura') tipoDocHtml = `<span class="badge" style="background:#e0e7ff; color:#4338ca; border:1px solid #c7d2fe;">FACTURA</span>${serieCorr}${estadoSunatHtml}`;
+        else if (v.tipo_comprobante === 'Recibo Interno') tipoDocHtml = `<span class="badge" style="background:#fff7ed; color:#c2410c; border:1px solid #fdba74;">RECIBO</span>`;
+        else tipoDocHtml = `<span class="badge" style="background:#f3f4f6; color:#4b5563; border:1px solid #e5e7eb;">BOLETA</span>${serieCorr}${estadoSunatHtml}`;
 
-        // E. MÉTODO DE PAGO
+        // E. Método Pago
         let metodoHtml = `<span class="badge badge-soft-primary">${v.metodo_pago || '-'}</span>`;
-        if (v.metodo_pago === 'Tarjeta' && v.tipo_tarjeta) {
-            const iconoTarjeta = v.tipo_tarjeta === 'Credito' ? '🏦' : '💳';
-            metodoHtml += `<div style="font-size:10px; color:#666; margin-top:2px;">${iconoTarjeta} ${v.tipo_tarjeta}</div>`;
-        } else if (v.metodo_pago === 'Yape') {
-             metodoHtml = `<span class="badge-pago badge-yape" style="font-size:11px"><i class='bx bx-qr'></i> Yape</span>`;
-        } else if (v.metodo_pago === 'Plin') {
-             metodoHtml = `<span class="badge-pago badge-plin" style="font-size:11px"><i class='bx bx-mobile-alt'></i> Plin</span>`;
-        }
+        if (v.metodo_pago === 'Tarjeta') metodoHtml += `<div style="font-size:10px; color:#666; margin-top:2px;">${v.tipo_tarjeta === 'Credito' ? '🏦' : '💳'} ${v.tipo_tarjeta || ''}</div>`;
+        else if (v.metodo_pago === 'Yape') metodoHtml = `<span class="badge-pago badge-yape" style="font-size:11px"><i class='bx bx-qr'></i> Yape</span>`;
+        else if (v.metodo_pago === 'Plin') metodoHtml = `<span class="badge-pago badge-plin" style="font-size:11px"><i class='bx bx-mobile-alt'></i> Plin</span>`;
 
-        // F. ACCIONES Y BOTONES
-        let botonesAccion = `<div style="display:flex; gap:5px;">`;
-        
+        // 🔥 F. ACCIONES (LIMPIAS, SIN DUPLICADOS Y DATOS COMPLETOS)
+        let acciones = [];
+
+        // 1. OJO (Ver Detalle)
         if (v.origen === 'VENTA_POS' || !v.origen || v.origen === 'CRM_SALDO') {
-            botonesAccion += `<button class="btn-icon" title="Ver Detalle" onclick="verDetallesVenta(${v.id}, '${v.codigo_visual}')" style="color:#4f46e5;"><i class='bx bx-show'></i></button>`;
+            acciones.push(`<button class="btn-icon" title="Ver Detalle" onclick="verDetallesVenta(${v.id}, '${v.codigo_visual}')" style="color:#4f46e5;"><i class='bx bx-show'></i></button>`);
         } else {
-            botonesAccion += `<button class="btn-icon" title="${v.observaciones}" style="color:#059669; cursor:help;"><i class='bx bx-info-circle'></i></button>`;
+            acciones.push(`<button class="btn-icon" title="${v.observaciones}" style="color:#059669; cursor:help;"><i class='bx bx-info-circle'></i></button>`);
         }
 
+        // 2. DOCUMENTOS Y COMPARTIR
         if (v.enlace_pdf) {
-            botonesAccion += `<a href="${v.enlace_pdf}" target="_blank" class="btn-icon" title="Imprimir Ticket" style="color:#dc2626;"><i class='bx bxs-file-pdf'></i></a>`;
+            // PDF Rojo
+            acciones.push(`<a href="${v.enlace_pdf}" target="_blank" class="btn-icon" title="Imprimir" style="color:#dc2626;"><i class='bx bxs-file-pdf'></i></a>`);
+            
+            // WHATSAPP (Verde - Pasamos TODOS los datos)
+            const nombreClean = (v.nombre_cliente_temporal || 'Cliente').replace(/'/g, ""); 
+            const ticketClean = v.codigo_visual || `${v.serie}-${v.correlativo}`; // ✅ Valor real
+            const totalClean = parseFloat(v.total_venta || 0).toFixed(2);        // ✅ Valor real
+
+            acciones.push(`<button onclick="abrirModalWhatsapp('${v.enlace_pdf}', '${nombreClean}', '${ticketClean}', '${totalClean}')" class="btn-icon" title="WhatsApp" style="color:#25D366; border:none; background:transparent; cursor:pointer;"><i class='bx bxl-whatsapp' style="font-size: 1.2rem;"></i></button>`);
+            
+            // CORREO (Azul)
+            acciones.push(`<button onclick="abrirModalCorreo(${v.id})" class="btn-icon" title="Email" style="color:#0ea5e9; border:none; background:transparent; cursor:pointer;"><i class='bx bx-envelope' style="font-size: 1.2rem;"></i></button>`);
         }
+
+        // 3. XML (Gris - Ícono código)
         if (v.enlace_xml) {
-            botonesAccion += `<a href="${v.enlace_xml}" target="_blank" class="btn-icon" title="XML" style="color:#64748b;"><i class='bx bxs-file-code'></i></a>`;
+            acciones.push(`<a href="${v.enlace_xml}" target="_blank" class="btn-icon" title="Descargar XML" style="color:#475569; border:none; background:transparent;"><i class='bx bx-code-alt' style="font-size: 1.2rem;"></i></a>`);
         }
         
-        // 3. BOTÓN BORRAR (LÓGICA BLINDADA: LIBERA VENTAS POS DE COMBOS/EVENTOS)
-        let btnDeleteHtml = '';
-
-        // 🛡️ REGLA DE BLOQUEO: Solo bloqueamos si el origen es explícitamente del CRM.
-        // Eliminamos la validación por 'linea_negocio' para que las ventas de caja (POS) no tengan candado.
+        // 4. ANULAR (Rojo)
         if (v.origen === 'CRM_SALDO') {
-            btnDeleteHtml = `
-                <button class="btn-icon" title="🚫 Gestionar anulación desde CRM (Leads)" style="color:#cbd5e1; cursor:not-allowed;" onclick="mostrarError('Esta venta está vinculada a un pago de evento en CRM. Debe eliminar el Lead en el CRM para liberar el stock.')">
-                    <i class='bx bxs-lock-alt'></i>
-                </button>`;
-        } 
-        // CASO B: Comprobante ya anulado en SUNAT
-        else if (v.sunat_estado === 'ANULADA') {
-            btnDeleteHtml = `<button class="btn-icon" title="Comprobante ya anulado" style="color:#ccc; cursor:not-allowed;"><i class='bx bx-block'></i></button>`;
-        } 
-        // CASO C: Venta normal de mostrador (POS), incluyendo combos de la categoría 'EVENTOS'
-        else if (v.origen === 'VENTA_POS' || !v.origen) {
-            btnDeleteHtml = `<button class="btn-icon delete" title="Anular Venta" onclick="eliminarVenta(${v.id}, '${v.codigo_visual}')" style="color:#ef4444;">
-                                <i class='bx bx-trash'></i>
-                            </button>`;
-        } 
-        // CASO D: Otros orígenes (Módulo de Terceros/Canjes)
-        else {
-            btnDeleteHtml = `<button class="btn-icon" title="Gestionar en Módulo de Terceros" style="color:#cbd5e1; cursor:not-allowed;"><i class='bx bx-block'></i></button>`;
+            acciones.push(`<button class="btn-icon" title="Bloqueado por CRM" style="color:#cbd5e1; cursor:not-allowed;"><i class='bx bxs-lock-alt'></i></button>`);
+        } else if (v.sunat_estado === 'ANULADA') {
+            acciones.push(`<button class="btn-icon" title="Anulado" style="color:#ccc; cursor:not-allowed;"><i class='bx bx-block'></i></button>`);
+        } else if (v.origen === 'VENTA_POS' || !v.origen) {
+            acciones.push(`<button class="btn-icon delete" title="Anular" onclick="eliminarVenta(${v.id}, '${v.codigo_visual}')" style="color:#ef4444;"><i class='bx bx-trash'></i></button>`);
+        } else {
+            acciones.push(`<button class="btn-icon" style="color:#cbd5e1; cursor:not-allowed;"><i class='bx bx-block'></i></button>`);
         }
 
-        botonesAccion += btnDeleteHtml;
-        botonesAccion += `</div>`;
+        // Unir todo
+        const botonesAccionHtml = `<div style="display:flex; gap:8px; align-items:center; justify-content:center;">${acciones.join('')}</div>`;
 
-        // Renderizado Final de la Fila
         tr.innerHTML = `
             <td>
                 <div style="font-weight:600">${fechaStr}</div>
                 <div style="font-size:11px; color:#666">${horaStr}</div>
             </td>
-            <td>
-                <span style="background:#e0e7ff; color:#3730a3; padding:3px 8px; border-radius:4px; font-weight:700; font-size:11px;">
-                    ${v.nombre_sede || 'Local'}
-                </span>
-            </td>
-            <td style="font-weight:bold; font-size:14px; color:#333;">
-                ${v.codigo_visual || '#' + v.id}
-            </td>
+            <td><span style="background:#e0e7ff; color:#3730a3; padding:3px 8px; border-radius:4px; font-weight:700; font-size:11px;">${v.nombre_sede || 'Local'}</span></td>
+            <td style="font-weight:bold; font-size:14px; color:#333;">${v.codigo_visual || '#' + v.id}</td>
             <td>${tipoDocHtml}</td>
             <td>${clienteInfo}</td>
             <td>${metodoHtml}</td>
@@ -269,7 +246,7 @@ function renderizarTablaHistorial(datos) {
                     <span style="font-size:12px;">${cajeroTexto}</span>
                 </div>
             </td>
-            <td>${botonesAccion}</td>
+            <td>${botonesAccionHtml}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -277,16 +254,30 @@ function renderizarTablaHistorial(datos) {
     renderizarPaginacion(datos.length, datos);
 }
 
-// --- FUNCIÓN PARA CONSULTAR ESTADO ACTUAL EN NUBEFACT (SIN OMISIONES) ---
+// --- FUNCIÓN PARA CONSULTAR ESTADO ACTUAL EN NUBEFACT (OPTIMIZADA) ---
 window.consultarEstadoSunat = async function(ventaId) {
     console.log(`🔍 Consultando estado SUNAT para Venta ID: ${ventaId}`);
+
+    // 🔥 1. VALIDACIÓN PREVIA VISUAL (OPTIMIZACIÓN)
+    // Buscamos el elemento que disparó el clic para analizar la fila
+    const trigger = document.querySelector(`[onclick*="consultarEstadoSunat(${ventaId})"]`);
+    
+    if (trigger) {
+        const fila = trigger.closest('tr');
+        // Si visualmente ya es un RECIBO o dice NO_APLICA, bloqueamos la llamada
+        if (fila && (fila.innerText.includes('RECIBO') || fila.innerText.includes('NO_APLICA'))) {
+            return mostrarError("⚠️ Este es un documento interno. No se reporta a SUNAT.");
+        }
+    }
 
     try {
         const token = localStorage.getItem('token');
         if (!token) return console.error("No se encontró token de autenticación.");
 
-        // 1. Llamada al endpoint de facturación
-        // Nota: Asegúrate de que este endpoint exista en tu backend
+        // Feedback visual inmediato (opcional, cambia el cursor)
+        document.body.style.cursor = 'wait';
+
+        // 2. Llamada al endpoint de facturación
         const res = await fetch(`${API_BASE}/facturacion/consultar-estado/${ventaId}`, {
             method: 'GET',
             headers: { 
@@ -299,26 +290,35 @@ window.consultarEstadoSunat = async function(ventaId) {
 
         if (res.ok) {
             // ✅ ÉXITO: El estado cambió o se confirmó
-            // Usamos tu función mostrarExito para avisar al usuario
             const msgFinal = `Estado actualizado: ${data.sunat_estado || 'Procesado'}`;
             
-            // Si tienes el sistema de notificaciones mini, úsalo, si no, el modal
+            // Usar sistema de notificación disponible
             if (window.showMiniNotif) {
                 window.showMiniNotif(msgFinal, 'success');
-            } else {
+            } else if (window.mostrarExito) {
                 mostrarExito(msgFinal);
+            } else {
+                alert("✅ " + msgFinal);
             }
 
-            // 🔄 Recargamos el historial para que aparezcan los botones de PDF/XML y el badge verde
+            // 🔄 Recargamos el historial para actualizar colores y botones (PDF/XML)
             await cargarHistorial(); 
         } else {
-            // ❌ ERROR: Nubefact rechazó o hubo problema de red
-            mostrarError(data.msg || "No se pudo actualizar el estado en este momento.");
+            // ❌ ERROR: Nubefact rechazó o el documento no existe en la nube
+            const errorMsg = data.msg || "No se pudo actualizar el estado. Verifique si el comprobante fue enviado.";
+            if (window.mostrarError) {
+                mostrarError(errorMsg);
+            } else {
+                alert("❌ " + errorMsg);
+            }
         }
 
     } catch (error) {
         console.error("Error en consultarEstadoSunat:", error);
-        mostrarError("Error de conexión al intentar consultar con SUNAT/Nubefact.");
+        const netError = "Error de conexión al intentar consultar con SUNAT/Nubefact.";
+        if (window.mostrarError) window.mostrarError(netError); else alert(netError);
+    } finally {
+        document.body.style.cursor = 'default'; // Restaurar cursor
     }
 };
     
@@ -630,6 +630,161 @@ window.verDetallesVenta = async function(ventaId, codigoVisual) {
             currentPage += delta;
             renderizarTablaHistorial(datosFiltrados); 
         };
+    }
+
+    // 1. WhatsApp
+    window.abrirModalWhatsapp = function(link, nombre, ticket, total) {
+        // 1. Guardamos los datos en los inputs ocultos (HTML) en lugar de variables volátiles
+        document.getElementById('hidden-link-pdf-wsp').value = link;
+        document.getElementById('hidden-cliente-wsp').value = nombre;
+        document.getElementById('hidden-ticket-wsp').value = ticket;
+        document.getElementById('hidden-total-wsp').value = total;
+
+        // 2. Limpiamos input y mostramos modal
+        const modal = document.getElementById('modal-envio-whatsapp');
+        document.getElementById('input-wsp-envio').value = ""; 
+        
+        if(modal) {
+            modal.classList.add('active');
+            // Resetear botón por si quedó cargando antes
+            const btn = modal.querySelector('.btn-primary');
+            if(btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<i class='bx bxs-paper-plane'></i> Enviar WhatsApp`;
+                btn.style.opacity = "1";
+            }
+            setTimeout(() => document.getElementById('input-wsp-envio').focus(), 100);
+        }
+    }
+
+    window.cerrarModalWhatsapp = function() {
+        document.getElementById('modal-envio-whatsapp').classList.remove('active');
+    }
+
+    window.confirmarEnvioWhatsapp = function() {
+        const numero = document.getElementById('input-wsp-envio').value.trim();
+        const notificar = window.showMiniNotif || window.showToast || alert;
+
+        if(numero.length < 9) {
+            return notificar("⚠️ El número debe tener 9 dígitos", "warning");
+        }
+
+        // Efecto Loading
+        const modal = document.getElementById('modal-envio-whatsapp');
+        const btn = modal.querySelector('.btn-primary');
+        const textoOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Abriendo...`;
+
+        // 1. Recuperamos datos
+        const link = document.getElementById('hidden-link-pdf-wsp').value;
+        const nombre = document.getElementById('hidden-cliente-wsp').value;
+        const ticket = document.getElementById('hidden-ticket-wsp').value;
+        const total = document.getElementById('hidden-total-wsp').value;
+
+        // 🔍 DEPURACIÓN: Verificamos en consola que no sean undefined
+        console.log("DATOS WHATSAPP:", { link, nombre, ticket, total });
+
+        // 2. Saludo Inteligente
+        let saludo = "Hola!";
+        if (nombre && nombre !== 'null' && nombre !== 'undefined' && nombre.trim() !== '' && nombre !== 'Cliente') {
+            saludo = `Hola ^-^ `;
+        }
+
+        // 3. Mensaje (USANDO SÍMBOLOS SEGUROS, NO EMOJIS COMPLEJOS)
+        // Usamos saltos de línea y asteriscos
+        const mensaje = 
+        `${saludo}, gracias por tu visita a *SuperNova*.
+        Aqui tienes tu comprobante electronico:
+
+        > Ticket: *${ticket}*
+        > Total: *S/ ${total}*
+
+        Descargalo aqui:
+        ${link}`;
+
+        // 4. Enviar
+        const url = `https://wa.me/51${numero}?text=${encodeURIComponent(mensaje)}`;
+        
+        setTimeout(() => {
+            window.open(url, '_blank');
+            btn.disabled = false;
+            btn.innerHTML = textoOriginal;
+            cerrarModalWhatsapp();
+        }, 800);
+    }
+
+    // 2. Correo
+    window.abrirModalCorreo = function(id) {
+        document.getElementById('modal-envio-correo').classList.add('active');
+        document.getElementById('hidden-venta-id-correo').value = id;
+        document.getElementById('input-email-envio').value = "";
+        document.getElementById('input-email-envio').focus();
+    }
+
+    window.cerrarModalCorreo = function() {
+        document.getElementById('modal-envio-correo').classList.remove('active');
+    }
+
+    // 3. Correo: Envío usando NUESTRO BACKEND (Mejorado con Loading y Feedback)
+    window.confirmarEnvioCorreo = async function() {
+        const ventaId = document.getElementById('hidden-venta-id-correo').value;
+        const email = document.getElementById('input-email-envio').value.trim();
+
+        // Detectamos qué sistema de notificación tienes activo
+        const notificar = window.showMiniNotif || window.showToast || alert;
+
+        if(!email || !email.includes('@')) {
+            return notificar("⚠️ Por favor ingresa un correo válido", "error");
+        }
+
+        // 1. CAPTURAR EL BOTÓN Y ACTIVAR ESTADO DE CARGA
+        const modal = document.getElementById('modal-envio-correo');
+        const btn = modal.querySelector('.btn-primary');
+        const textoOriginal = btn.innerHTML; // Guardamos el texto original ("Enviar")
+
+        // Bloqueo visual
+        btn.disabled = true;
+        btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Enviando...`;
+        btn.style.opacity = "0.7";
+        btn.style.cursor = "not-allowed";
+
+        try {
+            const token = localStorage.getItem('token');
+            
+            // Llamada al backend
+            const res = await fetch('/api/facturacion/reenviar-email', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-auth-token': token 
+                },
+                body: JSON.stringify({ venta_id: ventaId, cliente_email: email })
+            });
+
+            const data = await res.json();
+
+            if(res.ok) {
+                // ✅ ÉXITO
+                notificar(`✅ Correo enviado correctamente a: ${email}`, "success");
+                cerrarModalCorreo();
+            } else {
+                // ❌ ERROR DEL BACKEND
+                notificar(`❌ Error: ${data.msg || 'No se pudo enviar'}`, "error");
+            }
+
+        } catch (error) {
+            console.error(error);
+            notificar("❌ Error de conexión con el servidor", "error");
+        } finally {
+            // 🔄 SIEMPRE RESTAURAR EL BOTÓN (Al final, salga bien o mal)
+            if(btn) {
+                btn.disabled = false;
+                btn.innerHTML = textoOriginal;
+                btn.style.opacity = "1";
+                btn.style.cursor = "pointer";
+            }
+        }
     }
 
     // INICIAR

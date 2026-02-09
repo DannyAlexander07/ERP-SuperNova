@@ -8,6 +8,14 @@
     let totalVentaOriginal = 0; 
     let categoriaActual = 'todos';
 
+    // Función para generar ID único (Anti-Doble Click)
+    function generarUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
     // --- 1. UTILIDADES VISUALES ---
     function getIconBgClass(cat) {
         switch(cat) {
@@ -385,8 +393,9 @@
         }
     }
 
-    // --- PROCESAR VENTA ---
+// --- PROCESAR VENTA (ACTUALIZADO: VALIDACIÓN ESTRICTA DE DNI/NOMBRE) ---
 window.procesarVenta = async function() {
+    // 0. Validación inicial de carrito
     if (carrito.length === 0) {
         return mostrarModalResultado("⚠️ Carrito vacío", "Por favor, añade productos antes de procesar.", "warning");
     }
@@ -394,56 +403,110 @@ window.procesarVenta = async function() {
     const btn = document.querySelector('.btn-primary.full-width');
     const originalText = btn.innerText;
     
-    // 1. Recopilar datos básicos y de comprobante
+    // 1. Recopilar datos básicos y de asignación
     const vendedorId = document.getElementById('modal-vendedor').value;
     const tipoVenta = document.getElementById('modal-tipo-venta').value;
+    
+    // Datos de Descuento
     const selectorConvenio = document.getElementById('modal-convenio');
     const descuentoFactor = parseFloat(selectorConvenio.value) || 0;
     const nombreConvenio = selectorConvenio.options[selectorConvenio.selectedIndex].text;
     
+    // 2. Recopilar métodos de pago y tarjeta
     const metodoPago = document.querySelector('input[name="pago"]:checked').value;
     let tipoTarjeta = (metodoPago === 'Tarjeta') ? document.querySelector('input[name="tipo_tarjeta"]:checked').value : null;
 
+    // 3. Recopilar datos de facturación y CLIENTE
     const tipoComprobante = document.querySelector('input[name="tipo_comprobante"]:checked').value;
-    let docCliente = "";
-    let razonSocial = null;
-    let direccion = null;
+    
+    let docCliente = "00000000";
+    let nombreCliente = "CLIENTE VARIOS"; // Valor por defecto
+    let direccionCliente = "";
     
     if (tipoComprobante === 'Factura') {
+        // --- LÓGICA FACTURA ---
         docCliente = document.getElementById('cliente-ruc').value.trim();
+        nombreCliente = document.getElementById('cliente-razon').value.trim(); 
+        direccionCliente = document.getElementById('cliente-direccion').value.trim();
+
         if(!docCliente || docCliente.length !== 11) {
             return mostrarModalResultado("RUC Inválido", "El RUC debe tener 11 dígitos exactos.", "error");
         }
-        razonSocial = document.getElementById('cliente-razon').value.trim();
-        direccion = document.getElementById('cliente-direccion').value.trim();
-        if(!razonSocial) {
-            return mostrarModalResultado("Faltan Datos", "La Razón Social es obligatoria para Facturas.", "error");
+        if(!nombreCliente) {
+            return mostrarModalResultado("Faltan Datos", "La Razón Social es obligatoria para emitir Factura.", "error");
         }
     } else {
-        docCliente = document.getElementById('cliente-dni').value.trim();
-        if(docCliente && docCliente !== 'PUBLICO' && docCliente.length !== 8) {
-            return mostrarModalResultado("DNI Inválido", "El DNI debe tener 8 dígitos.", "error");
-        }
+        // --- LÓGICA BOLETA / TICKET ---
+        const dniVal = document.getElementById('cliente-dni').value.trim();
+        // 🔥 AQUI LEEMOS EL CAMPO DONDE LA LUPA O EL USUARIO PUSO EL NOMBRE
+        const nombreVal = document.getElementById('cliente-nombre-natural').value.trim();
+        
+        if(dniVal) {
+            // Si hay DNI escrito...
+            if(dniVal.length !== 8) {
+                return mostrarModalResultado("DNI Inválido", "El DNI debe tener 8 dígitos.", "error");
+            }
+            
+            // 🔥 VALIDACIÓN NUEVA: OBLIGAR A TENER NOMBRE
+            if (!nombreVal) {
+                return mostrarModalResultado(
+                    "Falta Nombre", 
+                    "Por favor, presiona la LUPA 🔍 para buscar el nombre o escríbelo manualmente.", 
+                    "warning"
+                );
+            }
+
+            docCliente = dniVal;
+            nombreCliente = nombreVal; 
+        } 
+        // Si dniVal está vacío, se mantienen los defaults ("00000000" y "CLIENTE VARIOS")
     }
 
-    // Bloqueo de seguridad para evitar doble clic
+    // 4. CAPTURAR EMAIL
+    const emailInput = document.getElementById('cliente-email');
+    let clienteEmail = emailInput ? emailInput.value.trim().toLowerCase() : "";
+    
+    if (clienteEmail && !/^\S+@\S+\.\S+$/.test(clienteEmail)) {
+        return mostrarModalResultado("Email Inválido", "Por favor, ingresa un correo válido.", "warning");
+    }
+
+    // 5. Capturar Formato de Impresión
+    const radioFormato = document.querySelector('input[name="formato_impresion"]:checked');
+    const formatoImpresion = radioFormato ? radioFormato.value : "3"; 
+
+    // Bloqueo de botón visual
     btn.disabled = true;
     btn.innerText = "Procesando...";
 
     try {
-        // 2. Preparar Payload
+        // Generador de UUID para seguridad (Anti-duplicidad)
+        const uuidSeguridad = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+
+        // 6. Preparar Payload (DATOS LISTOS PARA EL BACKEND)
         const payload = {
             carrito: carrito.map(i => ({ id: i.id, cantidad: i.cantidad })),
             vendedor_id: vendedorId,
             tipo_venta: tipoVenta,
             metodoPago: metodoPago,
             tipo_comprobante: tipoComprobante,
-            clienteDni: docCliente || 'PUBLICO', 
-            cliente_razon_social: razonSocial,
-            cliente_direccion: direccion,
+            
+            // Datos del Cliente Procesados
+            clienteDni: docCliente, 
+            cliente_nombre_completo: nombreCliente, // Este es el nombre que saldrá en el ticket
+            cliente_razon_social: (tipoComprobante === 'Factura') ? nombreCliente : null,
+            cliente_direccion: direccionCliente,
+            cliente_email: clienteEmail,
+            
             tipo_tarjeta: tipoTarjeta,
-            observaciones: (descuentoFactor > 0) ? `Convenio: ${nombreConvenio}` : "",
-            descuento_factor: descuentoFactor
+            // Texto de observaciones para el ticket (si hay descuento)
+            observaciones: (descuentoFactor > 0) ? `[Descuento: ${(descuentoFactor * 100).toFixed(0)}%] ${nombreConvenio}` : "",
+            
+            formato_pdf: formatoImpresion,
+            descuento_factor: descuentoFactor,
+            uuid_unico: uuidSeguridad
         };
 
         const token = localStorage.getItem('token');
@@ -459,37 +522,44 @@ window.procesarVenta = async function() {
         const data = await res.json();
 
         if (res.ok) {
-            // ✅ 1. PREPARAR MODAL DE ÉXITO CON DATOS NUEVOS
-            const tituloExito = `Venta: ${data.ticketCodigo || 'Exitosa'}`;
-            const cuerpoExito = `La venta se registró correctamente. El comprobante electrónico se está procesando y aparecerá en el Historial en unos segundos.`;
-            
-            // ✅ 2. CERRAR MODALES ANTERIORES PARA EVITAR PARPADEO
-            cerrarModalCobro(); // Cierra el formulario de pago
+            cerrarModalCobro(); 
 
-            // ✅ 3. LIMPIEZA TOTAL DE VARIABLES Y UI
-            carrito = []; // Vaciar carrito en memoria
-            renderCarrito(); // Vaciar lista visual
+            // Limpieza de UI y Carrito
+            carrito = []; 
+            if(typeof renderCarrito === 'function') renderCarrito(); 
             
-            // ✅ 4. RESETEAR FORMULARIO (Evita que el próximo cliente vea datos del anterior)
-            if(document.getElementById('cliente-dni')) document.getElementById('cliente-dni').value = '';
-            if(document.getElementById('cliente-ruc')) document.getElementById('cliente-ruc').value = '';
-            if(document.getElementById('cliente-razon')) document.getElementById('cliente-razon').value = '';
-            if(document.getElementById('cliente-direccion')) document.getElementById('cliente-direccion').value = '';
+            // Resetear inputs del formulario de cliente
+            const idsReset = [
+                'cliente-dni', 
+                'cliente-nombre-natural', // 🔥 Limpiamos el nombre también
+                'cliente-ruc', 
+                'cliente-razon', 
+                'cliente-direccion', 
+                'cliente-email'
+            ];
+            idsReset.forEach(id => {
+                const el = document.getElementById(id);
+                if(el) {
+                    el.value = '';
+                    el.readOnly = false; // Desbloquear por si acaso
+                }
+            });
+            
+            // Resetear descuento
             if(document.getElementById('modal-convenio')) document.getElementById('modal-convenio').value = "0";
 
-            // ✅ 5. MOSTRAR RESULTADO FINAL
-            mostrarModalResultado(tituloExito, cuerpoExito, "success");
-
-            // ✅ 6. AJUSTE PARA MÓVIL
+            mostrarModalResultado(`Venta: ${data.ticketCodigo || 'Exitosa'}`, "Venta procesada correctamente.", "success");
+            
+            // Cerrar carrito lateral móvil si está abierto
             const ticketPanel = document.querySelector('.pos-ticket');
             if(ticketPanel) ticketPanel.classList.remove('active');
             
-            // Actualizar stock visual
-            initPOS(); 
-        } else {
-            mostrarModalResultado("❌ Error en Venta", data.msg, "error");
-        }
+            // Recargar stock visual
+            if(typeof initPOS === 'function') initPOS(); 
 
+        } else {
+            mostrarModalResultado("❌ Error en Venta", data.msg || "Error desconocido", "error");
+        }
     } catch (error) {
         console.error("Error en el flujo de venta:", error);
         mostrarModalResultado("❌ Error de Conexión", "No se pudo conectar con el servidor.", "error");
@@ -497,8 +567,7 @@ window.procesarVenta = async function() {
         btn.disabled = false;
         btn.innerText = originalText;
     }
-}
-
+};
 
     // --- JS: AGREGAR SI FALTA ---
 window.toggleCarritoMovil = function() {
@@ -560,7 +629,104 @@ window.toggleCarritoMovil = function() {
         modalResult.classList.add('active');
     };
 
+// --- CONSULTA DNI/RUC (Actualizado y Sincronizado con HTML) ---
+window.consultarIdentidadPOS = async function(tipo) {
+    // 1. Determinar si es DNI o RUC basado en el parámetro string ('dni' o 'ruc')
+    const esDNI = (tipo === 'dni');
+    const inputId = esDNI ? 'cliente-dni' : 'cliente-ruc';
     
+    // 2. Obtener elementos del DOM
+    const inputDocumento = document.getElementById(inputId);
+    const numero = inputDocumento.value.trim();
+    const token = localStorage.getItem('token');
+
+    // 3. Validaciones de longitud
+    if (esDNI && numero.length !== 8) return window.showMiniNotif("⚠️ DNI debe tener 8 dígitos.", "error");
+    if (!esDNI && numero.length !== 11) return window.showMiniNotif("⚠️ RUC debe tener 11 dígitos.", "error");
+
+    // 4. Efecto visual en el botón (Loading)
+    const btn = event.currentTarget; // El botón lupa que se presionó
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i>";
+    btn.disabled = true;
+
+    // 5. Definir campos de destino (Output)
+    const inputNombre = document.getElementById(esDNI ? 'cliente-nombre-natural' : 'cliente-razon');
+    const inputDireccion = document.getElementById('cliente-direccion'); // Solo para RUC
+    const inputEmail = document.getElementById('cliente-email');
+
+    // Bloquear input de nombre mientras busca
+    if(inputNombre) {
+        inputNombre.placeholder = "Buscando...";
+        inputNombre.value = "";
+    }
+
+    try {
+        // 🔥 LLAMADA AL BACKEND SEGURO
+        const res = await fetch(`/api/consultas/${numero}`, {
+            headers: { 'x-auth-token': token }
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+            // ✅ ÉXITO: CLIENTE ENCONTRADO
+            window.showMiniNotif(`✅ Encontrado: ${data.nombre}`);
+
+            if (inputNombre) {
+                inputNombre.value = data.nombre;
+                inputNombre.readOnly = true; // Bloquear edición si es oficial
+                inputNombre.style.backgroundColor = "#dcfce7"; // Verde éxito
+            }
+
+            if (!esDNI) {
+                // Lógica Extra para RUC
+                if (inputDireccion) {
+                    inputDireccion.value = data.direccion || "";
+                    inputDireccion.readOnly = true;
+                }
+                
+                // Advertencias de estado SUNAT
+                if (data.estado !== 'ACTIVO') {
+                    window.showMiniNotif(`⚠️ RUC en estado: ${data.estado}`, "warning");
+                }
+            }
+
+            // Desbloquear email por si quieren editarlo
+            if (inputEmail) inputEmail.readOnly = false;
+
+        } else {
+            // ❌ NO ENCONTRADO (Modo Manual)
+            window.showMiniNotif("ℹ️ No encontrado. Ingrese datos manualmente.", "info");
+
+            // Desbloquear para escribir
+            if (inputNombre) {
+                inputNombre.value = "";
+                inputNombre.readOnly = false;
+                inputNombre.placeholder = "Escriba el nombre aquí...";
+                inputNombre.style.backgroundColor = "#fff";
+                inputNombre.focus(); // Poner cursor listo para escribir
+            }
+
+            if (!esDNI && inputDireccion) {
+                inputDireccion.readOnly = false;
+                inputDireccion.value = "";
+            }
+        }
+
+    } catch (error) {
+        console.error("Error en consulta API:", error);
+        window.showMiniNotif("❌ Error de conexión con el servidor.", "error");
+        
+        // En caso de error crítico, desbloquear para permitir venta manual
+        if(inputNombre) inputNombre.readOnly = false;
+        
+    } finally {
+        // Restaurar botón
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    }
+};
 
     initPOS();
 })();

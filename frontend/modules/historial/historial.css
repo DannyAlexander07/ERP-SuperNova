@@ -461,3 +461,11 @@
     background-color: #e5e7eb;
     color: #1f2937;
 }
+
+/* Corrección para que el TOTAL no se rompa en dos líneas */
+.premium-table td:nth-child(7), 
+.premium-table th:nth-child(7) {
+    white-space: nowrap; /* Fuerza a que el texto se quede en una sola línea */
+    min-width: 120px;    /* Le da un ancho mínimo asegurado */
+    width: 120px;        /* Sugiere este ancho */
+}  

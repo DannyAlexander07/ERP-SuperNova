@@ -82,6 +82,7 @@
             const token = localStorage.getItem('token');
             if (!token) return;
 
+            // Llamamos a la API que ya configuramos para filtrar anulados
             const res = await fetch('/api/analitica/resumen-dia', { 
                 headers: { 'x-auth-token': token } 
             });
@@ -93,10 +94,11 @@
                 const divEventos = document.getElementById('dash-eventos-hoy');
 
                 if(divVentas) {
-                    // Animación de conteo simple
-                    divVentas.innerText = `S/ ${parseFloat(data.ventasHoy).toFixed(2)}`;
+                    // Formateo profesional: Si no hay ventas, mostrar 0.00 en lugar de null
+                    const monto = parseFloat(data.ventasHoy || 0).toFixed(2);
+                    divVentas.innerText = `S/ ${monto}`;
                 }
-                if(divEventos) divEventos.innerText = data.eventosHoy;
+                if(divEventos) divEventos.innerText = data.eventosHoy || 0;
             }
         } catch (error) {
             console.error("Error cargando dashboard:", error);

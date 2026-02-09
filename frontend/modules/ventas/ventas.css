@@ -1169,3 +1169,76 @@ input[type="radio"]:checked + .comprobante-btn {
     opacity: 0 !important;
     visibility: hidden !important;
 }
+
+/* Contenedor de la cuadrícula con más aire */
+.print-format-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px; /* Espacio real entre botones */
+    margin-top: 10px;
+    margin-bottom: 25px;
+    padding: 2px 1.2rem;
+}
+
+.format-card {
+    cursor: pointer;
+    display: block;
+    position: relative;
+}
+
+/* Escondemos el radio original pero lo mantenemos funcional */
+.format-card input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+/* Diseño del botón (Estado normal) */
+.format-card .format-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 15px 5px;
+    background: #ffffff;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.format-card .format-content i {
+    font-size: 22px;
+    margin-bottom: 6px;
+    color: #94a3b8;
+}
+
+.format-card .format-content span {
+    font-size: 11px;
+    font-weight: 800;
+    color: #64748b;
+    letter-spacing: 0.5px;
+}
+
+/* --- ESTADO SELECCIONADO (Solo uno a la vez) --- */
+.format-card input[type="radio"]:checked + .format-content {
+    border-color: #6366f1;
+    background: #f5f3ff;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+    transform: translateY(-2px);
+}
+
+.format-card input[type="radio"]:checked + .format-content i {
+    color: #6366f1;
+}
+
+.format-card input[type="radio"]:checked + .format-content span {
+    color: #4338ca;
+}
+
+/* Hover para mejor feedback */
+.format-card:hover .format-content {
+    border-color: #cbd5e1;
+    background: #f8fafc;
+}
