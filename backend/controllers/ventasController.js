@@ -290,7 +290,7 @@ exports.registrarVenta = async (req, res) => {
     }
 };
 
-// 2. OBTENER HISTORIAL (CORREGIDO: DIFERENCIA EVENTOS VS POS)
+// 2. OBTENER HISTORIAL (CORREGIDO: MUESTRA TIPO DE TARJETA EN LA TABLA)
 exports.obtenerHistorialVentas = async (req, res) => {
     try {
         const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
@@ -312,7 +312,15 @@ exports.obtenerHistorialVentas = async (req, res) => {
             WITH HistorialUnificado AS (
                 -- A. VENTAS DEL POS Y CRM
                 SELECT 
-                    v.id, v.fecha_venta, v.total_venta, v.metodo_pago, 
+                    v.id, v.fecha_venta, v.total_venta, 
+                    
+                    -- 🔥 CORRECCIÓN CLAVE: Concatenamos el Tipo de Tarjeta si aplica
+                    CASE 
+                        WHEN v.metodo_pago = 'Tarjeta' AND v.tipo_tarjeta IS NOT NULL AND v.tipo_tarjeta != '' 
+                        THEN 'TARJETA (' || UPPER(v.tipo_tarjeta) || ')'
+                        ELSE UPPER(v.metodo_pago)
+                    END as metodo_pago,
+
                     COALESCE(s.prefijo_ticket || '-' || LPAD(v.numero_ticket_sede::text, 4, '0'), 'TICKET-' || v.id) as codigo_visual,
                     v.tipo_venta, v.observaciones, v.tipo_comprobante, v.tipo_tarjeta,
                     -- CAMPOS SUNAT --
@@ -325,9 +333,8 @@ exports.obtenerHistorialVentas = async (req, res) => {
                     COALESCE(c.nombre_completo, v.nombre_cliente_temporal, 'Consumidor Final') AS nombre_cliente_temporal,
                     v.doc_cliente_temporal, 
                     
-                    -- 🔥 CAMBIO CLAVE: YA NO PONEMOS 'VENTA_POS' FIJO, SINO EL REAL PARA DETECTAR EVENTOS
                     COALESCE(v.origen, 'VENTA_POS') as origen,
-                    v.linea_negocio -- 🔥 NECESARIO PARA BLOQUEAR EL BOTÓN BORRAR SI ES 'EVENTOS'
+                    v.linea_negocio
                 FROM ventas v
                 JOIN usuarios u ON v.usuario_id = u.id          
                 LEFT JOIN usuarios vend ON v.vendedor_id = vend.id 
@@ -337,13 +344,13 @@ exports.obtenerHistorialVentas = async (req, res) => {
 
                 UNION ALL
 
-                -- B. COBROS B2B
+                -- B. COBROS B2B (Se mantiene igual ya que usan Movimientos Caja)
                 SELECT 
-                    mc.id + 900000, mc.fecha_registro, mc.monto, mc.metodo_pago,
+                    mc.id + 900000, mc.fecha_registro, mc.monto, UPPER(mc.metodo_pago),
                     'B2B-' || mc.id, 'Cobro Terceros', mc.descripcion, 'Recibo Interno', NULL,
                     'NO_APLICA', NULL, NULL, NULL, NULL, NULL,
                     s.nombre, u.nombres, 'Acuerdo Comercial', 'CORPORATIVO', 'Cliente Corporativo', 
-                    'COBRO_CAJA', 'OTROS' -- origen y linea_negocio dummy
+                    'COBRO_CAJA', 'OTROS' 
                 FROM movimientos_caja mc
                 JOIN usuarios u ON mc.usuario_id = u.id
                 JOIN sedes s ON mc.sede_id = s.id
@@ -358,7 +365,6 @@ exports.obtenerHistorialVentas = async (req, res) => {
         const ventasFormateadas = result.rows.map(v => ({
             ...v,
             nombre_cajero: v.nombre_usuario,
-            // Aseguramos que el nombre del cliente se vea bien en el frontend
             nombre_cliente: v.nombre_cliente_temporal 
         }));
 
@@ -447,35 +453,40 @@ exports.obtenerDetalleVenta = async (req, res) => {
     }
 };
 
-// 4. ANULAR VENTA (Versión Blindada: Mantiene montos históricos y sincroniza con Nubefact)
+// 4. ANULAR VENTA (Versión Final: B2B financiero + Reversión con Costos Reales)
 exports.eliminarVenta = async (req, res) => {
     const { id } = req.params;
     const usuarioId = req.usuario.id;
     
-    // Normalización de Roles para permisos
+    // Normalización de Roles
     const rolUsuario = (req.usuario.rol || '').toLowerCase().trim();
     const rolesPermitidos = ['superadmin', 'admin', 'administrador', 'super admin', 'gerente'];
 
     const client = await pool.connect();
     try {
-        // Validar permisos
+        // 1. Validar permisos
         if (!rolesPermitidos.includes(rolUsuario)) {
             throw new Error('⛔ ACCESO DENEGADO: Permisos insuficientes para anular.');
         }
 
         await client.query('BEGIN');
         
-        // A. Verificar existencia y bloquear fila para evitar colisiones
+        // 2. Obtener datos de la venta y Bloquear fila
         const ventaRes = await client.query('SELECT * FROM ventas WHERE id = $1 FOR UPDATE', [id]);
         if (ventaRes.rows.length === 0) throw new Error('Venta no encontrada.');
         
         const venta = ventaRes.rows[0];
+
+        // 🛑 3. REGLA: BLOQUEAR CRM
+        if (venta.origen === 'CRM_SALDO' || venta.origen === 'EVENTOS') {
+            throw new Error('⛔ Las ventas de CRM/EVENTOS no se pueden anular desde Caja.');
+        }
+
         if (venta.sunat_estado === 'ANULADA') throw new Error('Esta venta ya se encuentra anulada.');
 
-        // 🛡️ B. PROCESO LEGAL NUBEFACT (Operación 3: Generar Anulación)
+        // 4. PROCESO NUBEFACT (Comunicación de Baja)
         if (venta.serie && venta.correlativo) {
             try {
-                // Buscamos credenciales en la tabla de configuración
                 const configRes = await client.query(
                     'SELECT api_url, api_token FROM nufect_config WHERE sede_id = $1 AND estado = TRUE LIMIT 1', 
                     [venta.sede_id]
@@ -485,88 +496,117 @@ exports.eliminarVenta = async (req, res) => {
                     const config = configRes.rows[0];
                     const facturadorService = require('../utils/facturadorService');
 
-                    const datosAnulacion = {
+                    const nubefactRes = await facturadorService.anularComprobante({
                         ruta: config.api_url,   
                         token: config.api_token,
                         tipo_de_comprobante: venta.tipo_comprobante === 'Factura' ? 1 : 2,
                         serie: venta.serie,
                         numero: venta.correlativo,
-                        motivo: "ERROR EN DIGITACION O CANCELACION DE PEDIDO", // Requisito Manual
+                        motivo: "ERROR EN DIGITACION O CANCELACION",
                         codigo_unico: `SUPERNOVA-V${venta.id}`
-                    };
-
-                    // Llamada al service con la Operación 3
-                    const nubefactRes = await facturadorService.anularComprobante(datosAnulacion);
+                    });
                     
                     if (nubefactRes.errors) {
-                        throw new Error(`Nubefact: ${nubefactRes.message || 'Error al comunicar la baja.'}`);
+                        throw new Error(`Nubefact: ${nubefactRes.message || 'Error al comunicar baja.'}`);
                     }
                     
-                    // Actualizamos estado y guardamos ticket sin borrar el monto (total_venta se queda igual)
                     await client.query(
-                        `UPDATE ventas 
-                         SET sunat_ticket_anulacion = $1, 
-                             sunat_estado = 'ANULADA',
-                             observaciones = observaciones || ' [ANULADA SUNAT TICKET: ' || $1 || ']'
-                         WHERE id = $2`,
+                        `UPDATE ventas SET sunat_ticket_anulacion = $1, sunat_estado = 'ANULADA', observaciones = observaciones || ' [ANULADA SUNAT]' WHERE id = $2`,
                         [nubefactRes.sunat_ticket_numero, id]
                     );
                 } else {
-                    // Si no hay API, anulación local manteniendo montos
                     await client.query(`UPDATE ventas SET sunat_estado = 'ANULADA' WHERE id = $1`, [id]);
                 }
             } catch (dbErr) {
-                console.warn("⚠️ Advertencia: No se pudo conectar con Nubefact. Anulando localmente.");
+                console.warn("⚠️ Error Nubefact, anulando localmente:", dbErr.message);
                 await client.query(`UPDATE ventas SET sunat_estado = 'ANULADA' WHERE id = $1`, [id]);
             }
         } else {
-            // Ticket interno: marcar como anulada
             await client.query(`UPDATE ventas SET sunat_estado = 'ANULADA' WHERE id = $1`, [id]);
         }
 
-        // C. RECUPERAR STOCK (Combos e Ingredientes)
-        const detallesRes = await client.query('SELECT producto_id, cantidad FROM detalle_ventas WHERE venta_id = $1', [id]);
-        
-        for (const item of detallesRes.rows) {
-            if (!item.producto_id) continue;
-
-            const esCombo = await client.query('SELECT producto_hijo_id, cantidad FROM productos_combo WHERE producto_padre_id = $1', [item.producto_id]);
+        // 🔥 5. REVERTIR STOCK (CON COSTOS REALES) 🔥
+        // Si la venta viene de una CUOTA (B2B), NO devolvemos stock (solo financiero).
+        if (venta.origen !== 'COBRO_CUOTA') {
             
-            if (esCombo.rows.length > 0) {
-                // Reponer Ingredientes
-                for (const hijo of esCombo.rows) {
-                    const totalInsumo = Number(hijo.cantidad) * Number(item.cantidad);
-                    await reponerStock(client, hijo.producto_hijo_id, venta.sede_id, totalInsumo, usuarioId, id, `Anulación (Ingrediente)`);
+            // ✅ CORRECCIÓN: Traemos también 'costo_historico' para devolverlo al Kardex con valor
+            const detallesRes = await client.query('SELECT producto_id, cantidad, costo_historico FROM detalle_ventas WHERE venta_id = $1', [id]);
+            
+            for (const item of detallesRes.rows) {
+                if (!item.producto_id) continue;
+
+                // Revisar si es combo
+                const esCombo = await client.query('SELECT producto_hijo_id, cantidad FROM productos_combo WHERE producto_padre_id = $1', [item.producto_id]);
+                
+                if (esCombo.rows.length > 0) {
+                    for (const hijo of esCombo.rows) {
+                        const totalInsumo = Number(hijo.cantidad) * Number(item.cantidad);
+                        
+                        // ✅ CORRECCIÓN: Buscamos el costo actual del ingrediente para que el Kardex no entre en 0
+                        const resCostoHijo = await client.query('SELECT costo_promedio FROM productos WHERE id = $1', [hijo.producto_hijo_id]);
+                        const costoHijo = resCostoHijo.rows[0]?.costo_promedio || 0;
+
+                        await client.query('UPDATE inventario_sedes SET cantidad = cantidad + $1 WHERE producto_id = $2 AND sede_id = $3', [totalInsumo, hijo.producto_hijo_id, venta.sede_id]);
+                        
+                        // Kardex Ingrediente (Usando costo recuperado)
+                        await client.query(
+                            `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
+                             VALUES ($1, $2, $3, 'entrada_anulacion', $4, (SELECT cantidad FROM inventario_sedes WHERE producto_id = $2 AND sede_id = $1), $5, $6)`,
+                            [venta.sede_id, hijo.producto_hijo_id, usuarioId, totalInsumo, `Anulación Venta (Ingrediente) #${venta.numero_ticket_sede}`, costoHijo]
+                        );
+                    }
                 }
+                
+                // Devolver Producto Principal
+                await client.query('UPDATE inventario_sedes SET cantidad = cantidad + $1 WHERE producto_id = $2 AND sede_id = $3', [item.cantidad, item.producto_id, venta.sede_id]);
+                
+                // ✅ CORRECCIÓN: Usamos 'item.costo_historico' en lugar de 0
+                const costoParaKardex = item.costo_historico || 0;
+
+                // Kardex Principal
+                await client.query(
+                    `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
+                     VALUES ($1, $2, $3, 'entrada_anulacion', $4, (SELECT cantidad FROM inventario_sedes WHERE producto_id = $2 AND sede_id = $1), $5, $6)`,
+                    [venta.sede_id, item.producto_id, usuarioId, item.cantidad, `Anulación Venta #${venta.numero_ticket_sede}`, costoParaKardex]
+                );
             }
-            // Reponer Producto Principal
-            await reponerStock(client, item.producto_id, venta.sede_id, item.cantidad, usuarioId, id, `Anulación Venta`);
+        } else {
+            console.log("ℹ️ Anulación B2B detectada: Se omite la devolución de stock (solo movimiento financiero).");
         }
 
-        // D. REVERTIR MOVIMIENTOS FINANCIEROS (Aquí sí ponemos monto 0 porque el dinero sale de caja física)
+        // 6. REVERTIR DINERO DE CAJA (Esto sí aplica siempre)
         await client.query(
-            `UPDATE movimientos_caja 
-             SET descripcion = '(ANULADO) ' || descripcion, 
-                 monto = 0 
-             WHERE venta_id = $1`, 
+            `UPDATE movimientos_caja SET descripcion = '(ANULADO) ' || descripcion, monto = 0 WHERE venta_id = $1`, 
             [id]
         );
         
-        // E. REABRIR EVENTOS/LEADS SI ES VENTA DE CRM
-        if (venta.origen === 'CRM_SALDO' && venta.cliente_id) {
-             await client.query(`UPDATE eventos SET estado = 'confirmado', saldo = costo_total WHERE cliente_id = $1 AND estado = 'finalizado'`, [venta.cliente_id]);
-             await client.query(`UPDATE leads SET estado = 'seguimiento' WHERE cliente_asociado_id = $1`, [venta.cliente_id]);
+        // 7. LÓGICA ESPECIAL B2B: LIBERAR LA CUOTA
+        if (venta.origen === 'COBRO_CUOTA') {
+            const sedeInfo = await client.query('SELECT prefijo_ticket FROM sedes WHERE id = $1', [venta.sede_id]);
+            const prefijo = sedeInfo.rows[0]?.prefijo_ticket || 'GEN';
+            const ticketGenerado = `${prefijo}-${String(venta.numero_ticket_sede).padStart(4, '0')}`;
+
+            const resReversion = await client.query(`
+                UPDATE cuotas_acuerdos 
+                SET estado = 'PENDIENTE', 
+                    fecha_pago = NULL, 
+                    comprobante_pago = NULL, 
+                    metodo_pago = NULL
+                WHERE comprobante_pago = $1 
+                RETURNING id
+            `, [ticketGenerado]);
+
+            if (resReversion.rows.length > 0) {
+                console.log(`♻️ Cuota B2B (ID: ${resReversion.rows[0].id}) liberada.`);
+            }
         }
 
         await client.query('COMMIT');
-        res.json({ 
-            success: true, 
-            msg: `Venta anulada legalmente. El historial conserva el monto pero el Dashboard lo ignorará.` 
-        });
+        res.json({ success: true, msg: "Venta anulada correctamente. Inventario valorizado restaurado." });
 
     } catch (err) {
         if (client) await client.query('ROLLBACK');
-        console.error("❌ Error en anulación:", err.message);
+        console.error("❌ Error anulación:", err.message);
         res.status(400).json({ msg: err.message });
     } finally {
         if (client) client.release();

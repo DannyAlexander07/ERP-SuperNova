@@ -93,7 +93,7 @@
         }
     }
 
-// --- 2. RENDERIZAR TABLA (FINAL: SIN DUPLICADOS, CON % Y WHATSAPP FULL) ---
+// --- 2. RENDERIZAR TABLA (FINAL: ANULACIÓN HABILITADA PARA B2B/TERCEROS) ---
 function renderizarTablaHistorial(datos) {
     const tbody = document.getElementById('tabla-historial-body');
     if (!tbody) return;
@@ -125,7 +125,7 @@ function renderizarTablaHistorial(datos) {
         const vendedorTexto = v.nombre_vendedor ? `${v.nombre_vendedor}`.trim() : '<span style="color:#aaa;">No asignado</span>';
         const cajeroTexto = v.nombre_cajero || v.nombre_usuario || 'Sistema';
 
-        // 🔥 C. PRECIOS Y DESCUENTOS (% DINÁMICO)
+        // C. Precios y Descuentos (% DINÁMICO)
         const totalVenta = parseFloat(v.total_venta || 0);
         let precioHtml = "";
 
@@ -182,7 +182,8 @@ function renderizarTablaHistorial(datos) {
         let acciones = [];
 
         // 1. OJO (Ver Detalle)
-        if (v.origen === 'VENTA_POS' || !v.origen || v.origen === 'CRM_SALDO') {
+        // Permitimos ver detalle de todos, incluido COBRO_CUOTA
+        if (v.origen === 'VENTA_POS' || !v.origen || v.origen === 'CRM_SALDO' || v.origen === 'COBRO_CUOTA') {
             acciones.push(`<button class="btn-icon" title="Ver Detalle" onclick="verDetallesVenta(${v.id}, '${v.codigo_visual}')" style="color:#4f46e5;"><i class='bx bx-show'></i></button>`);
         } else {
             acciones.push(`<button class="btn-icon" title="${v.observaciones}" style="color:#059669; cursor:help;"><i class='bx bx-info-circle'></i></button>`);
@@ -210,14 +211,21 @@ function renderizarTablaHistorial(datos) {
         }
         
         // 4. ANULAR (Rojo)
-        if (v.origen === 'CRM_SALDO') {
+        // 🚫 BLOQUEO: CRM y EVENTOS
+        if (v.origen === 'CRM_SALDO' || v.origen === 'EVENTOS') {
             acciones.push(`<button class="btn-icon" title="Bloqueado por CRM" style="color:#cbd5e1; cursor:not-allowed;"><i class='bx bxs-lock-alt'></i></button>`);
-        } else if (v.sunat_estado === 'ANULADA') {
+        } 
+        // 🚫 BLOQUEO: YA ANULADA
+        else if (v.sunat_estado === 'ANULADA') {
             acciones.push(`<button class="btn-icon" title="Anulado" style="color:#ccc; cursor:not-allowed;"><i class='bx bx-block'></i></button>`);
-        } else if (v.origen === 'VENTA_POS' || !v.origen) {
+        } 
+        // ✅ PERMITIDO: POS, MANUAL y AHORA TERCEROS (COBRO_CUOTA)
+        else if (v.origen === 'VENTA_POS' || !v.origen || v.origen === 'COBRO_CUOTA') {
             acciones.push(`<button class="btn-icon delete" title="Anular" onclick="eliminarVenta(${v.id}, '${v.codigo_visual}')" style="color:#ef4444;"><i class='bx bx-trash'></i></button>`);
-        } else {
-            acciones.push(`<button class="btn-icon" style="color:#cbd5e1; cursor:not-allowed;"><i class='bx bx-block'></i></button>`);
+        } 
+        // 🚫 BLOQUEO: OTROS ORIGENES DESCONOCIDOS
+        else {
+            acciones.push(`<button class="btn-icon" title="Origen Protegido" style="color:#cbd5e1; cursor:not-allowed;"><i class='bx bx-block'></i></button>`);
         }
 
         // Unir todo

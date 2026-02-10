@@ -336,19 +336,41 @@
         document.getElementById('modal-confirmar-pago').classList.add('active');
     }
 
-   // D. EJECUTAR EL PAGO REAL (VERSIÓN BLINDADA CON NOTIFICACIONES TOAST)
+   // 3. EJECUTAR PAGO (ACTUALIZADO PARA ENVIAR DATOS DE VENTA)
     window.ejecutarPago = async function() {
         const cuotaId = document.getElementById('conf-cuota-id').value;
+        const tipoComp = document.querySelector('input[name="tipo_comp_cuota"]:checked').value;
+        const metodo = document.getElementById('cuota-metodo').value;
+        const email = document.getElementById('cuota-email').value;
         
-        // 🛡️ BLINDAJE 1: Prevención de doble clic y feedback visual
-        const btn = event.currentTarget;
-        const textoOriginal = btn.innerHTML;
-        
+        // 🔥 Capturar formato PDF (Ticket/A4/A5)
+        const formatoPdf = document.querySelector('input[name="fmt_cuota"]:checked').value;
+
+        // 🔥 Capturar Tipo de Tarjeta si aplica
+        let tipoTarjeta = null;
+        if (metodo === 'Tarjeta') {
+            tipoTarjeta = document.querySelector('input[name="tipo_tarjeta_cuota"]:checked').value;
+        }
+
+        // Datos Cliente
+        let clienteDoc = "", clienteNombre = "", clienteDir = "";
+        if (tipoComp === 'Boleta') {
+            clienteDoc = document.getElementById('cuota-dni').value.trim() || "00000000";
+            clienteNombre = document.getElementById('cuota-nombre').value.trim() || "CLIENTE VARIOS";
+        } else {
+            clienteDoc = document.getElementById('cuota-ruc').value.trim();
+            clienteNombre = document.getElementById('cuota-razon').value.trim();
+            clienteDir = document.getElementById('cuota-direccion').value.trim();
+            
+            if (clienteDoc.length !== 11) return showToast("RUC inválido.", "warning");
+            if (!clienteNombre) return showToast("Falta Razón Social.", "warning");
+        }
+
+        const btn = document.querySelector('.btn-confirm-pay');
         btn.disabled = true;
-        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Procesando Cobro...";
+        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Facturando...";
 
         try {
-            // 🚀 2. Petición al Backend
             const res = await fetch(`/api/terceros/cuotas/${cuotaId}/pagar`, {
                 method: 'POST',
                 headers: { 
@@ -356,36 +378,33 @@
                     'x-auth-token': localStorage.getItem('token') 
                 },
                 body: JSON.stringify({ 
-                    metodo_pago: 'TRANSFERENCIA' // Valor por defecto para acuerdos B2B
+                    metodo_pago: metodo,
+                    tipo_comprobante: tipoComp,
+                    tipo_tarjeta: tipoTarjeta, // Enviamos Debito/Credito
+                    cliente_doc: clienteDoc,
+                    cliente_nombre: clienteNombre,
+                    cliente_direccion: clienteDir,
+                    cliente_email: email,
+                    formato_pdf: formatoPdf // Enviamos 1(A4), 2(A5) o 3(Ticket)
                 }) 
             });
 
             const data = await res.json();
 
             if (res.ok) {
-                // ✅ ÉXITO: El backend ya registró el ingreso en Caja
+                showToast(`✅ Cobro exitoso. Ticket: ${data.ticketCodigo}`, "success");
                 cerrarModalConfirmacion();
-                cerrarModalPagos(); 
-                
-                // Usamos showToast en lugar de alert
-                showToast(data.msg || "Cobro registrado correctamente en la Caja actual.", "success", "Finanzas B2B");
-                
-                // Actualizar la tabla principal de acuerdos para reflejar los nuevos saldos
-                if (typeof cargarAcuerdos === 'function') {
-                    await cargarAcuerdos(); 
-                }
+                cerrarModalPagos();
+                if (typeof cargarAcuerdos === 'function') await cargarAcuerdos();
             } else {
-                // ❌ ERROR: Problemas de validación o servidor
-                showToast("Error: " + (data.error || "No se pudo procesar el ingreso a caja."), "error");
+                showToast(data.error || "Error al procesar cobro.", "error");
             }
-
         } catch (e) { 
-            console.error("Error crítico en ejecutarPago:", e); 
-            showToast("Error de conexión: No se pudo registrar el pago en el servidor.", "error"); 
+            console.error(e);
+            showToast("Error crítico de conexión.", "error"); 
         } finally {
-            // 🛡️ 3. Restaurar estado del botón
             btn.disabled = false;
-            btn.innerHTML = textoOriginal;
+            btn.innerHTML = "Confirmar y Facturar";
         }
     };
 
@@ -1226,6 +1245,73 @@
         document.querySelectorAll('.tabs-terceros .tab-btn').forEach(b => b.classList.remove('active'));
         event.currentTarget.classList.add('active');
     }
+
+    // 1. Mostrar/Ocultar Crédito/Débito
+    window.toggleTarjetaCuota = function() {
+        const metodo = document.getElementById('cuota-metodo').value;
+        const divTarjeta = document.getElementById('sub-opcion-tarjeta');
+        if (metodo === 'Tarjeta') {
+            divTarjeta.style.display = 'block';
+        } else {
+            divTarjeta.style.display = 'none';
+        }
+    };
+
+    // 2. Alternar Boleta/Factura
+    window.toggleCamposFacturaCuota = function() {
+        const tipo = document.querySelector('input[name="tipo_comp_cuota"]:checked').value;
+        document.getElementById('grupo-dni-cuota').style.display = (tipo === 'Boleta') ? 'block' : 'none';
+        document.getElementById('grupo-ruc-cuota').style.display = (tipo === 'Factura') ? 'block' : 'none';
+    };
+
+    // 3. Buscar DNI/RUC
+    window.buscarEntidadCuota = async function(tipo) {
+        const inputId = tipo === 'dni' ? 'cuota-dni' : 'cuota-ruc';
+        const numero = document.getElementById(inputId).value.trim();
+        
+        // Validación rápida
+        if ((tipo === 'dni' && numero.length !== 8) || (tipo === 'ruc' && numero.length !== 11)) {
+            return showToast("Número de documento inválido.", "warning");
+        }
+
+        const btn = event.currentTarget;
+        const icon = btn.querySelector('i');
+        const originalClass = icon.className;
+        icon.className = 'bx bx-loader-alt bx-spin';
+        btn.disabled = true;
+
+        try {
+            const res = await fetch(`/api/consultas/${numero}`, {
+                headers: { 'x-auth-token': localStorage.getItem('token') }
+            });
+            const data = await res.json();
+
+            if (res.ok && data.success) {
+                showToast("✅ Datos encontrados.", "success");
+                if (tipo === 'dni') {
+                    document.getElementById('cuota-nombre').value = data.nombre;
+                    document.getElementById('cuota-nombre').readOnly = true;
+                } else {
+                    document.getElementById('cuota-razon').value = data.nombre;
+                    document.getElementById('cuota-direccion').value = data.direccion;
+                    document.getElementById('cuota-razon').readOnly = true;
+                    document.getElementById('cuota-direccion').readOnly = true;
+                }
+            } else {
+                showToast("ℹ️ No encontrado. Ingrese manualmente.", "info");
+                if(tipo === 'dni') document.getElementById('cuota-nombre').readOnly = false;
+                else {
+                    document.getElementById('cuota-razon').readOnly = false;
+                    document.getElementById('cuota-direccion').readOnly = false;
+                }
+            }
+        } catch (e) {
+            showToast("Error de conexión.", "error");
+        } finally {
+            icon.className = originalClass;
+            btn.disabled = false;
+        }
+    };
 
     initTerceros();
 })();

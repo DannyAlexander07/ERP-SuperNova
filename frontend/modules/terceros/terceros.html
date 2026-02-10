@@ -33,13 +33,13 @@
                 <small>Presiona ENTER después de escanear.</small>
 
                 <div id="resultado-validacion" class="result-box hidden">
-                </div>
+                    </div>
             </div>
 
             <div class="history-card">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <h4 style="margin:0;">⏱️ Últimos Canjes Hoy</h4>
-                    <button class="btn-xs" onclick="abrirModalHistorialTotal()" title="Ver Todos los Tiempos" style="background:#3b82f6; color:white; border:none; border-radius:4px; padding:2px 6px;">
+                    <button class="btn-xs" onclick="abrirModalHistorialTotal()" title="Ver Todos los Tiempos">
                         <i class='bx bx-history'></i> Ver Todo
                     </button>
                 </div>
@@ -48,9 +48,9 @@
                     <li class="empty-msg">Cargando...</li>
                 </ul>
 
-                <div class="mini-pagination" style="display:flex; justify-content:space-between; margin-top:5px; border-top:1px solid #eee; padding-top:5px;">
+                <div class="mini-pagination">
                     <button id="btn-mini-prev" onclick="cambiarPaginaMini(-1)" disabled class="btn-xs">◀</button>
-                    <span id="txt-mini-page" style="font-size:10px; color:#666;">Pg 1</span>
+                    <span id="txt-mini-page">Pg 1</span>
                     <button id="btn-mini-next" onclick="cambiarPaginaMini(1)" disabled class="btn-xs">▶</button>
                 </div>
             </div> 
@@ -96,7 +96,7 @@
                 </div>
             </div>
             
-            <div class="panel-carga">
+            <div class="panel-carga" class="tab-content">
                 <h3>📥 Gestión de Códigos</h3>
                 
                 <div class="tabs-mini-bar">
@@ -222,7 +222,7 @@
                 <input type="text" id="filtro-codigo" class="form-control" placeholder="🔍 Buscar código..." onkeyup="filtrarListaCodigos()">
             </div>
             
-            <div class="lista-scrollable" style="max-height: 300px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px;">
+            <div class="lista-scrollable">
                 <table class="simple-table" style="font-size: 0.85rem;">
                     <thead>
                         <tr>
@@ -268,7 +268,7 @@
 </div>
 
 <div id="modal-pagos" class="modal-overlay">
-    <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-content" style="max-width: 700px;">
         <div class="modal-header" style="background: #ecfdf5;">
             <h3 style="color:#047857;">💰 Gestión de Pagos</h3>
             <button class="btn-close" onclick="cerrarModalPagos()"><i class='bx bx-x'></i></button>
@@ -363,31 +363,104 @@
 </div>
 
 <div id="modal-confirmar-pago" class="modal-overlay">
-    <div class="modal-content" style="max-width: 400px; text-align: center;">
-        <div class="modal-body" style="padding: 30px;">
-            <div class="payment-icon-container">
-                <i class='bx bx-dollar'></i>
-            </div>
-            
-            <h3 style="margin-bottom:10px; color:#1e293b;">¿Confirmar Pago?</h3>
-            
-            <p class="confirm-text">
-                Se registrará un ingreso de dinero en tu caja actual.
-                <span id="conf-monto" class="amount-highlight">S/ 0.00</span>
-            </p>
-            
+    <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+            <h3>💸 Cobrar Cuota</h3>
+            <button class="btn-close" onclick="cerrarModalConfirmacion()"><i class='bx bx-x'></i></button>
+        </div>
+        <div class="modal-body">
             <input type="hidden" id="conf-cuota-id">
             
-            <div style="display:flex; gap:15px; justify-content:center;">
-                <button class="btn-secondary" onclick="cerrarModalConfirmacion()">Cancelar</button>
-                <button class="btn-confirm-pay" onclick="ejecutarPago()">Sí, Cobrar</button>
+            <div style="background: #ecfdf5; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: center;">
+                <label style="color: #047857; font-size: 0.9rem;">Monto a Cobrar</label>
+                <div id="conf-monto" style="font-size: 2rem; font-weight: 800; color: #059669;">S/ 0.00</div>
             </div>
+
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label style="font-weight:bold;">Tipo de Comprobante:</label>
+                <div style="display: flex; gap: 10px; margin-top:5px;">
+                    <label style="flex: 1; cursor: pointer; background:#f8fafc; padding:8px; border-radius:6px; border:1px solid #e2e8f0; text-align:center;">
+                        <input type="radio" name="tipo_comp_cuota" value="Boleta" checked onchange="toggleCamposFacturaCuota()"> 📄 Boleta
+                    </label>
+                    <label style="flex: 1; cursor: pointer; background:#f8fafc; padding:8px; border-radius:6px; border:1px solid #e2e8f0; text-align:center;">
+                        <input type="radio" name="tipo_comp_cuota" value="Factura" onchange="toggleCamposFacturaCuota()"> 🏢 Factura
+                    </label>
+                </div>
+            </div>
+
+            <div id="bloque-cliente-cuota" style="background:#f1f5f9; padding:10px; border-radius:8px; margin-bottom:15px;">
+                <div id="grupo-dni-cuota">
+                    <label style="font-size:0.8rem; font-weight:bold; color:#64748b;">Cliente (DNI):</label>
+                    <div style="display: flex; gap: 5px; margin-bottom:5px;">
+                        <input type="text" id="cuota-dni" class="form-control" placeholder="DNI" maxlength="8">
+                        <button class="btn-sm" onclick="buscarEntidadCuota('dni')"><i class='bx bx-search'></i></button>
+                    </div>
+                    <input type="text" id="cuota-nombre" class="form-control" placeholder="Nombre del Cliente" readonly>
+                </div>
+
+                <div id="grupo-ruc-cuota" style="display: none;">
+                    <label style="font-size:0.8rem; font-weight:bold; color:#64748b;">Empresa (RUC):</label>
+                    <div style="display: flex; gap: 5px; margin-bottom:5px;">
+                        <input type="text" id="cuota-ruc" class="form-control" placeholder="RUC" maxlength="11">
+                        <button class="btn-sm" onclick="buscarEntidadCuota('ruc')"><i class='bx bx-search'></i></button>
+                    </div>
+                    <input type="text" id="cuota-razon" class="form-control" placeholder="Razón Social" readonly style="margin-bottom:5px;">
+                    <input type="text" id="cuota-direccion" class="form-control" placeholder="Dirección Fiscal">
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label style="font-weight:bold;">Método de Pago:</label>
+                <select id="cuota-metodo" class="form-control" onchange="toggleTarjetaCuota()">
+                    <option value="Transferencia" selected>Transferencia</option>
+                    <option value="Efectivo">Efectivo</option>
+                    <option value="Yape">Yape</option>
+                    <option value="Plin">Plin</option>
+                    <option value="Tarjeta">Tarjeta (Crédito/Débito)</option>
+                </select>
+
+                <div id="sub-opcion-tarjeta" style="display:none; margin-top:10px; background:#fff7ed; padding:10px; border:1px solid #fdba74; border-radius:6px;">
+                    <label style="font-size:0.8rem; color:#9a3412;">Tipo de Tarjeta:</label>
+                    <div style="display: flex; gap: 15px; margin-top:5px;">
+                        <label><input type="radio" name="tipo_tarjeta_cuota" value="Debito" checked> Débito</label>
+                        <label><input type="radio" name="tipo_tarjeta_cuota" value="Credito"> Crédito</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label>Email (Opcional):</label>
+                <input type="email" id="cuota-email" class="form-control" placeholder="cliente@correo.com">
+            </div>
+
+            <div class="form-group">
+                <label style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; display: block; margin-bottom: 5px;">
+                    Tamaño de Impresión
+                </label>
+                <div style="display: flex; gap: 10px;">
+                    <label class="format-card" style="flex:1; text-align:center; padding:8px; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer;">
+                        <input type="radio" name="fmt_cuota" value="3" checked> Ticket
+                    </label>
+                    <label class="format-card" style="flex:1; text-align:center; padding:8px; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer;">
+                        <input type="radio" name="fmt_cuota" value="1"> A4
+                    </label>
+                    <label class="format-card" style="flex:1; text-align:center; padding:8px; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer;">
+                        <input type="radio" name="fmt_cuota" value="2"> A5
+                    </label>
+                </div>
+            </div>
+
+        </div>
+        <div class="modal-footer">
+            <button class="btn-secondary" onclick="cerrarModalConfirmacion()">Cancelar</button>
+            <button class="btn-confirm-pay" onclick="ejecutarPago()">Confirmar y Facturar</button>
         </div>
     </div>
 </div>
 
 <div id="modal-historial-total" class="modal-overlay">
-    <div class="modal-content" style="max-width: 1000px;"> <div class="modal-header" style="background: #f0f9ff; border-bottom: 1px solid #bae6fd;">
+    <div class="modal-content" style="max-width: 1000px;">
+        <div class="modal-header" style="background: #f0f9ff; border-bottom: 1px solid #bae6fd;">
             <div style="display:flex; align-items:center; gap:10px;">
                 <h3 style="color:#0369a1; margin:0;"><i class='bx bx-history'></i> Historial Canjes</h3>
                 <span class="badge-count" id="total-registros-hist" style="background:#0ea5e9; color:white; padding:2px 8px; border-radius:10px; font-size:0.8rem;">0</span>
@@ -411,7 +484,7 @@
                     <label style="font-size:0.75rem; font-weight:bold;">Canal / Socio:</label>
                     <select id="filtro-hist-canal" class="form-control" style="font-size:0.85rem;">
                         <option value="">Todos</option>
-                        </select>
+                    </select>
                 </div>
 
                 <div class="form-group" style="margin:0;">
@@ -442,7 +515,7 @@
                         </tr>
                     </thead>
                     <tbody id="tabla-historial-total">
-                        </tbody>
+                    </tbody>
                 </table>
             </div>
 

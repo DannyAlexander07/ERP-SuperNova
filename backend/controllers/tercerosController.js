@@ -1,6 +1,7 @@
 //Ubicacion: backend/controllers/tercerosController.js
 
 const pool = require('../db');
+const facturacionController = require('./facturacionController');
 
 // 1. LISTAR CANALES (Para llenar el select en el frontend)
 exports.obtenerCanales = async (req, res) => {
@@ -157,7 +158,8 @@ exports.cargarCodigos = async (req, res) => {
         client.release();
     }
 };
-// 5. 🔥 VALIDACIÓN EN PUERTA (MODIFICADO: STATUS 200 SIEMPRE)
+
+// 5. 🔥 VALIDACIÓN EN PUERTA (CORREGIDO: COSTO_COMPRA)
 exports.validarYCanjear = async (req, res) => {
     const { codigo } = req.body;
     const sedeId = req.usuario.sede_id;
@@ -168,12 +170,13 @@ exports.validarYCanjear = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // A. Buscar código
+        // A. Buscar código y datos del acuerdo
+        // CORRECCIÓN: Usamos 'p.costo_compra' en lugar de 'p.costo_promedio'
         const resCodigo = await client.query(
             `SELECT c.*, 
                     p.nombre as nombre_producto, 
                     p.id as prod_id, 
-                    p.costo_compra,
+                    p.costo_compra,             -- <--- CORREGIDO AQUÍ
                     a.precio_unitario_acordado 
              FROM codigos_externos c
              LEFT JOIN productos p ON c.producto_asociado_id = p.id
@@ -209,16 +212,28 @@ exports.validarYCanjear = async (req, res) => {
                 throw new Error(`❌ CÓDIGO VÁLIDO PERO NO HAY STOCK FÍSICO DE "${infoCodigo.nombre_producto}".`);
             }
 
+            // 1. Descontar Stock
             await client.query(
                 "UPDATE inventario_sedes SET cantidad = cantidad - 1 WHERE producto_id = $1 AND sede_id = $2",
                 [infoCodigo.prod_id, sedeId]
             );
 
+            // 2. Registrar Kardex con Valorización
+            // Costo = costo_compra (del producto)
+            // Precio Venta = precio_unitario_acordado (del acuerdo B2B)
             await client.query(
                 `INSERT INTO movimientos_inventario 
-                (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
-                 VALUES ($1, $2, $3, 'salida_canje', -1, $4, $5, $6)`,
-                [sedeId, infoCodigo.prod_id, usuarioId, stockActual - 1, `Canje Externo: ${codigo}`, infoCodigo.costo_compra || 0]
+                (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento, precio_venta_historico)
+                 VALUES ($1, $2, $3, 'salida_canje', -1, $4, $5, $6, $7)`,
+                [
+                    sedeId, 
+                    infoCodigo.prod_id, 
+                    usuarioId, 
+                    stockActual - 1, 
+                    `Canje Externo: ${codigo}`, 
+                    infoCodigo.costo_compra || 0,            // <--- CORREGIDO (Costo Contable)
+                    infoCodigo.precio_unitario_acordado || 0 // <--- (Precio Venta Real)
+                ]
             );
         }
 
@@ -232,7 +247,7 @@ exports.validarYCanjear = async (req, res) => {
 
         await client.query('COMMIT');
         
-        // ✅ RESPUESTA ÉXITOSA (Status 200 + success: true)
+        // ✅ RESPUESTA ÉXITOSA
         res.json({ 
             success: true, 
             msg: "✅ CÓDIGO VÁLIDO - PUEDE INGRESAR", 
@@ -242,9 +257,6 @@ exports.validarYCanjear = async (req, res) => {
 
     } catch (err) {
         await client.query('ROLLBACK');
-        
-        // 🚨 RESPUESTA DE "ERROR LÓGICO" (Status 200 + success: false)
-        // Esto evita el mensaje rojo en la consola del navegador
         res.json({ 
             success: false, 
             msg: err.message 
@@ -373,28 +385,32 @@ exports.obtenerCuotasAcuerdo = async (req, res) => {
     }
 };
 
-// 12. REGISTRAR PAGO DE CUOTA (SOLUCIÓN FINAL: SIN COLUMNA 'ESTADO') 💰
+// 🔥 12. REGISTRAR PAGO DE CUOTA (CORREGIDO: CANTIDAD EXACTA DEL ACUERDO) 💰
 exports.pagarCuota = async (req, res) => {
     const { id } = req.params; 
-    const { metodo_pago, sede_destino } = req.body; 
+    const { 
+        metodo_pago, tipo_comprobante, tipo_tarjeta,
+        cliente_doc, cliente_nombre, cliente_direccion, cliente_email,
+        formato_pdf
+    } = req.body; 
     
     const usuarioId = req.usuario.id;
-    // Si el frontend no manda sede, usamos la del usuario actual
-    const sedeId = sede_destino || req.usuario.sede_id; 
+    const sedeId = req.usuario.sede_id;
 
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
 
-        // 1. Verificar Cuota + Acuerdo + Canal (JOIN TRIPLE CORRECTO)
+        // 1. Obtener datos CLAVE: Cantidad original del acuerdo
         const resCuota = await client.query(`
-            SELECT 
-                c.*, 
-                ce.nombre as empresa,  -- Nombre de la empresa (Canal)
-                a.descripcion 
+            SELECT c.*, 
+                   a.descripcion as desc_acuerdo,
+                   a.producto_asociado_id,
+                   a.cantidad_entradas,         -- <--- DATO FUERTE: Cantidad Original (Ej: 8)
+                   p.nombre as nombre_producto
             FROM cuotas_acuerdos c
             JOIN acuerdos_comerciales a ON c.acuerdo_id = a.id
-            JOIN canales_externos ce ON a.canal_id = ce.id
+            LEFT JOIN productos p ON a.producto_asociado_id = p.id
             WHERE c.id = $1
         `, [id]);
 
@@ -403,39 +419,114 @@ exports.pagarCuota = async (req, res) => {
 
         if (cuota.estado === 'PAGADO') throw new Error("Esta cuota ya está pagada.");
 
-        // 2. Definir Método de Pago
-        const metodoFinal = metodo_pago || 'TRANSFERENCIA';
-
-        // 3. Registrar en CAJA (CORREGIDO: SIN COLUMNA 'ESTADO')
-        const desc = `Cobro B2B: ${cuota.empresa} - Cuota #${cuota.numero_cuota} (${cuota.descripcion})`;
+        // 2. ASIGNACIÓN DIRECTA (SIN DIVISIONES NI PROMEDIOS) 🛑
+        // Usamos la cantidad tal cual se creó en el acuerdo.
         
+        const totalPagar = parseFloat(cuota.monto); 
+        const cantidadReal = parseInt(cuota.cantidad_entradas) || 1; // Ej: 8
+        
+        // Calculamos el precio unitario inverso para que NUBEFACT no falle
+        // Si Total = 240 y Cantidad = 8, entonces Unitario = 30.
+        // Si Total = 120 y Cantidad = 8, entonces Unitario = 15.
+        const precioUnitarioParaFactura = Number((totalPagar / cantidadReal).toFixed(10));
+
+        const descripcionItem = `${cuota.nombre_producto || 'PAGO CUOTA'} [Cuota ${cuota.numero_cuota}]`;
+
+        const subtotal = Number((totalPagar / 1.18).toFixed(2));
+        const igv = Number((totalPagar - subtotal).toFixed(2));
+
+        // Correlativo Ticket Interno
+        const sedeRes = await client.query('SELECT prefijo_ticket FROM sedes WHERE id = $1', [sedeId]);
+        const prefijo = sedeRes.rows[0]?.prefijo_ticket || 'GEN';
+        const maxTicket = await client.query('SELECT COALESCE(MAX(numero_ticket_sede), 0) as max FROM ventas WHERE sede_id = $1', [sedeId]);
+        const numTicket = parseInt(maxTicket.rows[0].max) + 1;
+        const codigoTicket = `${prefijo}-${numTicket.toString().padStart(4, '0')}`;
+
+        // Insertar Venta
+        const resVenta = await client.query(`
+            INSERT INTO ventas (
+                sede_id, usuario_id, vendedor_id, 
+                metodo_pago, total_venta, subtotal, igv, 
+                linea_negocio, numero_ticket_sede, tipo_venta, 
+                observaciones, tipo_comprobante, 
+                doc_cliente_temporal, nombre_cliente_temporal, 
+                cliente_razon_social, cliente_direccion,
+                tipo_tarjeta, sunat_estado, origen
+            ) VALUES ($1, $2, $2, $3, $4, $5, $6, 'CORPORATIVO', $7, 'Servicio', $8, $9, $10, $11, $12, $13, $14, 'PENDIENTE', 'COBRO_CUOTA')
+            RETURNING id
+        `, [
+            sedeId, usuarioId, 
+            metodo_pago || 'TRANSFERENCIA', totalPagar, subtotal, igv, 
+            numTicket, `Pago Cuota #${cuota.numero_cuota} - ${cuota.desc_acuerdo}`, 
+            tipo_comprobante || 'Boleta',
+            cliente_doc, cliente_nombre, 
+            (tipo_comprobante === 'Factura' ? cliente_nombre : null),
+            (tipo_comprobante === 'Factura' ? cliente_direccion : null),
+            tipo_tarjeta 
+        ]);
+        
+        const ventaId = resVenta.rows[0].id;
+
+        // 3. Detalle de Venta
+        // Guardamos: Cantidad = 8, Precio = (Calculado para cuadrar total)
+        await client.query(`
+            INSERT INTO detalle_ventas (
+                venta_id, producto_id, nombre_producto_historico, 
+                cantidad, precio_unitario, subtotal, costo_historico
+            ) VALUES ($1, $2, $3, $4, $5, $6, 0)
+        `, [
+            ventaId, 
+            cuota.producto_asociado_id, 
+            descripcionItem, 
+            cantidadReal,               // <--- "8" (Tal cual el acuerdo)
+            precioUnitarioParaFactura,  // <--- Ajustado matemáticamente para cuadrar el total
+            totalPagar                  // <--- El monto de la cuota se mantiene exacto
+        ]);
+
+        // 4. Registrar en Caja
+        const descCaja = `Ticket ${codigoTicket} (Cuota #${cuota.numero_cuota})`;
         await client.query(`
             INSERT INTO movimientos_caja 
-            (sede_id, usuario_id, tipo_movimiento, categoria, monto, descripcion, metodo_pago, fecha_registro)
-            VALUES ($1, $2, 'INGRESO', 'Ingresos Varios (Caja)', $3, $4, $5, NOW())
-        `, [sedeId, usuarioId, cuota.monto, desc, metodoFinal]);
+            (sede_id, usuario_id, tipo_movimiento, categoria, monto, descripcion, metodo_pago, fecha_registro, venta_id)
+            VALUES ($1, $2, 'INGRESO', 'VENTA_POS', $3, $4, $5, NOW(), $6)
+        `, [sedeId, usuarioId, totalPagar, descCaja, metodo_pago, ventaId]);
 
-        // 4. Actualizar estado de la cuota (Aquí SÍ existe estado)
+        // 5. Actualizar Cuota
         await client.query(`
             UPDATE cuotas_acuerdos 
-            SET estado = 'PAGADO', fecha_pago = NOW(), metodo_pago = $2
+            SET estado = 'PAGADO', fecha_pago = NOW(), metodo_pago = $2, comprobante_pago = $3
             WHERE id = $1
-        `, [id, metodoFinal]);
+        `, [id, metodo_pago, codigoTicket]);
 
         await client.query('COMMIT');
-        res.json({ msg: "✅ Pago registrado correctamente en caja." });
+
+        // 6. Facturación NUBEFACT
+        setImmediate(() => {
+            facturacionController.emitirComprobante({
+                body: { 
+                    venta_id: ventaId, 
+                    formato_pdf: formato_pdf || '3', 
+                    cliente_email 
+                },
+                usuario: req.usuario
+            }, {
+                json: (d) => console.log(`[B2B] Factura enviada: ${ventaId}`),
+                status: () => ({ json: () => {} })
+            });
+        });
+
+        res.json({ msg: "Pago registrado y factura generada.", ticketCodigo: codigoTicket, ventaId });
 
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error("❌ Error en pagarCuota:", err.message); 
-        res.status(500).json({ error: "Error interno: " + err.message });
+        console.error("❌ Error pago cuota:", err.message); 
+        res.status(500).json({ error: err.message });
     } finally {
         client.release();
     }
 };
 
-
-// 13. EDITAR CUOTA (CON CREACIÓN AUTOMÁTICA DE SALDOS) 🧠
+// 13. EDITAR CUOTA (CON REDISTRIBUCIÓN Y LIMPIEZA DE CUOTAS VACÍAS) 🧠
 exports.editarCuota = async (req, res) => {
     const { id } = req.params;
     const { nuevo_monto, nueva_fecha } = req.body;
@@ -444,67 +535,113 @@ exports.editarCuota = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // A. Obtener datos de la cuota ACTUAL antes de editar
-        const resActual = await client.query("SELECT * FROM cuotas_acuerdos WHERE id = $1", [id]);
+        // 1. Obtener datos de la cuota que estamos editando
+        const resActual = await client.query("SELECT * FROM cuotas_acuerdos WHERE id = $1 FOR UPDATE", [id]);
         if(resActual.rows.length === 0) throw new Error("Cuota no encontrada");
         
         const cuotaActual = resActual.rows[0];
+        const acuerdoId = cuotaActual.acuerdo_id;
+        const numeroCuotaActual = parseInt(cuotaActual.numero_cuota);
         const montoAnterior = parseFloat(cuotaActual.monto);
         const montoNuevoFloat = parseFloat(nuevo_monto);
-        
-        // Calculamos la diferencia
-        // Ej: Era 100, Ahora pone 60. Diferencia = +40 (Falta cobrar)
+
+        // 2. Calcular la Diferencia
+        // POSITIVA: El cliente paga MENOS ahora (Falta dinero -> Se suma al futuro)
+        // NEGATIVA: El cliente paga MÁS ahora (Sobra dinero -> Se resta al futuro)
         const diferencia = montoAnterior - montoNuevoFloat; 
 
-        // B. Actualizar la cuota ACTUAL con el nuevo monto reducido
+        // 3. VALIDACIÓN DE SEGURIDAD (No cobrar más de la deuda total)
+        if (diferencia < 0) { 
+            const resFuturo = await client.query(`
+                SELECT COALESCE(SUM(monto), 0) as deuda_futura 
+                FROM cuotas_acuerdos 
+                WHERE acuerdo_id = $1 AND numero_cuota > $2 AND estado = 'PENDIENTE'
+            `, [acuerdoId, numeroCuotaActual]);
+            
+            const deudaFuturaTotal = parseFloat(resFuturo.rows[0].deuda_futura);
+            const excedente = Math.abs(diferencia);
+
+            // Margen de error de 0.10 por decimales
+            if (excedente > (deudaFuturaTotal + 0.10)) {
+                throw new Error(`⚠️ Error: El monto ingresado (S/ ${montoNuevoFloat}) supera la deuda total pendiente.`);
+            }
+        }
+
+        // 4. ACTUALIZAR LA CUOTA ACTUAL
         await client.query(`
             UPDATE cuotas_acuerdos 
             SET monto = $1, fecha_vencimiento = $2
             WHERE id = $3
         `, [montoNuevoFloat, nueva_fecha, id]);
 
-        // C. GESTIONAR LA DIFERENCIA (Saldos)
-        // Solo si sobra dinero (diferencia positiva > 0.01 centavos)
+        // 5. LÓGICA DE CASCADA
+        
         if (diferencia > 0.01) {
-            
-            // 1. Buscamos si existe una "Siguiente Cuota"
+            // CASO A: FALTA DINERO (Se suma a la siguiente cuota o se crea nueva)
+            // ------------------------------------------------------------------
             const resSiguiente = await client.query(`
                 SELECT id, monto FROM cuotas_acuerdos 
                 WHERE acuerdo_id = $1 AND numero_cuota > $2 AND estado = 'PENDIENTE'
-                ORDER BY numero_cuota ASC 
-                LIMIT 1
-            `, [cuotaActual.acuerdo_id, cuotaActual.numero_cuota]);
+                ORDER BY numero_cuota ASC LIMIT 1
+            `, [acuerdoId, numeroCuotaActual]);
 
             if (resSiguiente.rows.length > 0) {
-                // ESCENARIO 1: Existe una cuota después. Le sumamos la deuda.
+                // Existe una cuota siguiente: Le sumamos la deuda
                 const siguiente = resSiguiente.rows[0];
                 const nuevoMontoSiguiente = parseFloat(siguiente.monto) + diferencia;
-                
                 await client.query("UPDATE cuotas_acuerdos SET monto = $1 WHERE id = $2", [nuevoMontoSiguiente, siguiente.id]);
-                
             } else {
-                // ESCENARIO 2: NO existe siguiente (Era la última). CREAMOS UNA NUEVA. 🔥
-                
-                // Calculamos nueva fecha (30 días después de la fecha editada)
+                // Es la última cuota: Creamos una nueva al final
                 const fechaBase = new Date(nueva_fecha);
-                fechaBase.setDate(fechaBase.getDate() + 30); // Sumar 30 días
-                
-                const siguienteNumero = parseInt(cuotaActual.numero_cuota) + 1;
+                fechaBase.setDate(fechaBase.getDate() + 30); 
+                const siguienteNumero = numeroCuotaActual + 1;
 
                 await client.query(`
                     INSERT INTO cuotas_acuerdos 
                     (acuerdo_id, numero_cuota, monto, fecha_vencimiento, estado)
                     VALUES ($1, $2, $3, $4, 'PENDIENTE')
-                `, [cuotaActual.acuerdo_id, siguienteNumero, diferencia, fechaBase]);
+                `, [acuerdoId, siguienteNumero, diferencia, fechaBase]);
+            }
+
+        } else if (diferencia < -0.01) {
+            // CASO B: SOBRA DINERO (Se resta a las siguientes cuotas en cadena)
+            // ------------------------------------------------------------------
+            let saldoAFavor = Math.abs(diferencia); 
+
+            // Traemos TODAS las cuotas futuras en orden
+            const resFuturas = await client.query(`
+                SELECT id, monto, numero_cuota FROM cuotas_acuerdos 
+                WHERE acuerdo_id = $1 AND numero_cuota > $2 AND estado = 'PENDIENTE'
+                ORDER BY numero_cuota ASC
+            `, [acuerdoId, numeroCuotaActual]);
+
+            for (const futura of resFuturas.rows) {
+                if (saldoAFavor <= 0.01) break; // Ya repartimos todo el saldo
+
+                const montoFutura = parseFloat(futura.monto);
+
+                // Usamos un pequeño margen de 0.01 para evitar problemas de coma flotante
+                if (saldoAFavor >= (montoFutura - 0.01)) {
+                    // El saldo cubre TOTALMENTE esta cuota futura
+                    // 🔥 ACCIÓN CORREGIDA: ELIMINAR LA CUOTA EN LUGAR DE DEJARLA EN 0
+                    await client.query("DELETE FROM cuotas_acuerdos WHERE id = $1", [futura.id]);
+                    saldoAFavor -= montoFutura;
+                } else {
+                    // El saldo cubre PARCIALMENTE esta cuota
+                    const nuevoMontoFutura = montoFutura - saldoAFavor;
+                    await client.query("UPDATE cuotas_acuerdos SET monto = $1 WHERE id = $2", [nuevoMontoFutura, futura.id]);
+                    saldoAFavor = 0; // Se acabó el saldo
+                }
             }
         }
 
         await client.query('COMMIT');
-        res.json({ msg: "Cuota actualizada. Se generó saldo pendiente si existía diferencia." });
+        res.json({ msg: "Cuota actualizada y plan de pagos reajustado." });
 
     } catch (err) {
         await client.query('ROLLBACK');
-        res.status(500).json({ error: err.message });
+        const mensaje = err.message.replace("Error: ", ""); 
+        res.status(400).json({ error: mensaje });
     } finally {
         client.release();
     }
