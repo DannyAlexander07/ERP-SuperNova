@@ -48,6 +48,7 @@ const menuItems = [
     { id: 'inventario', icon: 'bx-box', text: 'Inventario', roles: ['superadmin', 'admin', 'colaborador', 'logistica', 'gerente'] },
     { id: 'proveedores', icon: 'bx-store-alt', text: 'Proveedores', roles: ['superadmin', 'admin', 'logistica', 'gerente'] },
     { id: 'facturas', icon: 'bx-receipt', text: 'Facturas', roles: ['superadmin', 'admin', 'gerente'] },
+    { id: 'prestamos', icon: 'bx-credit-card', text: 'Créditos', roles: ['superadmin', 'admin', 'gerente'] },
     { id: 'clientes', icon: 'bx-user-pin', text: 'Clientes', roles: ['superadmin', 'admin', 'colaborador', 'gerente'] },
     { id: 'crm', icon: 'bx-doughnut-chart', text: 'CRM / Leads', roles: ['superadmin', 'admin', 'colaborador', 'gerente'] },
     { id: 'analitica', icon: 'bx-bar-chart-alt-2', text: 'Analítica', roles: ['superadmin', 'admin', 'gerente'] },
@@ -202,6 +203,7 @@ async function loadModule(moduleId) {
                 'crm': 'initCRM',
                 'inventario': 'initInventario',
                 'terceros': 'initTerceros',
+                'prestamos': 'initPrestamos',
                 // AGREGADOS QUE FALTABAN:
                 'caja_chica': 'initCajaChica',
                 'caja': 'initCaja', // Flujo de caja

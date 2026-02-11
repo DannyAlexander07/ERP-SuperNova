@@ -1,50 +1,116 @@
 <div class="table-module-container">
-    <div class="module-header">
+    
+    <div class="module-header-tabs">
         <div class="header-titles">
-            <h2>Registro de Compras y Gastos</h2>
-            <p>Controla facturas, recibos por honorarios y caja chica.</p>
+            <h2>💰 Finanzas y Tesorería</h2>
+            <p>Control de gastos, pago a proveedores.</p>
         </div>
-        <button class="btn-primary" onclick="abrirModalFactura()">
-            <i class='bx bx-plus-circle'></i> Registrar Gasto
-        </button>
-    </div>
-
-    <div class="table-toolbar">
-        <div class="search-box">
-            <i class='bx bx-search'></i>
-            <input type="text" id="buscador-facturas" placeholder="Buscar por proveedor, RUC o Doc...">
-        </div>
-        <div class="filter-actions">
-            <input type="date" id="filtro-fecha" class="date-filter" onchange="filtrarPorFecha()">
-            <button class="btn-icon" onclick="exportarExcel()" title="Exportar Excel"><i class='bx bxs-file-export' style="color: #1D6F42;"></i></button>
+        <div class="tabs-wrapper">
+            <button class="tab-btn active" onclick="cambiarTab('tab-gastos')">
+                <i class='bx bx-receipt'></i> Registro de Compras
+            </button>
+            <button class="tab-btn" onclick="cambiarTab('tab-cuentas')">
+                <i class='bx bx-money-withdraw'></i> Cuentas por Pagar
+            </button>
         </div>
     </div>
 
-    <div class="table-responsive">
-        <table class="premium-table">
-            <thead>
-                <tr>
-                    <th>Emisión</th>
-                    <th>Proveedor</th>
-                    <th>Correlativo</th>
-                    <th>Neto a Pagar</th>
-                    <th>Vencimiento</th>
-                    <th>Estado</th>
-                    <th>Sede</th>
-                    <th>Categoría</th>
-                    <th>OC</th>
-                    <th>Evidencia</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody id="tabla-facturas-body"></tbody>
-        </table>
+    <div id="tab-gastos" class="tab-content active">
+        <div class="table-toolbar">
+            <div class="search-box">
+                <i class='bx bx-search'></i>
+                <input type="text" id="buscador-facturas" placeholder="Buscar factura, RUC o proveedor...">
+            </div>
+            <div class="filter-actions">
+                <input type="date" id="filtro-fecha" class="date-filter" onchange="filtrarPorFecha()">
+                <button class="btn-primary" onclick="abrirModalFactura()">
+                    <i class='bx bx-plus-circle'></i> Nueva Compra
+                </button>
+                <button class="btn-icon" onclick="exportarExcel()" title="Exportar Excel">
+                    <i class='bx bxs-file-export' style="color: #1D6F42;"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="premium-table">
+                <thead>
+                    <tr>
+                        <th>Emisión</th>
+                        <th>Proveedor</th>
+                        <th>Documento</th>
+                        <th>Total</th>
+                        <th>Estado</th>
+                        <th>Vencimiento</th>
+                        <th>Clasificación</th>
+                        <th>Evidencia</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-facturas-body">
+                    </tbody>
+            </table>
+        </div>
+        <div id="facturas-paginacion" class="pagination-container"></div>
+    </div>
+
+    <div id="tab-cuentas" class="tab-content">
+        <div class="kpi-resumen-bar">
+            <div class="kpi-card success" style="border-left: 4px solid #10b981;">
+                <span>Pagado Hoy</span>
+                <h3 id="kpi-pagado-hoy">S/ 0.00</h3>
+                <small style="color:#10b981; font-weight:600;"> <i class='bx bx-check'></i> Al día</small>
+            </div>
+
+            <div class="kpi-card info" style="border-left: 4px solid #3b82f6;">
+                <span id="lbl-mes">Acumulado Mes Actual</span>
+                <h3 id="kpi-pagado-mes" style="color:#3b82f6;">S/ 0.00</h3>
+                <small style="color:#64748b;">Reinicia a fin de mes</small>
+            </div>
+
+            <div class="kpi-card warning" style="border-left: 4px solid #f59e0b;">
+                <span id="lbl-anio">Total Año Actual</span>
+                <h3 id="kpi-pagado-anio" style="color:#f59e0b;">S/ 0.00</h3>
+                <small style="color:#64748b;">Egresos totales</small>
+            </div>
+
+            <div class="kpi-card" style="border-left: 4px solid #8b5cf6; background:#f5f3ff;">
+                <span style="color:#7c3aed;">Total por Pagar</span>
+                <h3 id="kpi-total-pendiente" style="color:#7c3aed;">S/ 0.00</h3>
+                <small style="color:#8b5cf6;">Deuda Global</small>
+            </div>
+
+            <div class="kpi-card danger" style="border-left: 4px solid #ef4444; background:#fef2f2;">
+                <span style="color:#ef4444;">Deuda Vencida</span>
+                <h3 id="kpi-vencido" style="color:#ef4444;">S/ 0.00</h3>
+                <small>¡Atención!</small>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="premium-table">
+                <thead>
+                    <tr>
+                        <th>Vencimiento</th>
+                        <th>Semáforo</th>
+                        <th>Proveedor</th>
+                        <th>Factura</th>
+                        <th>Deuda Total</th>
+                        <th>Acuenta</th>
+                        <th>Saldo Pendiente</th>
+                        <th>Pagar</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-cuentas-body">
+                    </tbody>
+            </table>
+        </div>
     </div>
 
     <div id="modal-factura" class="modal-overlay">
         <div class="modal-content slide-in-right">
             <div class="modal-header">
-                <h3>Nuevo Gasto / Compra</h3>
+                <h3>Registrar Gasto / Compra</h3>
                 <button class="btn-close" onclick="cerrarModalFactura()"><i class='bx bx-x'></i></button>
             </div>
             
@@ -52,84 +118,47 @@
                 <form id="form-nueva-factura">
                     <input type="hidden" id="fac-id">
 
-                    <h4 class="form-subtitle">Clasificación P&L (Vital)</h4>
-                    <div class="row-grid">
-                        <div class="input-group">
-                            <select id="fac-sede" required>
-                                <option value="" disabled selected>Cargando...</option>
-                            </select>
-                            <label class="static">Centro de Costo (Sede)</label>
-                        </div>
-                        <div class="input-group">
-                            <select id="fac-linea" required>
-                                <option value="" disabled selected>Seleccionar...</option>
-                                <option value="cafeteria">Cafetería (Insumos)</option>
-                                <option value="taquilla">Taquilla / Entradas</option>
-                                <option value="eventos">Eventos / Cumpleaños</option>
-                                <option value="arcade">Arcade / Juegos</option>
-                                <option value="operativo">Gasto Operativo (Luz/Agua/Local)</option>
-                                <option value="rrhh">Planilla / Personal</option>
-                            </select>
-                            <label class="static">Línea de Negocio / Gasto</label>
-                        </div>
-                    </div>
-
-                    <h4 class="form-subtitle">Datos Generales</h4>
-                    <div class="input-group">
-                        <select id="fac-proveedor" required>
-                            <option value="" disabled selected>Cargando...</option>
+                    <h4 class="form-subtitle">Proveedor</h4>
+                    <div class="input-group" style="width: 100%;">
+                        <select id="fac-proveedor" required style="width: 100%;">
+                            <option value="" disabled selected>-- Cargando proveedores... --</option>
                         </select>
-                        <label class="static">Proveedor</label>
+                        <label class="static">Razón Social</label>
                     </div>
 
-                    <div class="input-group">
-                        <input type="text" id="fac-glosa" required placeholder=" ">
-                        <label>Descripción del Gasto (Glosa)</label>
-                    </div>
-
-                    <div class="input-group">
-                        <input type="text" id="fac-oc" placeholder=" ">
-                        <label>N° Orden Compra </label>
-                    </div>
-
-                    <h4 class="form-subtitle">Documento Tributario</h4>
+                    <h4 class="form-subtitle">Datos del Documento</h4>
                     <div class="row-grid">
                         <div class="input-group">
                             <select id="fac-tipo">
                                 <option value="Factura">Factura</option>
                                 <option value="Boleta">Boleta</option>
                                 <option value="RHE">Recibo Honorarios</option>
+                                <option value="Nota">Nota Interna</option>
                             </select>
                             <label class="static">Tipo Doc.</label>
                         </div>
                         <div class="input-group">
-                            <input type="text" id="fac-serie" required placeholder=" " style="text-transform: uppercase;">
-                            <label>Serie - Correlativo</label>
+                            <input type="text" id="fac-serie" required placeholder="F001" style="text-transform: uppercase;">
+                            <label>Serie</label>
+                        </div>
+                        <div class="input-group">
+                            <input type="text" id="fac-numero" required placeholder="0004321">
+                            <label>Correlativo</label>
                         </div>
                     </div>
 
                     <div class="row-grid">
                         <div class="input-group">
-                            <input type="date" id="fac-emision" required placeholder=" ">
+                            <input type="date" id="fac-emision" required>
                             <label class="static">Fecha Emisión</label>
                         </div>
                         <div class="input-group">
-                            <select id="fac-forma-pago" onchange="calcularVencimiento()">
-                                <option value="Contado">Contado</option>
-                                <option value="Credito 7">Crédito 7 Días</option>
-                                <option value="Credito 15">Crédito 15 Días</option>
-                                <option value="Credito 30">Crédito 30 Días</option>
-                            </select>
-                            <label class="static">Forma de Pago</label>
+                            <input type="date" id="fac-vencimiento" required>
+                            <label class="static">Fecha Vencimiento</label>
                         </div>
                     </div>
-                    
-                    <div class="input-group">
-                        <input type="date" id="fac-vencimiento" required placeholder=" ">
-                        <label class="static">Fecha Vencimiento</label>
-                    </div>
 
-                    <h4 class="form-subtitle">Importes y Detracción</h4>
+                    <h4 class="form-subtitle">Detalles Financieros</h4>
                     <div class="row-grid">
                         <div class="input-group">
                             <select id="fac-moneda">
@@ -139,84 +168,98 @@
                             <label class="static">Moneda</label>
                         </div>
                         <div class="input-group">
-                            <input type="number" id="fac-total" required placeholder=" " step="0.01" oninput="calcularMontos()">
+                            <input type="number" id="fac-total" required placeholder="0.00" step="0.01">
                             <label>Monto Total (Inc. IGV)</label>
                         </div>
                     </div>
 
-                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
-                        <input type="checkbox" id="check-detraccion" onchange="toggleDetraccion()">
-                        <label for="check-detraccion" style="font-size: 14px; color: #555; font-weight: 600;">¿Aplica Detracción?</label>
-                    </div>
-
-                    <div id="bloque-detraccion" class="row-grid" style="display: none; background: #fff3e0; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
-                        <div class="input-group" style="margin-bottom:0;">
-                            <select id="fac-porcentaje-det" onchange="calcularMontos()">
-                                <option value="10">10%</option>
-                                <option value="12">12%</option>
-                                <option value="4">4%</option>
-                            </select>
-                            <label class="static">Porcentaje</label>
-                        </div>
-                        <div class="input-group" style="margin-bottom:0;">
-                            <input type="text" id="fac-monto-det" readonly style="background: transparent; font-weight: bold;">
-                            <label class="static">Monto a Detraer</label>
-                        </div>
-                    </div>
-
                     <div class="input-group">
-                        <input type="text" id="fac-neto" readonly style="background: #e8f5e9; font-weight: bold; color: #2e7d32;">
-                        <label class="static">Neto a Pagar al Proveedor</label>
+                        <input type="text" id="fac-glosa" required placeholder="Ej: Compra de gaseosas para el mes">
+                        <label>Descripción del Gasto</label>
+                    </div>
+
+                    <h4 class="form-subtitle">Clasificación</h4>
+                    <div class="row-grid">
+                        <div class="input-group">
+                            <select id="fac-sede" required>
+                                <option value="" disabled selected>Cargando...</option>
+                            </select>
+                            <label class="static">Sede</label>
+                        </div>
+                        <div class="input-group">
+                            <select id="fac-linea" required>
+                                <option value="operativo">Gasto Operativo</option>
+                                <option value="insumos">Insumos / Mercadería</option>
+                                <option value="rrhh">Personal / Planilla</option>
+                                <option value="mantenimiento">Mantenimiento</option>
+                                <option value="servicios">Servicios</option>
+                                <option value="impuestos">Impuestos / SUNAT</option>
+                            </select>
+                            <label class="static">Categoría</label>
+                        </div>
                     </div>
 
                     <div class="file-upload-zone" id="drop-zone">
                         <i class='bx bxs-cloud-upload'></i>
-                        <p>Adjuntar PDF/Foto</p>
+                        <p>Adjuntar Foto o PDF</p>
                         <p class="file-info" id="file-name-display"></p>
-                        <input type="file" id="fac-archivo" hidden accept=".pdf, .jpg, .png">
+                        <input type="file" id="fac-archivo" hidden accept=".pdf, .jpg, .png, .jpeg">
                     </div>
 
+                    <div style="margin-top:15px; display:flex; gap:10px; align-items:center; background:#f0fdf4; padding:10px; border-radius:8px; border:1px solid #bbf7d0;">
+                        <input type="checkbox" id="check-pagar-ahora" style="width:20px; height:20px;">
+                        <label for="check-pagar-ahora" style="color:#166534; font-weight:600; cursor:pointer;">¿Registrar el pago inmediatamente?</label>
+                    </div>
                 </form>
             </div>
 
             <div class="modal-footer">
                 <button class="btn-cancel" onclick="cerrarModalFactura()">Cancelar</button>
-                <button class="btn-primary" onclick="guardarFactura()">Guardar Factura</button>
+                <button class="btn-primary" onclick="guardarFactura()">Guardar Compra</button>
             </div>
         </div>
     </div>
 
     <div id="modal-pago" class="modal-overlay" style="z-index: 2100;">
-        <div class="modal-content center-modal" style="height: auto; border-radius: 15px; max-width: 400px;">
+        <div class="modal-content center-modal" style="max-width: 400px;">
             <div class="modal-header">
-                <h3>Registrar Pago</h3>
+                <h3>Registrar Salida de Dinero</h3>
                 <button class="btn-close" onclick="cerrarModalPago()"><i class='bx bx-x'></i></button>
             </div>
             <div class="modal-body">
-                <p style="margin-bottom: 15px; color: #666;">Confirma la salida de dinero.</p>
-                <input type="hidden" id="pago-id-factura">
+                <p class="text-muted" id="pago-descripcion-txt">Pagando a...</p>
+                <input type="hidden" id="pago-ref-id"> 
+                <input type="hidden" id="pago-tipo-origen">
+                
                 <div class="input-group">
-                    <input type="date" id="pago-fecha" required placeholder=" ">
-                    <label class="static">Fecha de Pago</label>
+                    <input type="number" id="pago-monto" required step="0.01" placeholder="0.00" style="font-size:1.5rem; color:#2e7d32; font-weight:bold;">
+                    <label>Monto a Pagar (S/)</label>
                 </div>
+
                 <div class="input-group">
                     <select id="pago-metodo">
-                        <option value="Transferencia">Transferencia Bancaria</option>
-                        <option value="Efectivo">Efectivo / Caja Chica</option>
-                        <option value="Yape/Plin">Billetera Digital</option>
+                        <option value="Caja Chica">Caja Chica (Efectivo)</option>
+                        <option value="Transferencia">Transferencia BCP/Interbank</option>
+                        <option value="Yape/Plin">Yape / Plin</option>
+                        <option value="Tarjeta">Tarjeta Corporativa</option>
                     </select>
-                    <label class="static">Método de Pago</label>
+                    <label class="static">Origen del Dinero</label>
                 </div>
+
                 <div class="input-group">
-                    <input type="text" id="pago-operacion" placeholder=" ">
-                    <label>N° Operación</label>
+                    <input type="date" id="pago-fecha" required>
+                    <label class="static">Fecha Pago</label>
+                </div>
+                
+                <div class="input-group">
+                    <input type="text" id="pago-operacion" placeholder="Ej: 123456">
+                    <label>N° Operación / Constancia</label>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn-primary full-width" onclick="confirmarPago()">Confirmar Pago</button>
+                <button class="btn-primary full-width" onclick="confirmarPago()">Confirmar Egreso</button>
             </div>
         </div>
     </div>
 
-    <div id="facturas-paginacion" class="pagination-container" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;"></div>
 </div>

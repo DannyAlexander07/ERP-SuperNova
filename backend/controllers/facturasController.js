@@ -1,10 +1,14 @@
 // Ubicacion: SuperNova/backend/controllers/facturasController.js
 const pool = require('../db');
 
+// =======================================================
+// 1. GESTIÓN DE FACTURAS / GASTOS
+// =======================================================
 
-// 1. OBTENER TODAS LAS FACTURAS (CON NOMBRE DE SEDE Y PROVEEDOR)
+// 1.1 OBTENER TODAS LAS FACTURAS (MEJORADO CON SALDO PENDIENTE)
 exports.obtenerFacturas = async (req, res) => {
     try {
+        // Obtenemos facturas y calculamos lo pagado sumando los movimientos de caja asociados
         const result = await pool.query(`
             SELECT 
                 f.id,
@@ -23,9 +27,11 @@ exports.obtenerFacturas = async (req, res) => {
                 f.tiene_detraccion,
                 f.porcentaje_detraccion,
                 f.monto_detraccion,
-                f.orden_compra,  /* ⬅️ ¡CAMBIO CRÍTICO: AÑADIDO! */
+                f.orden_compra,
                 p.razon_social AS proveedor,
-                s.nombre AS sede
+                s.nombre AS sede,
+                -- 🆕 CÁLCULO DE PAGOS PARCIALES
+                COALESCE((SELECT SUM(monto) FROM movimientos_caja WHERE gasto_id = f.id AND tipo_movimiento = 'EGRESO'), 0) as monto_pagado
             FROM facturas f
             LEFT JOIN proveedores p ON f.proveedor_id = p.id
             LEFT JOIN sedes s ON f.sede_id = s.id
@@ -33,15 +39,20 @@ exports.obtenerFacturas = async (req, res) => {
             LIMIT 100
         `);
         
-        res.json(result.rows);
+        // Calculamos saldo pendiente en el servidor para facilitar el frontend
+        const facturasConSaldo = result.rows.map(f => ({
+            ...f,
+            saldo_pendiente: Number(f.monto_total) - Number(f.monto_pagado)
+        }));
+
+        res.json(facturasConSaldo);
     } catch (err) {
         console.error("Error:", err.message);
         res.status(500).send('Error al obtener facturas');
     }
 };
 
-
-// 2. CREAR NUEVA FACTURA
+// 1.2 CREAR NUEVA FACTURA
 exports.crearFactura = async (req, res) => {
     const {
         proveedorId, glosa, sede, tipo, serie, emision, vencimiento,
@@ -85,7 +96,7 @@ exports.crearFactura = async (req, res) => {
         );
         const facturaId = result.rows[0].id;
         
-        // B. IMPACTO EN CAJA (Si es al contado) --- 🚨 ESTO ES LO NUEVO
+        // B. IMPACTO EN CAJA (Si es al contado)
         if (estadoPago === 'pagado') {
             await client.query(
                 `INSERT INTO movimientos_caja (
@@ -119,8 +130,7 @@ exports.crearFactura = async (req, res) => {
     }
 };
 
-
-// 3. ELIMINAR FACTURA
+// 1.3 ELIMINAR FACTURA
 exports.eliminarFactura = async (req, res) => {
     const { id } = req.params;
     const usuarioId = req.usuario ? req.usuario.id : null;
@@ -141,7 +151,7 @@ exports.eliminarFactura = async (req, res) => {
         
         if (result.rows.length === 0) throw new Error('Factura no encontrada.');
         
-        // 🚨 Auditoría (Punto 7)
+        // Auditoría
         await client.query(
             `INSERT INTO auditoria (usuario_id, accion, modulo, registro_id, detalle) 
              VALUES ($1, 'ELIMINAR', 'FACTURAS', $2, $3)`,
@@ -162,7 +172,7 @@ exports.eliminarFactura = async (req, res) => {
     }
 };
 
-// 4. ACTUALIZAR FACTURA (EDITAR) - ACTUALIZADA
+// 1.4 ACTUALIZAR FACTURA
 exports.actualizarFactura = async (req, res) => {
     const { id } = req.params;
     const { 
@@ -174,44 +184,26 @@ exports.actualizarFactura = async (req, res) => {
     const usuarioId = req.usuario ? req.usuario.id : null; 
 
     if (!proveedorId || !emision || !total || !categoria) {
-        return res.status(400).json({ msg: 'Faltan campos obligatorios: Proveedor, Fecha Emisión, Monto Total y Categoría de Gasto.' });
-    }
-    if (parseFloat(total) <= 0) {
-        return res.status(400).json({ msg: 'El Monto Total debe ser mayor a cero.' });
+        return res.status(400).json({ msg: 'Faltan campos obligatorios.' });
     }
 
-    const client = await pool.connect(); // 🛡️ Usamos client para transacción
+    const client = await pool.connect();
 
     try {
         await client.query('BEGIN');
 
-        // 🚨 SINCRONIZACIÓN CON CAJA: Si el monto cambió y era Contado, actualizamos el movimiento de caja
+        // Sincronización con Caja si es Contado
         const checkFac = await client.query(
             'SELECT monto_total, forma_pago, descripcion, numero_documento FROM facturas WHERE id = $1 FOR UPDATE', 
             [id]
         );
         
         if (checkFac.rows.length > 0 && checkFac.rows[0].forma_pago === 'Contado') {
-            // Verificamos si cambió algo relevante para la caja (Monto, Glosa o Serie)
             const old = checkFac.rows[0];
-            if (
-                Number(old.monto_total) !== Number(total) || 
-                old.descripcion !== glosa ||
-                old.numero_documento !== serie
-            ) {
-                // Actualizamos Monto, Categoría Y DESCRIPCIÓN para mantener la coherencia
+            if (Number(old.monto_total) !== Number(total) || old.descripcion !== glosa) {
                 await client.query(
-                    `UPDATE movimientos_caja 
-                     SET monto = $1, 
-                         categoria = $2,
-                         descripcion = $3 
-                     WHERE gasto_id = $4`,
-                    [
-                        total, 
-                        categoria, 
-                        `Pago Contado Fac. ${serie} (${glosa})`, // Nueva descripción sincronizada
-                        id
-                    ]
+                    `UPDATE movimientos_caja SET monto = $1, categoria = $2, descripcion = $3 WHERE gasto_id = $4`,
+                    [total, categoria, `Pago Contado Fac. ${serie} (${glosa})`, id]
                 );
             }
         }
@@ -231,108 +223,135 @@ exports.actualizarFactura = async (req, res) => {
             ]
         );
 
-        if (result.rows.length === 0) throw new Error('Factura no encontrada.');
-        
-        await client.query(
-            `INSERT INTO auditoria (usuario_id, accion, modulo, registro_id, detalle) 
-             VALUES ($1, 'ACTUALIZAR', 'FACTURAS', $2, $3)`,
-            [usuarioId, id, `Actualizó factura N° ${result.rows[0].numero_documento}. Total: ${moneda} ${total}.`]
-        );
-
         await client.query('COMMIT');
         res.json({ msg: 'Factura actualizada', factura: result.rows[0] });
 
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error("Error en actualizarFactura:", err.message);
         res.status(500).json({ msg: err.message || 'Error al actualizar' });
     } finally {
-        client.release(); // 🛡️ Liberamos conexión
+        client.release();
     }
 };
 
 exports.subirArchivo = async (req, res) => {
     const { id } = req.params;
-    // Gracias a multer, ahora req.file contiene la información del archivo subido
     const archivo = req.file;
 
-    if (!archivo) {
-        return res.status(400).json({ msg: 'No se ha enviado ningún archivo.' });
-    }
+    if (!archivo) return res.status(400).json({ msg: 'No se envió archivo.' });
 
     try {
-        // La ruta donde multer guardó el archivo.
-        // Normalizamos las barras para que se guarden estilo UNIX (mejor compatibilidad)
         const filePath = archivo.path.replace(/\\/g, '/'); 
-
-        // CORRECCIÓN: Usar el nombre de columna correcto 'evidencia_url'
-        await pool.query(
-            'UPDATE facturas SET evidencia_url = $1 WHERE id = $2',
-            [filePath, id]
-        );
-
-        res.json({ msg: 'Archivo subido y registrado con éxito.', path: filePath });
-
+        await pool.query('UPDATE facturas SET evidencia_url = $1 WHERE id = $2', [filePath, id]);
+        res.json({ msg: 'Archivo subido', path: filePath });
     } catch (err) {
-        console.error("Error al subir archivo:", err.message);
-        res.status(500).json({ msg: 'Error al subir el archivo.' });
+        res.status(500).json({ msg: 'Error al subir archivo' });
     }
 };
 
+// =======================================================
+// 2. GESTIÓN DE PAGOS (AMORTIZACIONES Y PARCIALES)
+// =======================================================
 
-// 5. PAGAR FACTURA - ACTUALIZADA
+// 2.1 REGISTRAR PAGO A FACTURA (Soporta Parciales)
 exports.pagarFactura = async (req, res) => {
     const { id } = req.params;
-    const { fechaPago } = req.body; 
+    // Ahora recibimos monto y método, no solo fecha
+    const { fechaPago, monto, metodo, operacion } = req.body; 
     const usuarioId = req.usuario ? req.usuario.id : null; 
 
-    if (!fechaPago) return res.status(400).json({ msg: 'Falta fecha de pago.' });
+    if (!fechaPago || !monto) return res.status(400).json({ msg: 'Faltan datos de pago.' });
 
     const client = await pool.connect();
 
     try {
         await client.query('BEGIN');
 
-        // A. Obtener datos de factura con BLOQUEO (FOR UPDATE) para evitar doble pago
-        const facRes = await client.query('SELECT * FROM facturas WHERE id = $1 FOR UPDATE', [id]);
+        // A. Validar Factura y Saldo
+        const facRes = await client.query(`
+            SELECT f.*, 
+            COALESCE((SELECT SUM(monto) FROM movimientos_caja WHERE gasto_id = f.id), 0) as pagado 
+            FROM facturas f WHERE id = $1 FOR UPDATE`, [id]);
+            
         if (facRes.rows.length === 0) throw new Error('Factura no encontrada');
         const fac = facRes.rows[0];
+        
+        const saldo = parseFloat(fac.monto_total) - parseFloat(fac.pagado);
+        if (parseFloat(monto) > saldo + 0.1) throw new Error(`El monto excede el saldo pendiente (S/ ${saldo.toFixed(2)})`);
 
-        if (fac.estado_pago === 'pagado') throw new Error('Esta factura ya ha sido pagada previamente.');
-
-        // B. Actualizar estado
-        await client.query(
-            `UPDATE facturas SET estado_pago = 'pagado', fecha_pago = $1 WHERE id = $2`,
-            [fechaPago, id]
-        );
-
-        // C. Registrar EGRESO en CAJA
+        // B. Registrar EGRESO en CAJA (Esto cuenta como pago)
         await client.query(
             `INSERT INTO movimientos_caja (
                 sede_id, usuario_id, tipo_movimiento, categoria, 
-                descripcion, monto, metodo_pago, gasto_id
-            ) VALUES ($1, $2, 'EGRESO', $3, $4, $5, 'TRANSFERENCIA', $6)`,
+                descripcion, monto, metodo_pago, gasto_id, numero_operacion, fecha_creacion
+            ) VALUES ($1, $2, 'EGRESO', $3, $4, $5, $6, $7, $8, $9)`,
             [
                 fac.sede_id, usuarioId, fac.categoria_gasto,
-                `Pago Diferido Fac. ${fac.numero_documento}`,
-                fac.monto_total, id
+                `Amortización Fac. ${fac.numero_documento}`,
+                monto, metodo || 'TRANSFERENCIA', id, operacion || '', fechaPago
             ]
         );
-        
+
+        // C. Actualizar estado si se pagó todo
+        const nuevoPagado = parseFloat(fac.pagado) + parseFloat(monto);
+        let nuevoEstado = 'parcial';
+        if (nuevoPagado >= parseFloat(fac.monto_total) - 0.1) nuevoEstado = 'pagado';
+
         await client.query(
-            `INSERT INTO auditoria (usuario_id, accion, modulo, registro_id, detalle) 
-             VALUES ($1, 'PAGAR', 'FACTURAS', $2, $3)`,
-            [usuarioId, id, `Pagó factura N° ${fac.numero_documento}`]
+            `UPDATE facturas SET estado_pago = $1, fecha_pago = $2 WHERE id = $3`,
+            [nuevoEstado, fechaPago, id]
         );
         
         await client.query('COMMIT');
-        res.json({ msg: 'Pago registrado y descontado de caja', factura: fac });
+        res.json({ msg: 'Pago registrado correctamente', nuevoEstado });
 
     } catch (err) {
         await client.query('ROLLBACK');
         console.error("Error pago:", err.message);
-        res.status(500).json({ msg: err.message || 'Error al procesar pago.' });
+        res.status(500).json({ msg: err.message });
     } finally {
-        client.release(); // 🛡️ Liberamos conexión
+        client.release();
+    }
+};
+
+// =======================================================
+// 7. OBTENER KPIs DE PAGOS (Solución Definitiva Hora Perú)
+// =======================================================
+exports.obtenerKpisPagos = async (req, res) => {
+    try {
+        // SOLUCIÓN:
+        // 1. fecha_creacion::date -> Toma la fecha tal cual está guardada (ej: 2026-02-10), sin cambiarle la hora.
+        // 2. (NOW() AT TIME ZONE 'America/Lima')::date -> Fuerza a que "HOY" sea la fecha de Perú, 
+        //    evitando que a las 7PM el servidor piense que ya es mañana.
+
+        const result = await pool.query(`
+            SELECT 
+                -- Total Hoy
+                COALESCE(SUM(CASE 
+                    WHEN fecha_creacion::date = (NOW() AT TIME ZONE 'America/Lima')::date 
+                    THEN monto 
+                    ELSE 0 END), 0) AS total_hoy,
+                
+                -- Total Mes Actual
+                COALESCE(SUM(CASE 
+                    WHEN to_char(fecha_creacion, 'YYYY-MM') = to_char(NOW() AT TIME ZONE 'America/Lima', 'YYYY-MM')
+                    THEN monto 
+                    ELSE 0 END), 0) AS total_mes,
+                
+                -- Total Año Actual
+                COALESCE(SUM(CASE 
+                    WHEN to_char(fecha_creacion, 'YYYY') = to_char(NOW() AT TIME ZONE 'America/Lima', 'YYYY')
+                    THEN monto 
+                    ELSE 0 END), 0) AS total_anio
+
+            FROM movimientos_caja 
+            WHERE tipo_movimiento = 'EGRESO'
+        `);
+
+        res.json(result.rows[0]);
+
+    } catch (err) {
+        console.error("Error KPIs:", err);
+        res.json({ total_hoy: 0, total_mes: 0, total_anio: 0 });
     }
 };

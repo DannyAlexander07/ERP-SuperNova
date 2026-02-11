@@ -1242,3 +1242,64 @@ input[type="radio"]:checked + .comprobante-btn {
     border-color: #cbd5e1;
     background: #f8fafc;
 }
+
+/* =========================================
+   CORRECCIÓN INPUT DNI + BOTÓN BÚSQUEDA (MODAL VENTAS)
+   Agrega esto al final de ventas.css
+   ========================================= */
+
+/* 1. Contenedor flexible del DNI y el botón */
+#campo-dni .input-group {
+    display: flex !important;
+    align-items: stretch !important; /* Para que ambos tengan la misma altura */
+    gap: 8px !important;
+    position: relative;
+    margin-bottom: 15px;
+}
+
+/* 2. El contenedor del input (que tiene el label flotante dentro) */
+#campo-dni .input-group > div:first-child {
+    flex-grow: 1;
+    position: relative;
+    width: auto !important;
+}
+
+/* 3. Estilo del Input DNI para que el label flote bien */
+#cliente-dni {
+    width: 100% !important;
+    height: 48px !important; /* Altura fija para alinear con el botón */
+    padding: 24px 12px 4px 12px !important; /* Espacio arriba para el label */
+    background-color: #f8fafc;
+}
+
+/* 4. Estilo del Botón de Búsqueda (Cuadrado y centrado) */
+.btn-search-identidad {
+    height: 48px !important;
+    width: 48px !important;
+    padding: 0 !important; /* Quitamos padding interno para centrar icono */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0; /* Que no se aplaste */
+}
+
+/* 5. Corrección del Label Flotante Específico para DNI */
+#cliente-dni + label {
+    left: 12px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    transition: all 0.2s ease !important;
+    background: transparent !important;
+    pointer-events: none;
+    color: #94a3b8;
+}
+
+/* Estado activo del label (cuando escribes o haces clic) */
+#cliente-dni:focus + label,
+#cliente-dni:not(:placeholder-shown) + label {
+    top: 10px !important;
+    transform: translateY(0) !important;
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    color: #6366f1 !important;
+}

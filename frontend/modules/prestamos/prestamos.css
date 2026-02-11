@@ -1,0 +1,416 @@
+/* =========================================
+   ESTILOS MÓDULO CRÉDITOS Y COBRANZAS (DEFINITIVO)
+   Ubicación: frontend/modules/prestamos/prestamos.css
+   ========================================= */
+
+/* --- 1. CONTENEDOR PRINCIPAL --- */
+.module-container {
+    padding: 20px;
+    background-color: #f8fafc;
+    min-height: 100vh;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.fade-in { animation: fadeIn 0.4s ease-in-out; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* --- 2. HEADER Y TABS --- */
+.module-header-tabs {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    background: #fff;
+    padding: 15px 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.header-titles h2 { margin: 0; color: #1e293b; font-size: 1.5rem; }
+.header-titles p { margin: 5px 0 0; color: #64748b; font-size: 0.9rem; }
+
+.tabs-wrapper { display: flex; gap: 10px; }
+
+.tab-btn {
+    border: none;
+    background: transparent;
+    padding: 10px 18px;
+    font-weight: 600;
+    color: #64748b;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    display: flex; align-items: center; gap: 8px;
+}
+
+.tab-btn:hover { background-color: #f1f5f9; color: #334155; }
+.tab-btn.active { background: #eff6ff; color: #3b82f6; }
+
+.tab-content { display: none; animation: fadeIn 0.3s ease; }
+.tab-content.active { display: block; }
+
+/* --- 3. KPIs RESUMEN --- */
+.kpi-resumen-bar {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.kpi-card {
+    background: #fff;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    border-left-width: 5px; border-left-style: solid;
+    transition: transform 0.2s;
+}
+.kpi-card:hover { transform: translateY(-3px); }
+
+.kpi-card span { display: block; font-size: 0.8rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
+.kpi-card h3 { font-size: 1.8rem; margin: 10px 0; color: #0f172a; }
+.kpi-card small { font-size: 0.85rem; color: #94a3b8; }
+
+.kpi-card.danger { border-left-color: #ef4444; }
+.kpi-card.success { border-left-color: #10b981; }
+.kpi-card.info { border-left-color: #3b82f6; }
+
+/* --- 4. FORMULARIOS Y GRID SYSTEM --- */
+.grid-row {
+    display: grid;
+    gap: 20px;
+    margin-bottom: 20px;
+    width: 100%;
+}
+.col-2 { grid-template-columns: 1fr 1fr; }
+.col-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+/* Estilo de Inputs */
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+}
+
+.input-group label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #475569;
+}
+
+.input-group input, .input-group select {
+    padding: 10px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    color: #1e293b;
+    outline: none;
+    transition: all 0.2s;
+    background: #fff;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.input-group input:focus, .input-group select:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.input-bold { font-weight: 700; font-size: 1.1rem !important; background-color: #f8fafc !important; }
+
+.form-subtitle {
+    font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;
+    color: #94a3b8; font-weight: 700;
+    margin: 25px 0 15px; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px;
+}
+
+.divider { border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0; }
+
+/* --- 5. TABLAS --- */
+.table-toolbar {
+    display: flex; justify-content: space-between; margin-bottom: 20px; gap: 15px; flex-wrap: wrap;
+}
+.search-box { position: relative; flex-grow: 1; max-width: 400px; }
+.search-box i { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #94a3b8; }
+.search-box input { width: 100%; padding: 10px 15px 10px 40px; border: 1px solid #e2e8f0; border-radius: 8px; outline: none; }
+.search-box input:focus { border-color: #3b82f6; }
+
+.table-responsive { overflow-x: auto; background: #fff; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+.premium-table { width: 100%; border-collapse: collapse; min-width: 600px; }
+.premium-table th { background: #f8fafc; padding: 15px; text-align: left; font-size: 0.8rem; color: #64748b; font-weight: 700; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; }
+.premium-table td { padding: 15px; border-bottom: 1px solid #f1f5f9; color: #334155; font-size: 0.95rem; }
+.premium-table tr:hover { background-color: #f8fafc; }
+
+/* Badges */
+.badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
+.badge.bg-green { background: #dcfce7; color: #166534; }
+.badge.bg-red { background: #fee2e2; color: #991b1b; }
+.badge.bg-blue { background: #dbeafe; color: #1e40af; }
+.badge.bg-yellow { background: #fef9c3; color: #854d0e; }
+
+/* --- 6. MODALES (ESTILO FLOTANTE) --- */
+.modal-overlay {
+    position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(15, 23, 42, 0.6);
+    z-index: 9999;
+    display: none;
+    justify-content: center; align-items: center;
+    backdrop-filter: blur(4px);
+    opacity: 0; transition: opacity 0.3s;
+}
+
+.modal-overlay.active { display: flex !important; opacity: 1; }
+
+.modal-content {
+    background: #fff; width: 90%; max-width: 500px;
+    border-radius: 16px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    display: flex; flex-direction: column;
+    max-height: 90vh; overflow: hidden;
+    transform: translateY(20px); transition: transform 0.3s;
+}
+
+.modal-overlay.active .modal-content { transform: translateY(0); }
+
+.modal-content.modal-lg { max-width: 800px; }
+.modal-content.modal-xl { max-width: 1100px; }
+.modal-content.center-modal { max-width: 400px; }
+
+.modal-header { padding: 20px 25px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #fff; }
+.modal-header h3 { margin: 0; font-size: 1.2rem; color: #1e293b; display: flex; align-items: center; gap: 10px; }
+.btn-close { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #94a3b8; }
+.btn-close:hover { color: #ef4444; }
+
+.modal-body { padding: 25px; overflow-y: auto; }
+
+.modal-footer { padding: 20px 25px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px; background: #f8fafc; }
+.modal-footer.space-between { justify-content: space-between; }
+
+/* --- 7. SELECTOR DE FLUJO --- */
+.flow-selector-container {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;
+}
+.flow-option input { display: none; }
+.flow-card {
+    border: 2px solid #e2e8f0; border-radius: 12px; padding: 20px;
+    text-align: center; cursor: pointer; opacity: 0.6; transition: all 0.2s; background: #fff;
+}
+.flow-card i { font-size: 2.5rem; margin-bottom: 10px; color: #94a3b8; display: block; }
+.flow-card span { font-weight: 700; color: #334155; display: block; }
+.flow-card small { font-size: 0.8rem; color: #64748b; }
+
+.flow-option input:checked + .flow-card { opacity: 1; transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+.flow-option input:checked + .flow-card.received { border-color: #ef4444; background: #fef2f2; }
+.flow-option input:checked + .flow-card.received i { color: #ef4444; }
+.flow-option input:checked + .flow-card.given { border-color: #10b981; background: #ecfdf5; }
+.flow-option input:checked + .flow-card.given i { color: #10b981; }
+
+/* --- 8. PREVISUALIZADOR Y PESTAÑA SIMULADOR (ACTUALIZADO) --- */
+.simulation-wrapper {
+    background: #fff; 
+    padding: 25px; 
+    border-radius: 12px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.simulation-box {
+    background-color: #f0f9ff; /* Azul muy suave */
+    border: 1px solid #bae6fd;
+    border-radius: 10px;
+    padding: 20px; /* Más espacio interno */
+    margin-top: 20px;
+    animation: fadeIn 0.3s ease-in-out;
+}
+.simulation-box.hidden { display: none; }
+
+.summary-pills {
+    display: flex; 
+    flex-wrap: wrap; 
+    justify-content: center; 
+    gap: 15px;
+    margin-bottom: 20px; 
+    padding-bottom: 15px; 
+    border-bottom: 1px dashed #bae6fd;
+}
+
+.pill {
+    background: #fff; 
+    padding: 8px 18px; 
+    border-radius: 30px; 
+    font-size: 0.9rem;
+    color: #475569; 
+    font-weight: 600; 
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    border: 1px solid #e0f2fe; 
+    display: flex; 
+    align-items: center; 
+    gap: 5px;
+}
+.pill b { color: #0284c7; font-size: 1.05rem; margin-left: 5px; }
+
+/* Contenedor de la Tabla Mini */
+.table-mini-wrapper {
+    max-height: 300px; 
+    overflow-y: auto;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    width: 100%; /* Asegura que ocupe todo el ancho */
+    margin: 0 auto;
+}
+
+/* Forzar que la tabla interna ocupe el 100% */
+.table-mini-wrapper .premium-table { 
+    width: 100%; 
+    min-width: 100%; 
+    font-size: 0.85rem; 
+    box-shadow: none; 
+    border-radius: 0;
+    table-layout: auto; 
+}
+
+/* Encabezados de la tabla mini */
+.table-mini-wrapper th { 
+    position: sticky; 
+    top: 0; 
+    z-index: 10; 
+    background: #f8fafc; 
+    padding: 12px 10px;
+    text-align: center; /* Centrado */
+    color: #64748b;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+/* Celdas de la tabla mini */
+.table-mini-wrapper td { 
+    padding: 8px 15px; 
+    border-bottom: 1px solid #f1f5f9;
+    text-align: right; /* NÚMEROS A LA DERECHA */
+    color: #334155;
+    white-space: nowrap;
+}
+
+/* Alinear columna # (1) y Fecha (2) al centro */
+.table-mini-wrapper td:nth-child(1),
+.table-mini-wrapper td:nth-child(2) {
+    text-align: center;
+}
+
+/* Resaltar la columna de CUOTA (la 5ta columna) */
+.table-mini-wrapper td:nth-child(5) {
+    font-weight: 700;
+    color: #2563eb;
+    background-color: #eff6ff;
+}
+
+/* Resumen Superior del Modal Detalle */
+.credit-summary-card {
+    display: grid; 
+    grid-template-columns: repeat(4, 1fr); 
+    background: #f8fafc;
+    padding: 20px; 
+    border-radius: 10px; 
+    margin-bottom: 20px; 
+    border: 1px solid #e2e8f0;
+}
+.summary-item { display: flex; flex-direction: column; gap: 5px; }
+.summary-item strong { font-size: 1.1rem; color: #0f172a; }
+
+/* Scrollbar personalizado fino */
+.table-mini-wrapper::-webkit-scrollbar { width: 8px; height: 8px; }
+.table-mini-wrapper::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+.table-mini-wrapper::-webkit-scrollbar-track { background: #f1f5f9; }
+
+/* --- 9. BOTONES --- */
+.btn-primary { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: 0.2s; }
+.btn-primary:hover { background: #2563eb; transform: translateY(-1px); }
+.btn-primary:disabled { background: #94a3b8; cursor: not-allowed; transform: none; }
+
+.btn-secondary { background: #eff6ff; color: #3b82f6; border: 1px solid #dbeafe; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.btn-secondary:hover { background: #dbeafe; }
+
+.btn-cancel { background: #fff; border: 1px solid #cbd5e1; color: #64748b; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+.btn-cancel:hover { background: #f1f5f9; }
+
+.btn-sm { padding: 6px 12px; font-size: 0.85rem; }
+.full-width { width: 100%; }
+
+/* --- 10. RESPONSIVE --- */
+@media (max-width: 768px) {
+    .kpi-resumen-bar { grid-template-columns: 1fr; gap: 10px; }
+    .grid-row.col-2, .grid-row.col-3 { grid-template-columns: 1fr; gap: 15px; }
+    .flow-selector-container { grid-template-columns: 1fr; }
+    .credit-summary-card { grid-template-columns: 1fr 1fr; gap: 15px; }
+    
+    /* Modal pantalla completa en móvil */
+    .modal-content.modal-lg, .modal-content.modal-xl {
+        width: 100%; height: 100%; max-height: 100vh;
+        border-radius: 0;
+    }
+    .modal-body { padding: 15px; }
+    .modal-footer { flex-direction: column-reverse; }
+    .modal-footer button { width: 100%; }
+}
+
+/* =========================================
+   CORRECCIÓN DE CAPAS (Z-INDEX)
+   Para que el modal de pago salga ENCIMA del detalle
+   ========================================= */
+
+#modal-pagar-cuota {
+    z-index: 99999 !important; /* Prioridad máxima */
+    background: rgba(0, 0, 0, 0.65); /* Un poco más oscuro para resaltar */
+}
+
+#modal-pagar-cuota .modal-content {
+    box-shadow: 0 0 50px rgba(0,0,0,0.5); /* Sombra fuerte para dar profundidad */
+    border: 2px solid #3b82f6; /* Borde azul para destacar */
+}
+
+/* Asegurar que el modal de detalle se quede quieto atrás */
+#modal-detalle-credito {
+    z-index: 9000 !important;
+}
+
+/* =========================================
+   FIX TABLA MINI – OCUPAR TODO EL ANCHO
+   ========================================= */
+
+.table-mini-wrapper .premium-table {
+    min-width: unset !important;
+    width: 100% !important;
+    table-layout: fixed;
+}
+
+.table-mini-wrapper th,
+.table-mini-wrapper td {
+    width: auto;
+}
+
+/* Evita espacio fantasma a la derecha */
+.table-mini-wrapper {
+    overflow-x: hidden;
+}
+
+/* Estilos para los botones de la tabla */
+.btn-icon {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 5px;
+    margin: 0 3px;
+    transition: transform 0.2s;
+}
+.btn-icon:hover { transform: scale(1.2); }
+.btn-icon .bx-show { color: #3b82f6; }   /* Azul */
+.btn-icon .bx-pencil { color: #f59e0b; } /* Naranja */
+.btn-icon .bxs-file-pdf { color: #ef4444; } /* Rojo */
+.btn-icon .bx-trash { color: #dc2626; } /* Rojo Oscuro */

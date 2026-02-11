@@ -1,0 +1,399 @@
+<div class="module-container fade-in">
+    
+    <div class="module-header-tabs">
+        <div class="header-titles">
+            <h2>🏦 Gestión de Créditos y Cobranzas</h2>
+            <p>Administración de Préstamos, Amortizaciones y Contratos.</p>
+        </div>
+        <div class="tabs-wrapper">
+            <button class="tab-btn active" onclick="cambiarTab('tab-creditos')">
+                <i class='bx bx-list-ul'></i> Mis Operaciones
+            </button>
+            <button class="tab-btn" onclick="cambiarTab('tab-simulador')">
+                <i class='bx bx-calculator'></i> Simulador Rápido
+            </button>
+        </div>
+    </div>
+
+    <div class="kpi-resumen-bar mobile-scroll">
+        <div class="kpi-card danger" style="border-left: 4px solid #ef4444;">
+            <span>Deuda por Pagar</span>
+            <h3 id="kpi-total-pagar">S/ 0.00</h3>
+            <small>Préstamos Recibidos</small>
+        </div>
+
+        <div class="kpi-card success" style="border-left: 4px solid #10b981;">
+            <span>Por Cobrar</span>
+            <h3 id="kpi-total-cobrar">S/ 0.00</h3>
+            <small>Préstamos Otorgados</small>
+        </div>
+
+        <div class="kpi-card info" style="border-left: 4px solid #3b82f6;">
+            <span>Próximo Vencimiento</span>
+            <h3 id="kpi-prox-vencimiento">-</h3>
+            <small>Fecha Límite</small>
+        </div>
+    </div>
+
+    <div id="tab-creditos" class="tab-content active">
+        <div class="table-toolbar">
+            <div class="search-box">
+                <i class='bx bx-search'></i>
+                <input type="text" id="buscador-creditos" placeholder="Buscar por código, empresa o banco...">
+            </div>
+            <div class="actions-box">
+                <button class="btn-primary" onclick="abrirModalNuevoCredito()">
+                    <i class='bx bx-plus-circle'></i> Nueva Operación
+                </button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="premium-table">
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Tipo</th>
+                        <th>Contraparte (Empresa/Banco)</th>
+                        <th>Capital Original</th>
+                        <th>Tasa / Plazo</th>
+                        <th>Saldo Pendiente</th>
+                        <th>Estado</th>
+                        <th>Contrato</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-creditos-body">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="tab-simulador" class="tab-content" width="100%">
+        <div class="simulation-wrapper" style="background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+            
+            <h3 style="margin-top:0; color:#334155; border-bottom:1px solid #f1f5f9; padding-bottom:15px; margin-bottom:20px;">
+                <i class='bx bx-calculator'></i> Calculadora Financiera (Método Francés)
+            </h3>
+
+            <div class="grid-row col-3">
+                <div class="input-group">
+                    <label>Monto a Simular</label>
+                    <input type="number" id="sim-tab-capital" placeholder="Ej: 5000" class="input-bold">
+                </div>
+                <div class="input-group">
+                    <label>Tasa Interés (%)</label>
+                    <input type="number" id="sim-tab-tasa" placeholder="Ej: 5">
+                </div>
+                <div class="input-group">
+                    <label>Tipo Tasa</label>
+                    <select id="sim-tab-tipo-tasa">
+                        <option value="ANUAL">Anual (TEA)</option>
+                        <option value="MENSUAL">Mensual (TEM)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid-row col-3">
+                <div class="input-group">
+                    <label>Plazo (Cuotas)</label>
+                    <input type="number" id="sim-tab-plazo" placeholder="12">
+                </div>
+                <div class="input-group">
+                    <label>Periodo Gracia</label>
+                    <input type="number" id="sim-tab-gracia" value="0">
+                </div>
+                <div class="input-group" style="justify-content: flex-end;">
+                    <button class="btn-primary full-width" onclick="calcularSimulacionTab()">
+                        <i class='bx bx-play'></i> Calcular Ahora
+                    </button>
+                </div>
+            </div>
+
+            <div id="sim-tab-resultado" class="hidden" style="margin-top: 20px; border-top: 2px dashed #e2e8f0; padding-top: 20px;">
+                <div class="summary-pills">
+                    <span class="pill">Cuota Fija: <b id="res-tab-cuota" style="color:#2563eb; font-size:1.1rem;">0.00</b></span>
+                    <span class="pill">Interés Total: <b id="res-tab-interes">0.00</b></span>
+                    <span class="pill">Total a Pagar: <b id="res-tab-total">0.00</b></span>
+                </div>
+
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="premium-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Capital</th>
+                                <th>Interés</th>
+                                <th>Cuota</th>
+                                <th>Saldo</th>
+                            </tr>
+                        </thead>
+                        <tbody id="res-tab-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div id="modal-credito" class="modal-overlay">
+        <div class="modal-content modal-lg"> <div class="modal-header">
+                <h3><i class='bx bxs-bank'></i> Registrar Operación Financiera</h3>
+                <button class="btn-close" onclick="cerrarModalCredito()"><i class='bx bx-x'></i></button>
+            </div>
+
+            <div class="modal-body">
+                <form id="form-credito">
+                    
+                    <div class="flow-selector-container">
+                        <label class="flow-option">
+                            <input type="radio" name="tipo_flujo" value="RECIBIDO" checked onchange="cambiarTipoFlujo()">
+                            <div class="flow-card received">
+                                <i class='bx bx-down-arrow-circle'></i>
+                                <span>Recibimos Dinero</span>
+                                <small>(SuperNova se endeuda)</small>
+                            </div>
+                        </label>
+                        <label class="flow-option">
+                            <input type="radio" name="tipo_flujo" value="OTORGADO" onchange="cambiarTipoFlujo()">
+                            <div class="flow-card given">
+                                <i class='bx bx-up-arrow-circle'></i>
+                                <span>Prestamos Dinero</span>
+                                <small>(SuperNova invierte)</small>
+                            </div>
+                        </label>
+                    </div>
+
+                    <hr class="divider">
+
+                    <h4 class="form-subtitle">Datos de la Contraparte</h4>
+                    <div class="grid-row col-2">
+                        <div class="input-group">
+                            <select id="cred-tercero" required style="width: 100%;">
+                                <option value="" disabled selected>-- Buscar Empresa / Banco --</option>
+                                </select>
+                            <label class="static">Empresa / Entidad</label>
+                        </div>
+                        <div class="input-group">
+                            <select id="cred-moneda">
+                                <option value="PEN">S/ Soles (PEN)</option>
+                                <option value="USD">$ Dólares (USD)</option>
+                            </select>
+                            <label class="static">Moneda del Contrato</label>
+                        </div>
+                    </div>
+
+                    <h4 class="form-subtitle">Condiciones Financieras</h4>
+                    <div class="grid-row col-3">
+                        <div class="input-group">
+                            <input type="number" id="cred-capital" required step="0.01" placeholder="0.00" class="input-bold">
+                            <label>Monto Capital</label>
+                        </div>
+                        <div class="input-group">
+                            <input type="number" id="cred-tasa" required step="0.01" placeholder="Ej: 15.00">
+                            <label>Tasa Interés (%)</label>
+                        </div>
+                        <div class="input-group">
+                            <select id="cred-tipo-tasa">
+                                <option value="ANUAL">Tasa Efectiva Anual (TEA)</option>
+                                <option value="MENSUAL">Tasa Efectiva Mensual (TEM)</option>
+                            </select>
+                            <label class="static">Tipo de Tasa</label>
+                        </div>
+                    </div>
+
+                    <div class="grid-row col-3">
+                        <div class="input-group">
+                            <input type="number" id="cred-plazo" required min="1" placeholder="12">
+                            <label>N° Cuotas</label>
+                        </div>
+                        <div class="input-group">
+                            <select id="cred-frecuencia">
+                                <option value="MENSUAL">Mensual</option>
+                                <option value="QUINCENAL">Quincenal</option>
+                            </select>
+                            <label class="static">Frecuencia Pago</label>
+                        </div>
+                        <div class="input-group">
+                            <input type="number" id="cred-gracia" min="0" value="0" placeholder="0">
+                            <label>Periodo Gracia (Meses)</label>
+                        </div>
+                    </div>
+                    <h4 class="form-subtitle">Datos Legales (Para el Contrato)</h4>
+                    <div class="grid-row col-3">
+                        <div class="input-group">
+                            <label>Representante Legal</label>
+                            <input type="text" id="cred-rep-nombre" placeholder="Nombre del Gerente">
+                        </div>
+                        <div class="input-group">
+                            <label>DNI Representante</label>
+                            <input type="text" id="cred-rep-dni" maxlength="8" placeholder="DNI">
+                        </div>
+                        <div class="input-group">
+                            <label>Partida Registral</label>
+                            <input type="text" id="cred-partida" placeholder="N° Partida Sunarp">
+                        </div>
+                    </div>
+                    <h4 class="form-subtitle">Datos para el Contrato</h4>
+                    <div class="grid-row col-3">
+                        <div class="input-group">
+                            <input type="date" id="cred-fecha-inicio" required>
+                            <label class="static">Vencimiento 1ra Cuota</label>
+                        </div>
+                        <div class="input-group">
+                            <input type="text" id="cred-banco" placeholder="Ej: BCP">
+                            <label>Banco Destino</label>
+                        </div>
+                        <div class="input-group">
+                            <input type="text" id="cred-cuenta" placeholder="Ej: 191-xxxxxxxx">
+                            <label>N° Cuenta Depósito</label>
+                        </div>
+                    </div>
+
+                    <div class="simulation-trigger">
+                        <button type="button" class="btn-secondary full-width" onclick="simularCronograma()">
+                            <i class='bx bx-refresh'></i> Calcular Cronograma (Previsualizar)
+                        </button>
+                    </div>
+
+                    <div id="simulation-result" class="simulation-box hidden">
+                        <div class="summary-pills">
+                            <span class="pill">Cuota Aprox: <b id="sim-cuota">S/ 0.00</b></span>
+                            <span class="pill">Interés Total: <b id="sim-interes">S/ 0.00</b></span>
+                            <span class="pill">Total a Pagar: <b id="sim-total">S/ 0.00</b></span>
+                        </div>
+                        <div class="table-mini-wrapper">
+                            <table class="mini-table">
+                                <thead>
+                                    <tr><th>#</th><th>Fecha</th><th>Capital</th><th>Interés</th><th>Cuota</th><th>Saldo</th></tr>
+                                </thead>
+                                <tbody id="sim-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </form>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="cerrarModalCredito()">Cancelar</button>
+                <button class="btn-primary" onclick="guardarCredito()">
+                    <i class='bx bx-save'></i> Guardar y Generar Contrato
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-detalle-credito" class="modal-overlay">
+        <div class="modal-content modal-xl"> <div class="modal-header">
+                <div class="header-info">
+                    <h3 id="det-titulo">Detalle de Operación</h3>
+                    <span id="det-estado" class="badge">ACTIVO</span>
+                </div>
+                <button class="btn-close" onclick="cerrarModalDetalle()"><i class='bx bx-x'></i></button>
+            </div>
+
+            <div class="modal-body">
+                
+                <div class="credit-summary-card">
+                    <div class="summary-item">
+                        <small>Contraparte</small>
+                        <strong id="det-cliente">...</strong>
+                    </div>
+                    <div class="summary-item">
+                        <small>Capital Prestado</small>
+                        <strong id="det-capital" style="color:var(--text-dark);">S/ 0.00</strong>
+                    </div>
+                    <div class="summary-item">
+                        <small>Tasa Interés</small>
+                        <strong id="det-tasa">0%</strong>
+                    </div>
+                    <div class="summary-item">
+                        <small>Deuda Restante</small>
+                        <strong id="det-saldo" style="color:var(--danger-color); font-size:1.2rem;">S/ 0.00</strong>
+                    </div>
+                </div>
+
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto; margin-top: 15px;">
+                    <table class="premium-table">
+                        <thead style="position: sticky; top: 0; z-index: 5;">
+                            <tr>
+                                <th>#</th>
+                                <th>Vencimiento</th>
+                                <th>Cuota Total</th>
+                                <th>Capital</th>
+                                <th>Interés</th>
+                                <th>Saldo Restante</th>
+                                <th>Estado</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-detalle-body">
+                            </tbody>
+                    </table>
+                </div>
+
+            </div>
+            
+            <div class="modal-footer space-between">
+                <button class="btn-secondary" onclick="imprimirContratoDetalle()">
+                    <i class='bx bxs-file-pdf'></i> Descargar Contrato
+                </button>
+                <button class="btn-cancel" onclick="cerrarModalDetalle()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-pagar-cuota" class="modal-overlay" style="z-index: 1200;">
+        <div class="modal-content center-modal" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Registrar Pago de Cuota</h3>
+                <button class="btn-close" onclick="cerrarModalPagoCuota()"><i class='bx bx-x'></i></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="pago-cuota-id">
+                <p id="pago-cuota-txt" style="margin-bottom: 15px; font-weight: 500;">Confirmar pago...</p>
+                
+                <div class="input-group">
+                    <input type="date" id="pago-cuota-fecha" required>
+                    <label class="static">Fecha de Realización</label>
+                </div>
+                <div class="input-group">
+                    <select id="pago-cuota-metodo">
+                        <option value="TRANSFERENCIA">Transferencia Bancaria</option>
+                        <option value="EFECTIVO">Efectivo / Caja</option>
+                        <option value="CHEQUE">Cheque</option>
+                    </select>
+                    <label class="static">Medio de Pago</label>
+                </div>
+                <div class="input-group">
+                    <input type="text" id="pago-cuota-operacion" placeholder="Ej: 1234567">
+                    <label>N° Operación</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-primary full-width" onclick="confirmarPagoCuota()">Procesar Pago</button>
+            </div>
+        </div>
+    </div>
+    <div id="modal-confirmar-borrado" class="modal-overlay" style="z-index: 2000;">
+    <div class="modal-content center-modal" style="max-width: 350px; text-align: center; padding: 30px;">
+        
+        <div style="margin-bottom: 15px;">
+            <i class='bx bx-error-circle' style="font-size: 4rem; color: #ef4444;"></i>
+        </div>
+        
+        <h3 style="margin-bottom: 10px; color: #1e293b;">¿Estás seguro?</h3>
+        <p style="color: #64748b; margin-bottom: 25px; line-height: 1.5;">
+            Esta acción eliminará el préstamo y <b>todo su historial de pagos</b> permanentemente.
+        </p>
+
+        <div class="modal-footer" style="justify-content: center; gap: 10px; padding: 0;">
+            <button class="btn-cancel" onclick="cerrarModalConfirmar()">Cancelar</button>
+            <button id="btn-delete-confirm" class="btn-primary" onclick="ejecutarEliminacion()" style="background-color: #ef4444; border-color: #ef4444;">
+                Sí, Eliminar
+            </button>
+        </div>
+    </div>
+</div>
+</div>
