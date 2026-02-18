@@ -69,9 +69,13 @@ app.use('/api/analitica', analiticaRoutes);
 
 
 // --- ARCHIVOS ESTÁTICOS (EVIDENCIAS Y FOTOS) ---
-// Habilitamos ambas rutas para asegurar compatibilidad
-app.use('/backend/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// --- ARCHIVOS ESTÁTICOS (EVIDENCIAS Y FOTOS) ---
+const uploadsPath = path.join(__dirname, 'uploads');
+app.use('/uploads', express.static(uploadsPath));
+app.use('/backend/uploads', express.static(uploadsPath));
+
+// Log para que sepas dónde está buscando las fotos el servidor al arrancar
+console.log(`📂 Carpeta de uploads vinculada en: ${uploadsPath}`);
 
 // --- SERVIR FRONTEND (SPA) ---
 app.use(express.static(path.join(__dirname, '../frontend')));

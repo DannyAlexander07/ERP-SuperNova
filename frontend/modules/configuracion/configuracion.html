@@ -77,25 +77,39 @@
                 </div>
                 <div class="form-row">
                     <div class="input-group">
-                        <select id="rol" required>
-                            <option value="" disabled selected></option>
+                        <select id="rol-usuario" name="rol" required>
                             <option value="superadmin">Super Admin</option>
-                            <option value="admin">Administrador</option>
+                            <option value="director">Director</option>
                             <option value="gerente">Gerente</option>
+                            <option value="admin">Administrador</option>
+                            <option value="finanzas">Finanzas</option>
+                            <option value="contador">Contabilidad</option>
                             <option value="logistica">Logística</option>
-                            <option value="colaborador">Colaborador</option>
+                            <option value="cajero">Cajero</option>
                         </select>
                         <label class="static">Rol de Sistema</label>
                     </div>
-                     <div class="input-group">
+                    <div class="input-group">
                         <input type="email" id="email" required placeholder=" " autocomplete="off">
                         <label>Correo Corporativo</label>
                     </div>
                 </div>
-                <div class="input-group full">
-                    <input type="password" id="password" required placeholder=" " autocomplete="new-password">
-                    <label>Contraseña Temporal</label>
+                
+                <div class="form-row">
+                    <div class="input-group">
+                        <select id="edit-estado" name="estado" required>
+                            <option value="activo">🟢 Activo (Trabajando)</option>
+                            <option value="inhabilitado">🟠 Inhabilitado (Suspendido/Vacaciones)</option>
+                            <option value="eliminado">🔴 Eliminado (Ya no labora)</option>
+                        </select>
+                        <label class="static">Estado del Usuario</label>
+                    </div>
+                    <div class="input-group">
+                        <input type="password" id="password" required placeholder=" " autocomplete="new-password">
+                        <label>Contraseña Temporal</label>
+                    </div>
                 </div>
+
                  <div class="action-wrapper">
                     <button type="submit" class="btn-save">
                         <i class='bx bx-user-plus'></i> Registrar Usuario

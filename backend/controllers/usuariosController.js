@@ -100,12 +100,12 @@ exports.obtenerSedes = async (req, res) => {
     }
 };
 
-// 3. ACTUALIZAR USUARIO (VERSIÓN SUPREMA: LIMPIEZA DE DISCO Y SANITIZACIÓN)
+// 3. ACTUALIZAR USUARIO (VERSIÓN SUPREMA: LIMPIEZA DE DISCO, SANITIZACIÓN Y ESTADO)
 exports.actualizarUsuario = async (req, res) => {
     const { id } = req.params;
     
-    // Capturamos los datos
-    let { nombres, apellidos, dni, celular, direccion, cargo, sede_id, rol, email, password } = req.body;
+    // 🔥 NUEVO: Capturamos 'estado' junto con los demás datos
+    let { nombres, apellidos, dni, celular, direccion, cargo, sede_id, rol, email, password, estado } = req.body;
     
     // 🛡️ BLINDAJE 1: Sanitización de datos (Limpiar espacios accidentales)
     if (dni) dni = dni.toString().trim();
@@ -144,14 +144,17 @@ exports.actualizarUsuario = async (req, res) => {
             }
         }
 
-        // 1. Verificar si el usuario existe
-        const usuarioExistente = await client.query('SELECT * FROM usuarios WHERE id = $1', [id]);
+        // 1. Verificar si el usuario existe y obtener su estado actual
+        const usuarioExistente = await client.query('SELECT estado FROM usuarios WHERE id = $1', [id]);
         if (usuarioExistente.rows.length === 0) {
             await client.query('ROLLBACK');
             return res.status(404).json({ msg: "Usuario no encontrado." });
         }
 
-        // 2. Construcción dinámica de la consulta
+        // 🔥 Si no nos envían un estado nuevo, mantenemos el que ya tenía en la base de datos
+        const estadoFinal = estado || usuarioExistente.rows[0].estado;
+
+        // 2. Construcción dinámica de la consulta (AHORA INCLUYE ESTADO)
         let query = `
             UPDATE usuarios SET 
                 nombres = $1, 
@@ -162,11 +165,12 @@ exports.actualizarUsuario = async (req, res) => {
                 cargo = $6, 
                 sede_id = $7, 
                 rol = $8, 
-                correo = $9
+                correo = $9,
+                estado = $10
         `;
         
-        let values = [nombres, apellidos, dni, celular, direccion, cargo, sedeIdFinal, rol, email];
-        let contador = 10; 
+        let values = [nombres, apellidos, dni, celular, direccion, cargo, sedeIdFinal, rol, email, estadoFinal];
+        let contador = 11; // Ahora el siguiente parámetro será el $11
 
         // A. Si hay contraseña nueva, la encriptamos
         if (password && password.trim() !== '') {
@@ -190,7 +194,7 @@ exports.actualizarUsuario = async (req, res) => {
             contador++;
         }
 
-        // Cerramos la consulta
+        // Cerramos la consulta agregando el WHERE id = ...
         query += ` WHERE id = $${contador}`;
         values.push(id);
 
@@ -304,7 +308,7 @@ exports.actualizarPerfil = async (req, res) => {
     }
 };
 
-// 6. ELIMINAR USUARIO POR ID
+// 6. ELIMINAR USUARIO POR ID (ACTUALIZADO A SOFT DELETE)
 exports.eliminarUsuario = async (req, res) => {
     const { id } = req.params;
 
@@ -314,9 +318,12 @@ exports.eliminarUsuario = async (req, res) => {
             return res.status(400).json({ msg: "No puedes eliminar tu propia cuenta mientras estás conectado." });
         }
 
-        // 2. Ejecutar borrado
-        // Nota: Si usas "Soft Delete" (papelera), cambia esto por un UPDATE usuarios SET activo = false...
-        const result = await pool.query('DELETE FROM usuarios WHERE id = $1 RETURNING *', [id]);
+        // 2. Ejecutar borrado lógico (Soft Delete)
+        // Ya no usamos DELETE. Actualizamos el estado a 'eliminado' para no romper el historial.
+        const result = await pool.query(
+            "UPDATE usuarios SET estado = 'eliminado' WHERE id = $1 RETURNING *", 
+            [id]
+        );
 
         if (result.rowCount === 0) {
             return res.status(404).json({ msg: "Usuario no encontrado." });
@@ -326,7 +333,7 @@ exports.eliminarUsuario = async (req, res) => {
 
     } catch (err) {
         console.error("Error al eliminar usuario:", err.message);
-        // Error común: llave foránea (si el usuario ya hizo ventas, la BD no dejará borrarlo)
+        // Error común: llave foránea (aunque con el UPDATE ya no debería saltar, lo conservamos por seguridad estructural)
         if (err.code === '23503') {
             return res.status(400).json({ msg: "No se puede eliminar: Este usuario tiene registros asociados (ventas, movimientos, etc.). Mejor desactívalo." });
         }

@@ -52,7 +52,27 @@ router.post('/upload/:id', checkAuth, upload.single('archivo'), facturasControll
 // Eliminar factura (DELETE) - Solo Admins por seguridad financiera
 router.delete('/:id', checkAuth, checkRole(['admin', 'superadmin']), facturasController.eliminarFactura);
 
+// KPIs Financieros
 router.get('/kpis/resumen-pagos', checkAuth, facturasController.obtenerKpisPagos);
+
+// ==========================================
+// 2. NUEVAS RUTAS: FLUJO DE APROBACIÓN Y MODAL "VER" (FASE 2)
+// ==========================================
+
+// Cambiar estado del flujo (Programado, Pendiente, etc.)
+router.put('/:id/estado', checkAuth, facturasController.cambiarEstadoAprobacion);
+
+// Ver historial de pagos de una factura
+router.get('/:id/pagos', checkAuth, facturasController.obtenerHistorialPagos);
+
+// Ver todos los documentos extra de una factura
+router.get('/:id/documentos', checkAuth, facturasController.obtenerDocumentos);
+
+// Subir un documento nuevo a la factura (Múltiples archivos)
+router.post('/:id/documentos', checkAuth, upload.single('archivo'), facturasController.subirDocumentoExtra);
+
+// Eliminar un documento específico
+router.delete('/documentos/:docId', checkAuth, facturasController.eliminarDocumento);
 
 
 module.exports = router;

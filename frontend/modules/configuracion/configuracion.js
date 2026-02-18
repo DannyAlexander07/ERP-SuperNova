@@ -42,7 +42,7 @@
     }
 
     // --- 3. CARGAR USUARIOS (VISTA LISTA) ---
-async function cargarListaUsuarios() {
+    async function cargarListaUsuarios() {
         const tbody = document.getElementById('tabla-usuarios-body');
         // Asegúrate de tener estos elementos en tu HTML (o agrégalos dinámicamente)
         const infoPag = document.getElementById('info-paginacion'); 
@@ -93,33 +93,35 @@ async function cargarListaUsuarios() {
                 else if (r.includes('logistica')) badgeClass = 'role-logis';
                 else if (r.includes('super')) badgeClass = 'role-superadmin'; // Asumiendo que tienes clase CSS para super
                 
-                // 🔥 CORRECCIÓN DEFINITIVA DE IMAGEN
+                // 🔥 CORRECCIÓN DEFINITIVA DE IMAGEN (ANTI-404)
                 let imgUrl = "https://cdn-icons-png.flaticon.com/512/149/149071.png"; // Imagen default
                 
                 if (u.foto_url && u.foto_url !== 'null') {
                     if(u.foto_url.startsWith('http')) {
-                        // Si ya es una URL web (ej: Cloudinary), usarla tal cual
                         imgUrl = u.foto_url;
                     } else {
-                        // Si es local:
-                        // 1. Reemplazar backslashes de Windows (\) por slashes web (/)
-                        let cleanPath = u.foto_url.replace(/\\/g, '/');
-                        // 2. Asegurar que no tenga doble slash al inicio
-                        if (cleanPath.startsWith('/') || cleanPath.startsWith('backend/')) {
-                            // Ajusta esto según cómo guardes la ruta. Normalmente queremos "uploads/foto.jpg"
-                            // Si tu ruta en DB es "backend/uploads/foto.jpg", úsala tal cual con el host.
+                        // 1. Limpiar barras invertidas de Windows y el prefijo 'backend/' si existe
+                        let cleanPath = u.foto_url.replace(/\\/g, '/').replace('backend/', '');
+                        
+                        // 2. Eliminar el slash inicial si existe para evitar la doble barra (//)
+                        if (cleanPath.startsWith('/')) {
+                            cleanPath = cleanPath.substring(1);
                         }
-                        // 3. Prepend el host (Asumiendo que tu backend corre en el 3000)
+                        
+                        // 3. Concatenar con el host limpio
                         imgUrl = `http://localhost:3000/${cleanPath}`; 
                     }
                 }
+                const opacityStyle = (u.estado || '').toLowerCase() === 'eliminado' ? 'opacity: 0.5; filter: grayscale(1);' : '';
 
+                // Y en el tr:
                 const tr = document.createElement('tr');
+                tr.style = opacityStyle;
                 tr.innerHTML = `
                     <td>
                         <div class="user-profile-cell">
                             <img src="${imgUrl}" class="user-mini-img" 
-                                 onerror="this.onerror=null; this.src='https://cdn-icons-png.flaticon.com/512/149/149071.png';">
+                                onerror="this.onerror=null; this.src='https://cdn-icons-png.flaticon.com/512/149/149071.png';">
                             <div class="user-info">
                                 <h4>${u.nombres} ${u.apellidos || ''}</h4>
                                 <span>${u.correo || u.email || 'Sin correo'}</span>
@@ -132,13 +134,17 @@ async function cargarListaUsuarios() {
                     </td>
                     <td><span class="role-tag ${badgeClass}">${(u.rol || '').toUpperCase()}</span></td>
                     <td>
-                        <span style="color:${u.estado === 'Activo' || u.activo ? '#16a34a' : '#dc2626'}; font-weight:700; font-size:12px; text-transform:uppercase;">
+                        <span style="color:${(u.estado || '').toLowerCase() === 'activo' ? '#16a34a' : '#dc2626'}; font-weight:700; font-size:12px; text-transform:uppercase;">
                             ${u.estado || (u.activo ? 'ACTIVO' : 'INACTIVO')}
                         </span>
                     </td>
                     <td>
-                        <button class="btn-action-mini btn-edit" title="Editar" onclick="editarUsuario(${u.id})"><i class='bx bx-edit-alt'></i></button>
-                        <button class="btn-action-mini btn-del" title="Eliminar" onclick="eliminarUsuario(${u.id})"><i class='bx bx-trash'></i></button>
+                        <button class="btn-action-mini btn-edit" title="Editar" onclick="editarUsuario(${u.id})">
+                            <i class='bx bx-edit-alt'></i>
+                        </button>
+                        <button class="btn-action-mini btn-del" title="Gestionar Estado / Inhabilitar" onclick="eliminarUsuario(${u.id})">
+                            <i class='bx bx-user-x'></i>
+                        </button>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -149,6 +155,7 @@ async function cargarListaUsuarios() {
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:red;">Error de conexión.</td></tr>';
         }
     }
+
     // A. Escuchar el buscador
     const buscador = document.getElementById('buscador-usuarios');
     if(buscador) {
@@ -196,71 +203,127 @@ async function cargarListaUsuarios() {
 
         } catch (error) {
             console.error(error);
-            alert("❌ No se pudieron cargar los datos del usuario para editar.");
+            // 🆕 Usar tu función de toast en lugar del alert feo
+            if (typeof showToast === 'function') {
+                showToast("No se pudieron cargar los datos del usuario para editar.", "error");
+            } else {
+                alert("❌ No se pudieron cargar los datos del usuario para editar.");
+            }
         }
     };
 
     // Función auxiliar para borrar usuario
     window.eliminarUsuario = async function(id) {
-        if(!confirm("¿Estás seguro de eliminar este usuario? Esta acción no se puede deshacer.")) return;
+        // 1. Buscamos los datos del usuario localmente para cargarlos rápido
+        // (O podemos hacer un fetch al server si prefieres)
         try {
             const token = localStorage.getItem('token');
             const res = await fetch(`/api/usuarios/${id}`, {
-                method: 'DELETE',
                 headers: { 'x-auth-token': token }
             });
-            const data = await res.json();
-            if(res.ok) {
-                alert("✅ " + data.msg);
-                cargarListaUsuarios();
+            const usuario = await res.json();
+
+            if (!res.ok) throw new Error("No se pudo obtener la información del usuario");
+
+            // 2. En lugar de borrarlo directamente, abrimos el formulario de edición
+            // para que el admin elija: Inhabilitado o Eliminado.
+            prepararFormularioEdicion(usuario);
+            
+            // 3. Notificación informativa al usuario
+            if (typeof showToast === 'function') {
+                showToast("Modo Gestión: Cambie el 'Estado del Usuario' según corresponda.", "info");
             } else {
-                alert("❌ Error: " + (data.msg || "No se pudo eliminar"));
+                console.log("Cambiando a modo gestión de estado para el usuario: " + usuario.nombres);
             }
-        } catch(e) { 
-            console.error(e); 
-            alert("Error de conexión.");
+
+            // 4. Hacemos scroll suave hacia arriba para que vea el formulario
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        } catch (e) {
+            console.error(e);
+            if (typeof showToast === 'function') showToast("Error al cargar gestión de usuario", "error");
         }
     };
 
     // --- 5. LÓGICA DEL FORMULARIO (CREAR / EDITAR) ---
-
-    // Llena el formulario con datos para editar
     function prepararFormularioEdicion(usuario) {
-        if (isListView) toggleUserView(); // Ir a la vista de formulario
+        // 1. Cambiar a la vista de formulario si estamos en la lista
+        if (isListView) toggleUserView(); 
 
-        editModeUserId = usuario.id; // Marcar que estamos editando
+        // 2. Marcar el ID del usuario que estamos editando
+        editModeUserId = usuario.id; 
 
-        // Cambiar títulos y botones
+        // 3. Actualizar la interfaz (Títulos y Botones)
         document.getElementById('config-title').innerText = "Editar Usuario";
-        document.querySelector('#form-crear-usuario-completo .btn-save').innerHTML = "<i class='bx bx-save'></i> Actualizar Usuario";
+        const btnSave = document.querySelector('#form-crear-usuario-completo .btn-save');
+        if (btnSave) {
+            btnSave.innerHTML = "<i class='bx bx-save'></i> Actualizar Usuario";
+        }
         
-        // Llenar campos
+        // 4. Llenado de campos de texto básicos
         document.getElementById('nombres').value = usuario.nombres || '';
         document.getElementById('apellidos').value = usuario.apellidos || '';
-        document.getElementById('dni').value = usuario.dni || '';
+        
+        // El campo dni en el objeto puede venir como 'dni' o 'documento_id'
+        document.getElementById('dni').value = usuario.dni || usuario.documento_id || '';
         document.getElementById('celular').value = usuario.celular || '';
         document.getElementById('direccion').value = usuario.direccion || '';
         document.getElementById('cargo').value = usuario.cargo || '';
-        document.getElementById('sede').value = usuario.sede_id || '';
-        document.getElementById('rol').value = usuario.rol || '';
-        document.getElementById('email').value = usuario.correo || '';
         
-        // La contraseña no es obligatoria al editar
-        const passInput = document.getElementById('password');
-        passInput.required = false;
-        passInput.placeholder = "Dejar en blanco para mantener la actual";
-
-        // Previsualizar foto actual si existe
-        const previewImg = document.getElementById('preview-img');
-        if (usuario.foto_url) {
-            let cleanPath = usuario.foto_url.replace(/\\/g, '/');
-            if (cleanPath.startsWith('/')) cleanPath = cleanPath.substring(1);
-            previewImg.src = `http://localhost:3000/${cleanPath}`;
-        } else {
-            previewImg.src = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
+        // 5. Llenado de Selects (Sede y Rol)
+        document.getElementById('sede').value = usuario.sede_id || '';
+        
+        // Aseguramos que el ID 'rol-usuario' coincida con tu HTML actualizado
+        const rolSelect = document.getElementById('rol-usuario');
+        if (rolSelect) {
+            rolSelect.value = usuario.rol || '';
         }
-        // Limpiar input de archivo para no re-subir la misma foto
-        document.getElementById('input-foto').value = '';
+        
+        // 6. 🔥 CORRECCIÓN: Correo corporativo (Campo 'correo' en DB -> Input 'email' en HTML)
+        const emailInput = document.getElementById('email');
+        if (emailInput) {
+            emailInput.value = usuario.correo || usuario.email || '';
+        }
+        
+        // 7. 🔥 CORRECCIÓN: Estado del Usuario
+        const estadoSelect = document.getElementById('edit-estado');
+        if (estadoSelect) {
+            // Normalizamos a minúsculas para que coincida con los values: 'activo', 'eliminado', etc.
+            estadoSelect.value = (usuario.estado || 'activo').toLowerCase();
+        }
+        
+        // 8. Gestión de Contraseña (No obligatoria en edición)
+        const passInput = document.getElementById('password');
+        if (passInput) {
+            passInput.required = false;
+            passInput.placeholder = "Dejar en blanco para mantener la actual";
+            passInput.value = ""; // Limpiar cualquier intento previo
+        }
+
+        // 9. 🔥 CORRECCIÓN ANTI-404: Previsualización de Foto
+        const previewImg = document.getElementById('preview-img');
+        if (previewImg) {
+            if (usuario.foto_url && usuario.foto_url !== 'null') {
+                // Limpieza de ruta: quitamos 'backend/' y evitamos dobles slashes
+                let cleanPath = usuario.foto_url.replace(/\\/g, '/').replace('backend/', '');
+                
+                if (cleanPath.startsWith('/')) {
+                    cleanPath = cleanPath.substring(1);
+                }
+                
+                // Construimos URL final
+                previewImg.src = cleanPath.startsWith('http') ? cleanPath : `http://localhost:3000/${cleanPath}`;
+            } else {
+                // Foto por defecto
+                previewImg.src = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
+            }
+        }
+
+        // 10. Resetear el input file físico
+        const fileInput = document.getElementById('input-foto');
+        if (fileInput) {
+            fileInput.value = '';
+        }
     }
 
     // Resetea el formulario al estado "Crear Nuevo"
@@ -307,77 +370,109 @@ async function cargarListaUsuarios() {
 
     // --- 7. ENVÍO DEL FORMULARIO (CREAR O ACTUALIZAR) ---
     const form = document.getElementById('form-crear-usuario-completo');
-    if(form) {
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const btnSubmit = form.querySelector('.btn-save');
-            const originalText = btnSubmit.innerHTML;
-            btnSubmit.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Procesando...";
-            btnSubmit.disabled = true;
+        if(form) {
+            form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btnSubmit = form.querySelector('.btn-save');
+        const originalText = btnSubmit.innerHTML;
+        
+        // Bloqueamos el botón y mostramos carga
+        btnSubmit.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Procesando...";
+        btnSubmit.disabled = true;
 
-            // 🔥 USAMOS FORMDATA PARA ENVIAR ARCHIVOS Y DATOS
+        try {
             const formData = new FormData();
-            formData.append('nombres', document.getElementById('nombres').value);
-            formData.append('apellidos', document.getElementById('apellidos').value);
-            formData.append('dni', document.getElementById('dni').value);
-            formData.append('celular', document.getElementById('celular').value);
-            formData.append('direccion', document.getElementById('direccion').value);
-            formData.append('cargo', document.getElementById('cargo').value);
-            formData.append('sede_id', document.getElementById('sede').value);
-            formData.append('rol', document.getElementById('rol').value);
-            formData.append('email', document.getElementById('email').value);
+
+            // --- 🛡️ FUNCIÓN DE CAPTURA SEGURA ---
+            // Evita que el código se rompa si un ID no existe en el HTML
+            const safeAppend = (id, key) => {
+                const el = document.getElementById(id);
+                if (el) {
+                    formData.append(key, el.value);
+                } else {
+                    console.warn(`⚠️ Advertencia: No se encontró el elemento con ID "${id}"`);
+                }
+            };
+
+            // Captura de datos (Ajustado a los IDs reales de tu HTML)
+            safeAppend('nombres', 'nombres');
+            safeAppend('apellidos', 'apellidos');
+            safeAppend('dni', 'dni');
+            safeAppend('celular', 'celular');
+            safeAppend('direccion', 'direccion');
+            safeAppend('cargo', 'cargo');
+            safeAppend('sede', 'sede_id');
+            safeAppend('rol-usuario', 'rol'); // ✅ Corregido de 'rol' a 'rol-usuario'
+            safeAppend('email', 'email');
             
-            const password = document.getElementById('password').value;
-            // Solo enviar contraseña si se escribió algo (importante al editar)
-            if (password) {
-                formData.append('password', password);
+            // 🔥 Estado seleccionado
+            const estadoSelect = document.getElementById('edit-estado');
+            if (estadoSelect) {
+                formData.append('estado', estadoSelect.value);
             }
 
+            // Contraseña (Solo si se escribe)
+            const passwordEl = document.getElementById('password');
+            if (passwordEl && passwordEl.value) {
+                formData.append('password', passwordEl.value);
+            }
+
+            // Foto (Solo si se selecciona)
             const fileInput = document.getElementById('input-foto');
-            if (fileInput.files[0]) {
+            if (fileInput && fileInput.files[0]) {
                 formData.append('foto', fileInput.files[0]);
             }
 
-            try {
-                const token = localStorage.getItem('token');
-                let url = '/api/usuarios';
-                let method = 'POST';
+            // --- 🚀 ENVÍO AL BACKEND ---
+            const token = localStorage.getItem('token');
+            let url = '/api/usuarios';
+            let method = 'POST';
 
-                // Si estamos editando, cambiamos la URL y el método
-                if (editModeUserId) {
-                    url = `/api/usuarios/${editModeUserId}`;
-                    method = 'PUT';
-                }
-
-                const response = await fetch(url, {
-                    method: method,
-                    headers: { 'x-auth-token': token }, // ¡NO poner Content-Type con FormData!
-                    body: formData
-                });
-
-                const data = await response.json();
-
-                if(response.ok) {
-                    alert("✅ " + data.msg);
-                    if (editModeUserId) {
-                        // Si fue una actualización, volvemos a la lista
-                        toggleUserView();
-                    } else {
-                        // Si fue creación, solo reseteamos el formulario
-                        resetearFormulario();
-                    }
-                } else {
-                    alert("❌ Error: " + (data.msg || "Operación fallida"));
-                }
-
-            } catch (error) {
-                console.error(error);
-                alert("❌ Error de conexión con el servidor");
-            } finally {
-                btnSubmit.innerHTML = originalText;
-                btnSubmit.disabled = false;
+            if (editModeUserId) {
+                url = `/api/usuarios/${editModeUserId}`;
+                method = 'PUT';
             }
-        });
+
+            const response = await fetch(url, {
+                method: method,
+                headers: { 'x-auth-token': token },
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                if (typeof showToast === 'function') {
+                    showToast(data.msg, "success");
+                } else {
+                    alert("✅ " + data.msg);
+                }
+
+                if (editModeUserId) {
+                    toggleUserView();
+                } else {
+                    resetearFormulario();
+                }
+            } else {
+                throw new Error(data.msg || "Operación fallida");
+            }
+
+        } catch (error) {
+            console.error("❌ Error en submit:", error);
+            
+            // Notificación de error
+            const errorMsg = error.message || "Error de conexión con el servidor";
+            if (typeof showToast === 'function') {
+                showToast(errorMsg, "error");
+            } else {
+                alert("❌ " + errorMsg);
+            }
+        } finally {
+            // ✅ SIEMPRE se restaura el botón, pase lo que pase
+            btnSubmit.innerHTML = originalText;
+            btnSubmit.disabled = false;
+        }
+    });
     }
 
     // Previsualizar foto al seleccionar archivo

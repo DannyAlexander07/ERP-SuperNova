@@ -37,11 +37,13 @@
                 <thead>
                     <tr>
                         <th>Emisión</th>
+                        <th>Programación</th>
+                        <th>Vencimiento</th>
                         <th>Proveedor</th>
                         <th>Documento</th>
                         <th>Total</th>
                         <th>Estado</th>
-                        <th>Vencimiento</th>
+                        <th>Días Venc.</th>
                         <th>Clasificación</th>
                         <th>Evidencia</th>
                         <th>Acciones</th>
@@ -58,35 +60,49 @@
         <div class="kpi-resumen-bar">
             <div class="kpi-card success" style="border-left: 4px solid #10b981;">
                 <span>Pagado Hoy</span>
-                <h3 id="kpi-pagado-hoy">S/ 0.00</h3>
-                <small style="color:#10b981; font-weight:600;"> <i class='bx bx-check'></i> Al día</small>
+                <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 5px;">
+                    <h3 id="kpi-pagado-hoy-pen" style="margin: 0; font-size: 1.3rem;">S/ 0.00</h3>
+                    <h3 id="kpi-pagado-hoy-usd" style="margin: 0; font-size: 1.1rem; color: #059669;">$ 0.00</h3>
+                </div>
+                <small style="color:#10b981; font-weight:600; margin-top: 8px; display: block;"> <i class='bx bx-check'></i> Al día</small>
             </div>
 
             <div class="kpi-card info" style="border-left: 4px solid #3b82f6;">
                 <span id="lbl-mes">Acumulado Mes Actual</span>
-                <h3 id="kpi-pagado-mes" style="color:#3b82f6;">S/ 0.00</h3>
-                <small style="color:#64748b;">Reinicia a fin de mes</small>
+                <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 5px;">
+                    <h3 id="kpi-pagado-mes-pen" style="color:#3b82f6; margin: 0; font-size: 1.3rem;">S/ 0.00</h3>
+                    <h3 id="kpi-pagado-mes-usd" style="color:#2563eb; margin: 0; font-size: 1.1rem;">$ 0.00</h3>
+                </div>
+                <small style="color:#64748b; margin-top: 8px; display: block;">Reinicia a fin de mes</small>
             </div>
 
             <div class="kpi-card warning" style="border-left: 4px solid #f59e0b;">
                 <span id="lbl-anio">Total Año Actual</span>
-                <h3 id="kpi-pagado-anio" style="color:#f59e0b;">S/ 0.00</h3>
-                <small style="color:#64748b;">Egresos totales</small>
+                <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 5px;">
+                    <h3 id="kpi-pagado-anio-pen" style="color:#f59e0b; margin: 0; font-size: 1.3rem;">S/ 0.00</h3>
+                    <h3 id="kpi-pagado-anio-usd" style="color:#d97706; margin: 0; font-size: 1.1rem;">$ 0.00</h3>
+                </div>
+                <small style="color:#64748b; margin-top: 8px; display: block;">Egresos totales</small>
             </div>
 
             <div class="kpi-card" style="border-left: 4px solid #8b5cf6; background:#f5f3ff;">
                 <span style="color:#7c3aed;">Total por Pagar</span>
-                <h3 id="kpi-total-pendiente" style="color:#7c3aed;">S/ 0.00</h3>
-                <small style="color:#8b5cf6;">Deuda Global</small>
+                <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 5px;">
+                    <h3 id="kpi-total-pendiente-pen" style="color:#7c3aed; margin: 0; font-size: 1.3rem;">S/ 0.00</h3>
+                    <h3 id="kpi-total-pendiente-usd" style="color:#6d28d9; margin: 0; font-size: 1.1rem;">$ 0.00</h3>
+                </div>
+                <small style="color:#8b5cf6; margin-top: 8px; display: block;">Deuda Global</small>
             </div>
 
             <div class="kpi-card danger" style="border-left: 4px solid #ef4444; background:#fef2f2;">
                 <span style="color:#ef4444;">Deuda Vencida</span>
-                <h3 id="kpi-vencido" style="color:#ef4444;">S/ 0.00</h3>
-                <small>¡Atención!</small>
+                <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 5px;">
+                    <h3 id="kpi-vencido-pen" style="color:#ef4444; margin: 0; font-size: 1.3rem;">S/ 0.00</h3>
+                    <h3 id="kpi-vencido-usd" style="color:#dc2626; margin: 0; font-size: 1.1rem;">$ 0.00</h3>
+                </div>
+                <small style="margin-top: 8px; display: block;">¡Atención!</small>
             </div>
         </div>
-
         <div class="table-responsive">
             <table class="premium-table">
                 <thead>
@@ -98,13 +114,14 @@
                         <th>Deuda Total</th>
                         <th>Acuenta</th>
                         <th>Saldo Pendiente</th>
-                        <th>Pagar</th>
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody id="tabla-cuentas-body">
                     </tbody>
             </table>
         </div>
+        <div id="cuentas-paginacion" class="pagination-container"></div>
     </div>
 
     <div id="modal-factura" class="modal-overlay">
@@ -129,21 +146,30 @@
                     <h4 class="form-subtitle">Datos del Documento</h4>
                     <div class="row-grid">
                         <div class="input-group">
-                            <select id="fac-tipo">
+                            <select id="fac-tipo" onchange="toggleInputsDocumento()">
                                 <option value="Factura">Factura</option>
                                 <option value="Boleta">Boleta</option>
+                                <option value="Invoice2">Invoice</option>
                                 <option value="RHE">Recibo Honorarios</option>
-                                <option value="Nota">Nota Interna</option>
+                                <option value="Sin Documento">Sin Documento</option>
                             </select>
                             <label class="static">Tipo Doc.</label>
                         </div>
-                        <div class="input-group">
-                            <input type="text" id="fac-serie" required placeholder="F001" style="text-transform: uppercase;">
-                            <label>Serie</label>
+
+                        <div id="bloque-doble-input" style="display: contents;">
+                            <div class="input-group">
+                                <input type="text" id="fac-serie" placeholder="F001" style="text-transform: uppercase;">
+                                <label>Serie</label>
+                            </div>
+                            <div class="input-group">
+                                <input type="text" id="fac-numero" placeholder="0004321">
+                                <label>Correlativo</label>
+                            </div>
                         </div>
-                        <div class="input-group">
-                            <input type="text" id="fac-numero" required placeholder="0004321">
-                            <label>Correlativo</label>
+
+                        <div id="bloque-unico-input" class="input-group" style="display: none; grid-column: span 2;">
+                            <input type="text" id="fac-doc-unico" placeholder="Ingrese N° o Código">
+                            <label>N° Documento / Serie</label>
                         </div>
                     </div>
 
@@ -152,14 +178,20 @@
                             <input type="date" id="fac-emision" required>
                             <label class="static">Fecha Emisión</label>
                         </div>
+                        
                         <div class="input-group">
                             <input type="date" id="fac-vencimiento" required>
                             <label class="static">Fecha Vencimiento</label>
                         </div>
                     </div>
 
-                    <h4 class="form-subtitle">Detalles Financieros</h4>
-                    <div class="row-grid">
+                    <div class="input-group">
+                            <input type="date" id="fac-programacion">
+                            <label class="static">Fecha Programación</label>
+                        </div>
+
+                    <h4 class="form-subtitle">Detalles Financieros (Cálculo Automático)</h4>
+                    <div class="row-grid" style="grid-template-columns: 1fr 1fr 1fr;"> 
                         <div class="input-group">
                             <select id="fac-moneda">
                                 <option value="PEN">S/ (Soles)</option>
@@ -167,18 +199,60 @@
                             </select>
                             <label class="static">Moneda</label>
                         </div>
+                        
                         <div class="input-group">
-                            <input type="number" id="fac-total" required placeholder="0.00" step="0.01">
-                            <label>Monto Total (Inc. IGV)</label>
+                            <input type="number" id="fac-base" required placeholder="0.00" step="0.01" oninput="calcularTotalImpuesto()">
+                            <label>Monto Base</label>
                         </div>
+
+                        <div class="input-group">
+                            <select id="fac-impuesto-porc" onchange="calcularTotalImpuesto()">
+                                <option value="18">18% (IGV - Suma)</option>
+                                <option value="10.5">10.5% (Suma)</option>
+                                <option value="0">0% (Exonerado)</option>
+                                <option value="8">8% (Resta / Retención)</option>
+                            </select>
+                            <label class="static">% Impuesto</label>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <input type="number" id="fac-total-final" readonly style="background-color: #f1f5f9; font-weight: bold; color: var(--primary-color);">
+                        <label class="static">Monto Total Incluido Impuesto</label>
                     </div>
 
                     <div class="input-group">
                         <input type="text" id="fac-glosa" required placeholder="Ej: Compra de gaseosas para el mes">
                         <label>Descripción del Gasto</label>
                     </div>
+                    <h4 class="form-subtitle">Datos Bancarios y Clasificación</h4>
+                    <div class="row-grid">
+                        <div class="input-group">
+                            <select id="fac-banco"> <option value="">-- Seleccionar Banco --</option>
+                                <option value="BCP">BCP</option>
+                                <option value="BBVA">BBVA</option>
+                                <option value="Scotiabank">Scotiabank</option>
+                                <option value="Interbank">Interbank</option>
+                            </select>
+                            <label class="static">Banco</label>
+                        </div>
+                        <div class="input-group">
+                            <select id="fac-clasificacion" required> <option value="Operativo">Operativo</option>
+                                <option value="Implementacion">Implementación</option>
+                                <option value="Financiero">Financiero</option>
+                            </select>
+                            <label class="static">Clasificación</label>
+                        </div>
+                    </div>
 
-                    <h4 class="form-subtitle">Clasificación</h4>
+                    <div class="row-grid">
+                        <div class="input-group">
+                            <input type="text" id="fac-cuenta" placeholder="N° Cuenta"> <label>Número de Cuenta</label>
+                        </div>
+                        <div class="input-group">
+                            <input type="text" id="fac-cci" placeholder="CCI"> <label>Cuenta Interbancaria (CCI)</label>
+                        </div>
+                    </div>
                     <div class="row-grid">
                         <div class="input-group">
                             <select id="fac-sede" required>
@@ -208,7 +282,7 @@
 
                     <div style="margin-top:15px; display:flex; gap:10px; align-items:center; background:#f0fdf4; padding:10px; border-radius:8px; border:1px solid #bbf7d0;">
                         <input type="checkbox" id="check-pagar-ahora" style="width:20px; height:20px;">
-                        <label for="check-pagar-ahora" style="color:#166534; font-weight:600; cursor:pointer;">¿Registrar el pago inmediatamente?</label>
+                        <label for="check-pagar-ahora" style="color:#166534; font-weight:600; cursor:pointer;">¿Pago Realizado? (Ya pagado)</label>
                     </div>
                 </form>
             </div>
@@ -221,45 +295,220 @@
     </div>
 
     <div id="modal-pago" class="modal-overlay" style="z-index: 2100;">
-        <div class="modal-content center-modal" style="max-width: 400px;">
-            <div class="modal-header">
-                <h3>Registrar Salida de Dinero</h3>
+        <div class="modal-content center-modal" style="max-width: 450px; padding: 0;">
+            <div class="modal-header" style="background-color: #f0fdf4; border-bottom: 1px solid #bbf7d0; padding: 20px;">
+                <h3 style="color: #166534;"><i class='bx bx-money-withdraw'></i> Registrar Salida de Dinero</h3>
                 <button class="btn-close" onclick="cerrarModalPago()"><i class='bx bx-x'></i></button>
             </div>
-            <div class="modal-body">
-                <p class="text-muted" id="pago-descripcion-txt">Pagando a...</p>
+            
+            <div class="modal-body" style="padding: 20px;">
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                    <p style="margin: 0 0 5px 0; font-size: 0.85rem; color: #64748b; text-transform: uppercase;">Pagando a:</p>
+                    <h4 id="pago-proveedor-txt" style="margin: 0 0 10px 0; color: #0f172a;">-</h4>
+                    
+                    <div style="display: flex; justify-content: space-between; border-top: 1px dashed #cbd5e1; padding-top: 10px;">
+                        <div>
+                            <span style="font-size: 0.8rem; color: #64748b;">Documento:</span>
+                            <strong id="pago-doc-txt" style="display: block; color: #334155;">-</strong>
+                        </div>
+                        <div style="text-align: right;">
+                            <span style="font-size: 0.8rem; color: #64748b;">Saldo Pendiente:</span>
+                            <strong id="pago-saldo-txt" style="display: block; color: #ef4444; font-size: 1.1rem;">-</strong>
+                        </div>
+                    </div>
+                </div>
+
                 <input type="hidden" id="pago-ref-id"> 
                 <input type="hidden" id="pago-tipo-origen">
                 
                 <div class="input-group">
-                    <input type="number" id="pago-monto" required step="0.01" placeholder="0.00" style="font-size:1.5rem; color:#2e7d32; font-weight:bold;">
-                    <label>Monto a Pagar (S/)</label>
+                    <input type="number" id="pago-monto" required step="0.01" placeholder="0.00" style="font-size:1.8rem; color:#10b981; font-weight:bold; text-align: center;">
+                    <label>Monto a Pagar</label>
                 </div>
 
                 <div class="input-group">
                     <select id="pago-metodo">
                         <option value="Caja Chica">Caja Chica (Efectivo)</option>
-                        <option value="Transferencia">Transferencia BCP/Interbank</option>
+                        <option value="Transferencia BCP">Transferencia BCP</option>
+                        <option value="Transferencia BBVA">Transferencia BBVA</option>
+                        <option value="Transferencia Interbank">Transferencia Interbank</option>
                         <option value="Yape/Plin">Yape / Plin</option>
                         <option value="Tarjeta">Tarjeta Corporativa</option>
                     </select>
-                    <label class="static">Origen del Dinero</label>
+                    <label class="static">Origen del Dinero (Método)</label>
                 </div>
 
-                <div class="input-group">
-                    <input type="date" id="pago-fecha" required>
-                    <label class="static">Fecha Pago</label>
-                </div>
-                
-                <div class="input-group">
-                    <input type="text" id="pago-operacion" placeholder="Ej: 123456">
-                    <label>N° Operación / Constancia</label>
+                <div class="row-grid">
+                    <div class="input-group">
+                        <input type="date" id="pago-fecha" required>
+                        <label class="static">Fecha de Pago</label>
+                    </div>
+                    <div class="input-group">
+                        <input type="text" id="pago-operacion" placeholder="Ej: OP-123456">
+                        <label>N° Operación</label>
+                    </div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn-primary full-width" onclick="confirmarPago()">Confirmar Egreso</button>
+            
+            <div class="modal-footer" style="padding: 15px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+                <button class="btn-cancel" onclick="cerrarModalPago()">Cancelar</button>
+                <button class="btn-primary" style="background-color: #10b981; border-color: #10b981;" onclick="confirmarPago()"><i class='bx bx-check-circle'></i> Confirmar Pago</button>
             </div>
         </div>
     </div>
 
+    <div id="modal-detalles-ver" class="modal-overlay" style="z-index: 2000;">
+        <div class="modal-content slide-in-right" style="max-width: 800px; padding: 0;">
+            
+            <div class="modal-header" style="padding: 20px;">
+                <h3>Detalles de Compra <span id="ver-modal-doc" class="badge bg-blue" style="font-size: 0.9rem;"></span></h3>
+                <button class="btn-close" onclick="cerrarModalDetallesVer()"><i class='bx bx-x'></i></button>
+            </div>
+            
+            <div class="modal-body" style="padding: 0;">
+                <div class="tabs-wrapper" style="border-bottom: 1px solid #e2e8f0; padding: 0 20px; gap: 15px;">
+                    <button class="tab-btn active" id="btn-tab-ver-info" onclick="cambiarTabModalVer('info')">
+                        <i class='bx bx-info-circle'></i> Información
+                    </button>
+                    <button class="tab-btn" id="btn-tab-ver-docs" onclick="cambiarTabModalVer('docs')">
+                        <i class='bx bx-folder-open'></i> Documentos
+                    </button>
+                    <button class="tab-btn" id="btn-tab-ver-pagos" onclick="cambiarTabModalVer('pagos')">
+                        <i class='bx bx-money'></i> Historial de Pagos
+                    </button>
+                </div>
+
+                <div style="padding: 20px;">
+                    
+                    <div id="tab-ver-info" style="display: block;">
+                        <div class="row-grid" style="margin-bottom: 20px;">
+                            <div>
+                                <h4 class="form-subtitle">Proveedor</h4>
+                                <p style="font-weight: 600; font-size: 1.1rem; color: #1e293b;" id="ver-info-proveedor">-</p>
+                                <p style="color: #64748b; font-size: 0.9rem;" id="ver-info-clasificacion">-</p>
+                            </div>
+                            <div>
+                                <h4 class="form-subtitle">Fechas</h4>
+                                <p><strong>Emisión:</strong> <span id="ver-info-emision">-</span></p>
+                                <p><strong>Vencimiento:</strong> <span id="ver-info-vencimiento">-</span></p>
+                                <p><strong>Programación:</strong> <span id="ver-info-programacion">-</span></p>
+                            </div>
+                        </div>
+
+                        <h4 class="form-subtitle">Resumen Financiero</h4>
+                        <div class="row-grid" style="background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px;">
+                            <div>
+                                <p style="color: #64748b; font-size: 0.9rem;">Monto Total</p>
+                                <p style="font-weight: bold; font-size: 1.2rem; color: #0f172a;" id="ver-info-total">-</p>
+                            </div>
+                            <div>
+                                <p style="color: #64748b; font-size: 0.9rem;">A Cuenta (Pagado)</p>
+                                <p style="font-weight: bold; font-size: 1.2rem; color: #10b981;" id="ver-info-pagado">-</p>
+                            </div>
+                            <div>
+                                <p style="color: #64748b; font-size: 0.9rem;">Saldo Pendiente</p>
+                                <p style="font-weight: bold; font-size: 1.2rem; color: #ef4444;" id="ver-info-deuda">-</p>
+                            </div>
+                        </div>
+
+                        <h4 class="form-subtitle">Datos Bancarios para Pago</h4>
+                        <div class="row-grid" style="background: #f0fdf4; padding: 15px; border-radius: 8px; border: 1px solid #bbf7d0;">
+                            <p><strong>Banco:</strong> <span id="ver-info-banco">-</span></p>
+                            <p><strong>Cuenta:</strong> <span id="ver-info-cuenta">-</span></p>
+                            <p><strong>CCI:</strong> <span id="ver-info-cci">-</span></p>
+                        </div>
+                    </div>
+
+                    <div id="tab-ver-docs" style="display: none;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h4 class="form-subtitle" style="margin: 0;">Archivos Relacionados</h4>
+                            
+                            <input type="hidden" id="ver-modal-factura-id">
+                            <input type="file" id="input-subir-doc-extra" style="display: none;" onchange="ejecutarSubidaDocumentoExtra(event)">
+                            <button class="btn-primary btn-sm" onclick="document.getElementById('input-subir-doc-extra').click()">
+                                <i class='bx bx-cloud-upload'></i> Agregar Documento
+                            </button>
+                        </div>
+                        
+                        <div class="table-responsive">
+                            <table class="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Archivo</th>
+                                        <th>Fecha Subida</th>
+                                        <th style="text-align: center;">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ver-tabla-docs-body">
+                                    </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div id="tab-ver-pagos" style="display: none;">
+                        <h4 class="form-subtitle">Historial de Pagos Realizados</h4>
+                        <div class="table-responsive">
+                            <table class="premium-table">
+                                <thead>
+                                    <tr>
+                                        <th>Fecha</th>
+                                        <th>Monto</th>
+                                        <th>Método</th>
+                                        <th>Detalle / Operación</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ver-tabla-pagos-body">
+                                    </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            
+            <div class="modal-footer" style="padding: 15px 20px;">
+                <button class="btn-cancel full-width" onclick="cerrarModalDetallesVer()">Cerrar Vista</button>
+            </div>
+        </div>
+    </div>
+    <div id="modal-confirmar-eliminar-doc" class="modal-overlay" style="z-index: 2200;">
+        <div class="modal-content center-modal" style="max-width: 350px; text-align: center; padding: 30px 20px;">
+            <div style="color: #ef4444; font-size: 3.5rem; margin-bottom: 10px;">
+                <i class='bx bx-error-circle'></i>
+            </div>
+            <h3 style="margin-bottom: 10px; color: #0f172a;">¿Eliminar Archivo?</h3>
+            <p style="color: #64748b; margin-bottom: 25px; font-size: 0.95rem;">
+                Esta acción no se puede deshacer. El documento será borrado permanentemente.
+            </p>
+            
+            <input type="hidden" id="delete-doc-id">
+            <input type="hidden" id="delete-doc-factura-id">
+
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button class="btn-cancel" onclick="cerrarModalEliminarDoc()" style="flex: 1;">Cancelar</button>
+                <button class="btn-primary" onclick="ejecutarEliminacionDoc()" style="flex: 1; background-color: #ef4444; border-color: #ef4444; color: white;">Sí, Eliminar</button>
+            </div>
+        </div>
+    </div>
+    <div id="modal-confirmar-flujo" class="modal-overlay" style="z-index: 2200;">
+        <div class="modal-content center-modal" style="max-width: 400px; text-align: center; padding: 30px 20px;">
+            
+            <div id="flujo-modal-icon" style="font-size: 3.5rem; margin-bottom: 10px;">
+                <i class='bx bx-question-mark'></i>
+            </div>
+            
+            <h3 id="flujo-modal-title" style="margin-bottom: 10px; color: #0f172a;">Confirmar Acción</h3>
+            <p id="flujo-modal-text" style="color: #64748b; margin-bottom: 25px; font-size: 0.95rem;">
+                ¿Estás seguro de continuar?
+            </p>
+            
+            <input type="hidden" id="flujo-factura-id">
+            <input type="hidden" id="flujo-nuevo-estado">
+
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button class="btn-cancel" onclick="cerrarModalFlujo()" style="flex: 1;">Cancelar</button>
+                <button id="flujo-modal-btn" class="btn-primary" onclick="ejecutarCambioFlujo()" style="flex: 1;">Sí, Confirmar</button>
+            </div>
+        </div>
+    </div>
 </div>

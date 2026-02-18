@@ -443,3 +443,65 @@
         width: 100%;
     }
 }
+
+/* --- CORRECCIÓN PARA INPUTS CON PLACEHOLDER LARGO --- */
+
+/* Asegura que el contenedor del grupo de entrada tenga posición relativa */
+.input-group {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+/* Estilo para el input de contraseña */
+.input-group input[type="password"],
+.input-group input[type="text"],
+.input-group input[type="email"] {
+    width: 100%;
+    padding: 12px 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    outline: none;
+    background: transparent;
+    transition: all 0.3s ease;
+    font-size: 14px;
+}
+
+/* Mueve el Label hacia arriba permanentemente si hay un placeholder o si el input tiene foco */
+.input-group label {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: white;
+    padding: 0 5px;
+    color: #64748b;
+    pointer-events: none;
+    transition: all 0.2s ease;
+}
+
+/* Efecto cuando el input tiene foco o NO está vacío (usando placeholder-shown) */
+.input-group input:focus + label,
+.input-group input:not(:placeholder-shown) + label {
+    top: 0;
+    font-size: 12px;
+    color: #4f46e5; /* Color de tu marca */
+    font-weight: 600;
+}
+
+/* Estilo específico para el placeholder para que no moleste al Label */
+.input-group input::placeholder {
+    color: #cbd5e1;
+    font-size: 13px;
+    opacity: 0; /* Oculto por defecto */
+    transition: opacity 0.2s ease;
+}
+
+/* Mostrar el placeholder solo cuando el Label ya subió (cuando el input tiene foco) */
+.input-group input:focus::placeholder {
+    opacity: 1;
+}
+
+/* Ajuste para el color rojo de error si el campo es inválido y no está vacío */
+.input-group input:invalid:not(:placeholder-shown) {
+    border-color: #ef4444;
+}
