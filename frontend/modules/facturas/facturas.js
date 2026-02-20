@@ -7,7 +7,7 @@
     // =======================================================
     let facturasData = []; 
     let cuentasData = []; // Para la tabla de tesorería
-
+    let tesoreriaData = [];
     let paginaGastos = 1;
     let paginaCuentas = 1;
     let paginaPrestamos = 1;
@@ -33,20 +33,49 @@
         exposeGlobalFunctions();
     }
 
+    // 2.2 CAMBIAR TAB (ACTUALIZADO: Sincronización Triple de Tesorería)
     window.cambiarTab = async function(tabId) {
-        // 1. Ocultar todos los tabs y desactivar botones
+        // 1. Ocultar todos los tabs y desactivar estilos de botones
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
 
-        // 2. Mostrar el tab seleccionado
-        document.getElementById(tabId).classList.add('active');
-        document.querySelector(`button[onclick="cambiarTab('${tabId}')"]`).classList.add('active');
+        // 2. Mostrar el tab seleccionado y activar su botón correspondiente
+        const content = document.getElementById(tabId);
+        if (content) content.classList.add('active');
 
-        // 3. Cargar datos específicos según el tab
-        if (tabId === 'tab-gastos') await cargarGastos(); 
-        if (tabId === 'tab-cuentas') {
-            await cargarCuentasPorPagar();
-            await cargarKpisPagos(); 
+        // Buscamos el botón por su atributo onclick para asegurar compatibilidad
+        const btn = document.querySelector(`button[onclick*="cambiarTab('${tabId}')"]`);
+        if (btn) btn.classList.add('active');
+
+        // 3. Carga y Sincronización de Datos según el Tab
+        try {
+            if (tabId === 'tab-gastos') {
+                // Recargamos el historial completo de facturas
+                await cargarGastos(); 
+            }
+            
+            if (tabId === 'tab-cuentas') {
+                // Sincronización forzada: cargamos facturas base y luego procesamos cuentas
+                await cargarGastos(); 
+                if (typeof cargarCuentasPorPagar === 'function') await cargarCuentasPorPagar();
+                // Actualizamos los KPIs superiores (Pagado hoy, Acumulado, Deuda Global)
+                if (typeof cargarKpisPagos === 'function') await cargarKpisPagos(); 
+            }
+
+            // 🆕 LÓGICA PARA LA VENTANA DE TESORERÍA (PAGOS DE HOY)
+            if (tabId === 'tab-tesoreria') {
+                // Esta función carga tanto la tabla de pagos como los 3 bloques (Operativo, Imp, Fin)
+                if (typeof cargarTesoriaDiaria === 'function') {
+                    await cargarTesoriaDiaria();
+                } else {
+                    console.warn("⚠️ La función cargarTesoriaDiaria aún no ha sido cargada en el DOM.");
+                }
+            }
+        } catch (error) {
+            console.error(`❌ Error crítico al cambiar al tab ${tabId}:`, error);
+            if (typeof showToast === 'function') {
+                showToast("Error al sincronizar la vista. Verifique su conexión.", "error");
+            }
         }
     };
 
@@ -93,318 +122,479 @@
         paginaGastos = 1; 
         
         // 2. Volvemos a dibujar la tabla (esta función ya leerá el input automáticamente)
-        renderizarTablaGastos(); 
+        renderizarTablaGastos();
     };
 
-    function renderizarTablaGastos() {
+    /**
+     * Renderiza la tabla de historial de compras con filtros internos (Proveedor y N°).
+     * Verificado para funcionar con el input onkeyup="renderizarTablaGastos(true)".
+     * Sincronizado con la lógica de fechas de Cuentas por Pagar.
+     */
+    function renderizarTablaGastos(resetPagina = false) {
         const tbody = document.getElementById('tabla-facturas-body');
         if (!tbody) return;
+
+        // 1. GESTIÓN DE PAGINACIÓN AL FILTRAR
+        if (resetPagina) {
+            paginaGastos = 1;
+        }
+
         tbody.innerHTML = '';
 
-        // 1. Filtrado Local (Buscador y Filtro de Fecha)
-        const busqueda = (document.getElementById('buscador-facturas')?.value || '').toLowerCase();
-        const fechaFiltro = document.getElementById('filtro-fecha')?.value;
+        // 2. CAPTURA DE VALORES DE LOS BUSCADORES DE COLUMNA
+        const filtroProv = (document.getElementById('buscador-proveedor-compras')?.value || '').toLowerCase().trim();
+        const filtroNum = (document.getElementById('buscador-numero-compras')?.value || '').toLowerCase().trim();
 
+        // 3. LÓGICA DE FILTRADO
         const filtrados = facturasData.filter(f => {
-            const texto = (f.proveedor + f.numero_documento + f.descripcion).toLowerCase();
-            const matchTexto = texto.includes(busqueda);
-            const matchFecha = !fechaFiltro || f.fecha_emision.startsWith(fechaFiltro);
-            return matchTexto && matchFecha;
+            const matchProv = (f.proveedor || '').toLowerCase().includes(filtroProv);
+            const matchNum = (f.numero_documento || '').toLowerCase().includes(filtroNum);
+            return matchProv && matchNum;
         });
 
-        // 2. Lógica de Paginación
+        // 4. LÓGICA DE SEGMENTACIÓN (PAGINACIÓN)
         const inicio = (paginaGastos - 1) * FILAS_POR_PAGINA;
         const datosPagina = filtrados.slice(inicio, inicio + FILAS_POR_PAGINA);
 
+        // Caso: No hay resultados
         if (datosPagina.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:20px;">No se encontraron registros.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:40px; color: #64748b;">No se encontraron registros con los filtros aplicados.</td></tr>';
+            const pagContainer = document.getElementById('facturas-paginacion');
+            if (pagContainer) pagContainer.innerHTML = '';
             return;
         }
 
-        // 3. Renderizado de Filas
+        // --- OBTENER FECHA ACTUAL (Normalizada a medianoche) ---
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+
+        // 5. RENDERIZADO DE FILAS
         datosPagina.forEach(f => {
             const tr = document.createElement('tr');
 
-            // --- 🚀 CÁLCULO DE DÍAS VENCIDOS (Sincronizado con el Backend) ---
-            let diasVencidosHtml = '<span class="badge bg-green" style="padding: 5px 10px; border-radius: 4px; font-size: 11px;">AL DÍA</span>';
+            // --- 📅 CÁLCULO DE SEMÁFORO (Sincronizado con Cuentas) ---
+            let diasVencidosHtml = '';
             
             if (f.estado_pago !== 'pagado') {
-                const diasNum = parseInt(f.dias_vencidos_count) || 0;
-                if (diasNum > 0) {
-                    diasVencidosHtml = `<span class="badge bg-red" style="font-weight:900; padding: 5px 10px; border-radius: 4px; font-size: 11px; background-color: #fee2e2; color: #dc2626;">${diasNum} DÍAS VENC.</span>`;
+                // Parseo robusto de la fecha de vencimiento
+                const parts = (f.fecha_vencimiento || "").split('-');
+                if (parts.length === 3) {
+                    const vence = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    vence.setHours(0, 0, 0, 0);
+
+                    const diffTime = vence.getTime() - hoy.getTime();
+                    const diasMora = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+                    if (diasMora < 0) {
+                        const absDias = Math.abs(diasMora);
+                        diasVencidosHtml = `<span class="badge" style="font-weight:900; padding: 5px 10px; border-radius: 4px; font-size: 11px; background-color: #fee2e2; color: #dc2626;">${absDias} DÍAS VENC.</span>`;
+                    } else if (diasMora <= 7) {
+                        diasVencidosHtml = `<span class="badge" style="padding: 5px 10px; border-radius: 4px; font-size: 11px; background-color: #fef9c3; color: #ca8a04;">⚠️ VENCE EN ${diasMora} DÍAS</span>`;
+                    } else {
+                        diasVencidosHtml = `<span class="badge" style="padding: 5px 10px; border-radius: 4px; font-size: 11px; background-color: #dcfce7; color: #16a34a;">AL DÍA</span>`;
+                    }
+                } else {
+                    diasVencidosHtml = '<span class="badge" style="color:#cbd5e1">S/V</span>';
                 }
-            } else if (f.estado_pago === 'pagado') {
-                diasVencidosHtml = '<span class="badge bg-green" style="padding: 5px 10px; border-radius: 4px; background-color: #dcfce7; color: #16a34a;"><i class="bx bx-check"></i></span>';
+            } else {
+                // Si ya está pagado, mostramos check verde
+                diasVencidosHtml = '<span class="badge" style="padding: 5px 10px; border-radius: 4px; background-color: #dcfce7; color: #16a34a;"><i class="bx bx-check"></i></span>';
             }
             
-            // --- SEMÁFORO ESTADO ---
+            // --- BADGE DE ESTADO ---
             let estadoHtml = '';
             if(f.estado_pago === 'pagado') {
-                estadoHtml = '<span class="badge bg-green" style="background-color: #dcfce7; color: #16a34a; padding: 4px 8px; border-radius: 4px; font-weight: 600;">PAGADO</span>';
+                estadoHtml = '<span class="badge" style="background-color: #dcfce7; color: #16a34a; padding: 4px 8px; border-radius: 4px; font-weight: 600;">PAGADO</span>';
             } else if(f.estado_pago === 'parcial') {
-                estadoHtml = '<span class="badge bg-yellow" style="background-color: #fef9c3; color: #ca8a04; padding: 4px 8px; border-radius: 4px; font-weight: 600;">PARCIAL</span>';
+                estadoHtml = '<span class="badge" style="background-color: #fef9c3; color: #ca8a04; padding: 4px 8px; border-radius: 4px; font-weight: 600;">PARCIAL</span>';
             } else {
-                estadoHtml = '<span class="badge bg-red" style="background-color: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 4px; font-weight: 600;">PENDIENTE</span>';
+                estadoHtml = '<span class="badge" style="background-color: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 4px; font-weight: 600;">PENDIENTE</span>';
             }
 
-            // --- EVIDENCIA ---
-            let evidenciaHtml = `<button class="btn-icon" onclick="subirArchivoFaltante(${f.id})" title="Subir"><i class='bx bx-upload'></i></button>`;
+            // --- EVIDENCIA (PDF) ---
+            let evidenciaHtml = `<button class="btn-icon" onclick="subirArchivoFaltante(${f.id})" title="Subir PDF"><i class='bx bx-upload'></i></button>`;
             if (f.evidencia_url) {
                 const url = f.evidencia_url.replace(/\\/g, '/').replace('backend/', '/');
-                evidenciaHtml = `<a href="${url}" target="_blank" class="btn-icon" style="color:#e74c3c"><i class='bx bxs-file-pdf'></i></a>`;
+                evidenciaHtml = `<a href="${url}" target="_blank" class="btn-icon" style="color:#e74c3c" title="Ver PDF"><i class='bx bxs-file-pdf'></i></a>`;
             }
 
-            const docVisual = f.numero_documento || '-';
+            // --- CLASIFICACIÓN ---
+            const clasif = f.clasificacion || 'Operativo';
+            let colorClasif = '#3b82f6'; 
+            if (clasif.toLowerCase().includes('implementaci')) colorClasif = '#8b5cf6';
+            if (clasif.toLowerCase().includes('financiero')) colorClasif = '#f59e0b';
 
-            // ⚠️ COLUMNA ACCIONES ACTUALIZADA: Se añade el botón "Ver Detalle" (abrirModalDetallesVer)
             tr.innerHTML = `
                 <td>${f.fecha_emision ? f.fecha_emision.slice(0, 10) : '-'}</td>
-
                 <td style="color:#6366f1; font-weight:500;">
                     ${f.fecha_programacion ? f.fecha_programacion.slice(0, 10) : '-'}
                 </td>
-                
                 <td>${f.fecha_vencimiento ? f.fecha_vencimiento.slice(0, 10) : '-'}</td>
-
-                <td style="font-weight:600">${f.proveedor || 'S/N'}</td>
-                
-                <td>${f.tipo_documento || 'Doc'} <br> <small style="color:#666">${docVisual}</small></td>
-                
-                <td style="font-weight:bold">${f.moneda === 'USD' ? '$' : 'S/'} ${parseFloat(f.monto_total).toFixed(2)}</td>
-                
+                <td style="font-weight:600; font-size: 0.85rem;">${f.proveedor || 'S/N'}</td>
+                <td>${f.tipo_documento || 'Doc'} <br> <small style="color:#666">${f.numero_documento || '-'}</small></td>
+                <td style="font-weight:bold">${f.moneda === 'USD' ? '$' : 'S/'} ${parseFloat(f.monto_total || 0).toFixed(2)}</td>
                 <td>${estadoHtml}</td>
-                
                 <td style="text-align:center;">${diasVencidosHtml}</td> 
-
-                <td>${f.categoria_gasto || '-'}</td>
-                
+                <td><span style="color:${colorClasif}; font-weight:700; font-size:0.75rem;">● ${clasif.toUpperCase()}</span></td>
                 <td style="text-align:center">${evidenciaHtml}</td>
-                
                 <td>
                     <div class="action-buttons" style="display: flex; gap: 5px; justify-content: center;">
-                        <button class="btn-icon" style="color:#3b82f6; background:#eff6ff;" onclick="abrirModalDetallesVer(${f.id})" title="Ver Historial y Documentos">
+                        <button class="btn-icon" style="color:#3b82f6; background:#eff6ff;" onclick="abrirModalDetallesVer(${f.id})" title="Ver Detalles">
                             <i class='bx bx-show'></i>
                         </button>
-                        <button class="btn-icon edit" onclick="editarFactura(${f.id})"><i class='bx bx-edit'></i></button>
-                        <button class="btn-icon delete" onclick="eliminarFactura(${f.id})"><i class='bx bx-trash'></i></button>
+                        <button class="btn-icon edit" style="color:#2563eb; background:#dbeafe;" onclick="editarFactura(${f.id})" title="Editar"><i class='bx bx-edit'></i></button>
+                        <button class="btn-icon delete" style="color:#dc2626; background:#fee2e2;" onclick="eliminarFactura(${f.id})" title="Eliminar"><i class='bx bx-trash'></i></button>
                     </div>
                 </td>
             `;
             tbody.appendChild(tr);
         });
-        
-        // 4. Actualizar Controles de Paginación
+
+        // 6. ACTUALIZACIÓN DE COMPONENTE DE PAGINACIÓN
         renderizarPaginacion('facturas-paginacion', filtrados.length, paginaGastos, (p) => { 
             paginaGastos = p; 
             renderizarTablaGastos(); 
         });
-        
-        // Alerta de vencimientos solo en la primera página
-        if (paginaGastos === 1) verificarAlertasVencimiento(facturasData);
+
+        // 7. ALERTAS (Solo en la primera carga o página 1)
+        if (paginaGastos === 1 && typeof verificarAlertasVencimiento === 'function') {
+            verificarAlertasVencimiento(facturasData);
+        }
     }
 
-    // Cargar KPIs de pagos para el Tab de Tesorería - ACTUALIZADO PARA ACTUALIZACIÓN INSTANTÁNEA
+        // Variable global para manejar el estado del ordenamiento
+    let ordenActual = { columna: null, direccion: 'asc' };
+
     async function cargarCuentasPorPagar() {
-        // 1. Sincronizamos cuentasData con la versión más reciente de facturasData (que viene del backend)
-        cuentasData = facturasData.filter(f => f.estado_pago !== 'pagado' && f.estado_pago !== 'anulado');
+        // 1. Sincronizamos y filtramos: Solo pendientes que NO estén programados para hoy
+        // Esto asegura que si se mueve a Tesorería, desaparezca de esta lista
+        cuentasData = facturasData.filter(f => 
+            f.estado_pago !== 'pagado' && 
+            f.estado_pago !== 'anulado' && 
+            f.programado_hoy === false
+        );
         
-        let totalPendienteGlobal = 0; // Acumulador para la Deuda Global
-        let totalVencido = 0;         // Acumulador para la Deuda Vencida
+        let totalPendienteGlobalPEN = 0;
+        let totalPendienteGlobalUSD = 0;
+        let totalVencidoPEN = 0;
+        let totalVencidoUSD = 0;
         
-        // 🚀 Normalizamos fecha actual a las 00:00:00 (Hora Lima) para cálculos exactos
         const hoy = new Date();
         hoy.setHours(0,0,0,0);
 
         cuentasData.forEach(c => {
-            // Calculamos saldos reales basados en la respuesta actualizada del servidor
-            const pagado = parseFloat(c.monto_pagado || 0);
             const total = parseFloat(c.monto_total || 0);
-            
-            // Usamos el saldo_pendiente calculado por el backend para evitar desfases en el frontend
+            const pagado = parseFloat(c.monto_pagado || 0);
             const saldo = (c.saldo_pendiente !== undefined) ? parseFloat(c.saldo_pendiente) : (total - pagado);
 
-            // A. Sumar a la deuda global
-            totalPendienteGlobal += saldo;
+            // A. Acumuladores de Deuda Global por Moneda
+            if (c.moneda === 'USD') {
+                totalPendienteGlobalUSD += saldo;
+            } else {
+                totalPendienteGlobalPEN += saldo;
+            }
 
-            // B. Verificar vencimiento usando la lógica de medianoche
+            // B. Verificar vencimiento
             if (c.fecha_vencimiento) {
                 const parts = c.fecha_vencimiento.split('-');
-                // Mes -1 porque en JS Enero es 0
                 const vence = new Date(parts[0], parts[1]-1, parts[2]);
                 
-                // Si la fecha de vencimiento es estrictamente menor a hoy, se considera vencida
                 if (vence < hoy) {
-                    totalVencido += saldo;
+                    if (c.moneda === 'USD') totalVencidoUSD += saldo;
+                    else totalVencidoPEN += saldo;
                 }
             }
         });
         
-        // 1. KPI: Total Por Pagar (Deuda Global)
-        const elTotal = document.getElementById('kpi-total-pendiente');
-        if (elTotal) {
-            elTotal.innerText = `S/ ${totalPendienteGlobal.toLocaleString('es-PE', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            })}`;
-        }
+        // 2. Actualizar KPIs con formato de moneda (PEN y USD)
+        const fmt = (m) => m.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-        // 2. KPI: Deuda Vencida (Urgente)
-        const elVencido = document.getElementById('kpi-vencido');
-        if (elVencido) {
-            elVencido.innerText = `S/ ${totalVencido.toLocaleString('es-PE', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            })}`;
-        }
+        if (document.getElementById('kpi-total-pendiente-pen')) 
+            document.getElementById('kpi-total-pendiente-pen').innerText = `S/ ${fmt(totalPendienteGlobalPEN)}`;
+        if (document.getElementById('kpi-total-pendiente-usd')) 
+            document.getElementById('kpi-total-pendiente-usd').innerText = `$ ${fmt(totalPendienteGlobalUSD)}`;
+        
+        if (document.getElementById('kpi-vencido-pen')) 
+            document.getElementById('kpi-vencido-pen').innerText = `S/ ${fmt(totalVencidoPEN)}`;
+        if (document.getElementById('kpi-vencido-usd')) 
+            document.getElementById('kpi-vencido-usd').innerText = `$ ${fmt(totalVencidoUSD)}`;
 
-        // 3. Redibujar la tabla con los saldos recién calculados
+        // 3. Redibujar la tabla
         if (typeof renderizarTablaCuentas === 'function') {
             renderizarTablaCuentas();
         }
     }
 
+    window.exportarExcelCuentas = function() {
+        if (!cuentasData || cuentasData.length === 0) {
+            return showToast("No hay datos para exportar", "warning");
+        }
+
+        // Preparar los datos para Excel
+        const reporte = cuentasData.map(c => ({
+            'Vencimiento': c.fecha_vencimiento ? c.fecha_vencimiento.slice(0,10) : '',
+            'Programación': c.fecha_programacion ? c.fecha_programacion.slice(0,10) : 'No prog.',
+            'Proveedor': c.proveedor,
+            'N° Documento': c.numero_documento,
+            'Moneda': c.moneda,
+            'Total': parseFloat(c.monto_total),
+            'Amortizado': parseFloat(c.monto_pagado || 0),
+            'Saldo Pendiente': parseFloat(c.saldo_pendiente),
+            'Estado': (c.estado_pago || 'pendiente').toUpperCase()
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(reporte);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Cuentas Por Pagar");
+
+        // Guardar archivo
+        const fecha = new Date().toISOString().slice(0,10);
+        XLSX.writeFile(workbook, `Cuentas_Por_Pagar_${fecha}.xlsx`);
+        showToast("Excel generado correctamente", "success");
+    };
+
+    window.ordenarCuentas = function(columna) {
+        // Alternar dirección
+        if (ordenActual.columna === columna) {
+            ordenActual.direccion = ordenActual.direccion === 'asc' ? 'desc' : 'asc';
+        } else {
+            ordenActual.columna = columna;
+            ordenActual.direccion = 'asc';
+        }
+
+        cuentasData.sort((a, b) => {
+            let valA = a[columna];
+            let valB = b[columna];
+
+            // Lógica para fechas
+            if (columna.includes('fecha')) {
+                valA = new Date(valA || '1900-01-01');
+                valB = new Date(valB || '1900-01-01');
+            } 
+            // Lógica para números
+            else if (columna === 'monto_total' || columna === 'saldo_pendiente') {
+                valA = parseFloat(valA || 0);
+                valB = parseFloat(valB || 0);
+            }
+
+            if (valA < valB) return ordenActual.direccion === 'asc' ? -1 : 1;
+            if (valA > valB) return ordenActual.direccion === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+        renderizarTablaCuentas();
+    };
+
+    /**
+     * 2.3 RENDERIZAR TABLA DE CUENTAS POR PAGAR (ACTUALIZADO: Indicador de Tesorería y Bloqueo de Duplicados)
+     * Sincronizado visualmente y lógicamente con la tabla de Registro de Gastos.
+     */
     function renderizarTablaCuentas() {
         const tbody = document.getElementById('tabla-cuentas-body');
         if (!tbody) return;
         tbody.innerHTML = '';
 
-        // 1. Lógica de Paginación: Cortar el array cuentasData según la página actual
+        // 1. Lógica de Paginación
         const inicio = (paginaCuentas - 1) * FILAS_POR_PAGINA;
         const datos = cuentasData.slice(inicio, inicio + FILAS_POR_PAGINA);
 
+        // Caso: No hay datos
         if (datos.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px;">🎉 ¡Todo al día! No hay deudas pendientes.</td></tr>';
-            // Limpiar paginación si no hay datos
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:30px; color:#64748b;">🎉 ¡Todo al día! No hay deudas pendientes por programar.</td></tr>';
             const pagContainer = document.getElementById('cuentas-paginacion');
             if (pagContainer) pagContainer.innerHTML = '';
             return;
         }
 
+        // --- OBTENER FECHA ACTUAL (Normalizada a medianoche) ---
         const hoy = new Date();
-        // Normalizamos hoy para la comparación del semáforo
-        hoy.setHours(0,0,0,0); 
-
-        // 🛡️ OBTENEMOS EL ROL DEL USUARIO ACTUAL
-        const userRole = (localStorage.getItem('rol') || '').toLowerCase(); 
-
-        // 🛡️ DEFINIMOS QUÉ ROLES PUEDEN HACER QUÉ ACCIÓN
-        const rolesProgramar = ['superadmin', 'gerente', 'director'];
-        const rolesAprobar = ['superadmin', 'contador', 'finanzas'];
+        hoy.setHours(0, 0, 0, 0);
 
         datos.forEach(c => {
             const tr = document.createElement('tr');
             
-            // Cálculo de días restantes para el semáforo
+            // --- 🔍 PASO 1: DETECTAR ESTADO EN TESORERÍA ---
+            const enTesoreria = c.programado_hoy === true;
+
+            // --- 📅 PASO 2: CÁLCULO DE SEMÁFORO (Sincronización Total) ---
+            // Parseo seguro de fecha YYYY-MM-DD
             const parts = c.fecha_vencimiento.split('-');
-            const vence = new Date(parts[0], parts[1]-1, parts[2]);
-            const diasRestantes = Math.ceil((vence - hoy) / (1000 * 60 * 60 * 24));
+            const vence = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+            vence.setHours(0, 0, 0, 0);
+
+            // Diferencia exacta en días
+            const diffTime = vence.getTime() - hoy.getTime();
+            const diasRestantes = Math.round(diffTime / (1000 * 60 * 60 * 24));
             
             let semaforo = '';
-            if (diasRestantes < 0) semaforo = `<span class="badge bg-red">VENCIDO (${Math.abs(diasRestantes)} días)</span>`;
-            else if (diasRestantes <= 7) semaforo = `<span class="badge bg-yellow">⚠️ Vence en ${diasRestantes} días</span>`;
-            else semaforo = `<span class="badge bg-green">🟢 Al día</span>`;
-
-            const total = parseFloat(c.monto_total);
-            const acuenta = parseFloat(c.monto_pagado || 0);
-            const saldo = parseFloat(c.saldo_pendiente || (total - acuenta));
-
-            // --- 🛡️ LÓGICA DE BOTONES DE FLUJO Y BLOQUEO DE PAGO CON PERMISOS ---
-            const estadoFlujo = c.estado_aprobacion || 'registrado';
-            let btnFlujo = '';
-            let btnPagar = '';
-            
-            if (estadoFlujo === 'registrado') {
-                if (rolesProgramar.includes(userRole)) {
-                    btnFlujo = `
-                        <button class="btn-icon" style="color:#f59e0b; background:#fef3c7;" onclick="cambiarEstadoFlujo(${c.id}, 'programado')" title="Programar Pago">
-                            <i class='bx bx-calendar-star'></i>
-                        </button>`;
-                } else {
-                    btnFlujo = `
-                        <button class="btn-icon" style="color:#cbd5e1; background:#f8fafc; cursor:not-allowed;" title="Esperando que Gerencia programe el pago">
-                            <i class='bx bx-calendar-star'></i>
-                        </button>`;
-                }
-                
-                btnPagar = `
-                    <button class="btn-icon" style="color:#94a3b8; background:#f1f5f9; cursor:not-allowed;" title="Requiere ser programado y aprobado primero">
-                        <i class='bx bx-dollar-circle'></i>
-                    </button>`;
-
-            } else if (estadoFlujo === 'programado') {
-                if (rolesAprobar.includes(userRole)) {
-                    btnFlujo = `
-                        <button class="btn-icon" style="color:#8b5cf6; background:#f3e8ff;" onclick="cambiarEstadoFlujo(${c.id}, 'pendiente')" title="Aprobar para Pago">
-                            <i class='bx bx-check-double'></i>
-                        </button>`;
-                } else {
-                    btnFlujo = `
-                        <button class="btn-icon" style="color:#cbd5e1; background:#f8fafc; cursor:not-allowed;" title="Esperando que Contabilidad apruebe la recepción">
-                            <i class='bx bx-check-double'></i>
-                        </button>`;
-                }
-
-                btnPagar = `
-                    <button class="btn-icon" style="color:#94a3b8; background:#f1f5f9; cursor:not-allowed;" title="Esperando aprobación de Contabilidad">
-                        <i class='bx bx-dollar-circle'></i>
-                    </button>`;
-
+            if (diasRestantes < 0) {
+                // IGUAL QUE EN GASTOS: ROJO INTENSO SI ESTÁ VENCIDO
+                const diasVencidos = Math.abs(diasRestantes);
+                semaforo = `<span class="badge" style="font-weight:900; padding: 5px 10px; border-radius: 4px; font-size: 11px; background-color: #fee2e2; color: #dc2626;">${diasVencidos} DÍAS VENC.</span>`;
+            } else if (diasRestantes <= 7) {
+                // AMARILLO SI VENCE PRONTO
+                semaforo = `<span class="badge" style="padding: 5px 10px; border-radius: 4px; font-size: 11px; background-color: #fef9c3; color: #ca8a04;">⚠️ VENCE EN ${diasRestantes} DÍAS</span>`;
             } else {
-                btnFlujo = `<span class="badge bg-green" style="padding: 5px;" title="Aprobado"><i class='bx bx-check'></i></span>`;
-                
-                btnPagar = `
-                    <button class="btn-icon" style="color:#10b981; background:#ecfdf5;" onclick="abrirModalPagoExtendido(${c.id}, ${saldo}, '${c.proveedor}', '${c.numero_documento}', '${c.moneda}')" title="Registrar Salida de Dinero">
-                        <i class='bx bx-dollar-circle'></i>
-                    </button>`;
+                // VERDE SI ESTÁ AL DÍA
+                semaforo = `<span class="badge" style="padding: 5px 10px; border-radius: 4px; font-size: 11px; background-color: #dcfce7; color: #16a34a;">AL DÍA</span>`;
             }
 
-            tr.innerHTML = `
-                <td>${c.fecha_vencimiento.slice(0, 10)}</td>
-                <td>${semaforo}</td>
-                <td style="font-weight:600">${c.proveedor}</td>
-                <td>${c.numero_documento}</td>
-                <td>${c.moneda === 'USD' ? '$' : 'S/'} ${total.toFixed(2)}</td>
-                <td style="color:#2ecc71">${acuenta.toFixed(2)}</td>
-                <td style="color:#e74c3c; font-weight:bold">${saldo.toFixed(2)}</td>
-                
-                <td>
-                    <div style="display: flex; gap: 5px; align-items: center; justify-content: center;">
-                        <button class="btn-icon" style="color:#3b82f6; background:#eff6ff;" onclick="abrirModalDetallesVer(${c.id})" title="Ver Detalles, Documentos y Pagos">
-                            <i class='bx bx-show'></i>
-                        </button>
-                        
-                        ${btnFlujo}
+            // Cálculos financieros
+            const total = parseFloat(c.monto_total || 0);
+            const acuenta = parseFloat(c.monto_pagado || 0);
+            const saldo = parseFloat(c.saldo_pendiente || (total - acuenta));
+            const monedaSym = c.moneda === 'USD' ? '$' : 'S/';
 
-                        ${btnPagar}
+            // --- 🎨 PASO 3: BADGE VISUAL PARA TESORERÍA ---
+            const badgeRevision = enTesoreria 
+                ? `<br><span style="background: #eef2ff; color: #6366f1; border: 1px solid #c7d2fe; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-top: 4px; display: inline-block; font-weight: 700;">
+                    <i class='bx bx-time-five'></i> EN TESORERÍA</span>` 
+                : '';
+
+            // --- 🛡️ PASO 4: BOTONES DE ACCIÓN (BLOQUEO SEGÚN ESTADO) ---
+            const btnProgramarHoy = enTesoreria 
+                ? `<button class="btn-icon" 
+                    style="color:#cbd5e1; background:#f8fafc; border: 1px solid #e2e8f0; cursor: not-allowed;" 
+                    title="Esta factura ya se encuentra en la lista de pagos de hoy">
+                    <i class='bx bx-check-double'></i>
+                </button>`
+                : `<button class="btn-icon" 
+                    style="color:#059669; background:#dcfce7; border: 1px solid #bbf7d0;" 
+                    onclick="alternarProgramacionHoy(${c.id}, true)" 
+                    title="Mover a Tesorería para pagar HOY">
+                    <i class='bx bx-calendar-check'></i>
+                </button>`;
+
+            const btnVerDetalles = `
+                <button class="btn-icon" 
+                    style="color:#3b82f6; background:#eff6ff; border: 1px solid #dbeafe;" 
+                    onclick="abrirModalDetallesVer(${c.id})" 
+                    title="Ver Información y Documentos">
+                    <i class='bx bx-show'></i>
+                </button>`;
+
+            // Construcción de la fila
+            tr.innerHTML = `
+                <td style="font-weight: 500;">${c.fecha_vencimiento.slice(0, 10)}</td>
+                <td style="text-align:center;">${semaforo}</td>
+                <td style="color:#6366f1; font-weight:500;">
+                    ${c.fecha_programacion ? c.fecha_programacion.slice(0, 10) : '<small style="color:#cbd5e1">No prog.</small>'}
+                </td>
+                <td style="font-weight:600; color: #1e293b; font-size: 0.85rem;">${c.proveedor}</td>
+                <td style="color: #64748b;">
+                    ${c.numero_documento}
+                    ${badgeRevision}
+                </td>
+                <td style="font-weight: 600;">${monedaSym} ${total.toFixed(2)}</td>
+                <td style="color:#10b981; font-weight: 500;">${monedaSym} ${acuenta.toFixed(2)}</td>
+                <td style="color:#ef4444; font-weight:bold; font-size: 1rem;">${monedaSym} ${saldo.toFixed(2)}</td>
+                <td>
+                    <div style="display: flex; gap: 10px; align-items: center; justify-content: center;">
+                        ${btnVerDetalles}
+                        ${btnProgramarHoy}
                     </div>
                 </td>
             `;
             tbody.appendChild(tr);
         });
 
-        // 2. 🔥 ACTIVAR CONTROLES DE PAGINACIÓN PARA CUENTAS
-        // Asegúrate de tener el contenedor <div id="cuentas-paginacion"></div> en tu HTML
+        // 3. RENDERIZAR PAGINACIÓN
         renderizarPaginacion('cuentas-paginacion', cuentasData.length, paginaCuentas, (p) => { 
             paginaCuentas = p; 
             renderizarTablaCuentas(); 
         });
+
+        // Actualizar estados visuales de ordenamiento si la función existe
+        if (typeof actualizarVisualOrdenamiento === 'function') {
+            actualizarVisualOrdenamiento();
+        }
     }
 
-    window.calcularTotalImpuesto = function() {
-        const base = parseFloat(document.getElementById('fac-base').value) || 0;
-        const porcentaje = parseFloat(document.getElementById('fac-impuesto-porc').value) || 0;
-        let total = 0;
+    /**
+     * Función auxiliar para resaltar visualmente qué columna está mandando
+     */
+    function actualizarVisualOrdenamiento() {
+        if (!ordenActual.columna) return;
+        
+        // Quitamos la clase active de todos los iconos
+        document.querySelectorAll('.premium-table th i').forEach(icon => {
+            icon.style.color = '#cbd5e1';
+        });
 
-        if (porcentaje === 8) {
-            // Caso especial: 8% RESTA al monto base
-            total = base - (base * 0.08);
+        // Buscamos el th que corresponde a la columna ordenada
+        // Nota: El texto del TH debe coincidir o puedes usar un data-attribute
+        const headers = document.querySelectorAll('.premium-table th');
+        headers.forEach(th => {
+            if (th.getAttribute('onclick')?.includes(`'${ordenActual.columna}'`)) {
+                const icon = th.querySelector('i');
+                if (icon) icon.style.color = '#3b82f6';
+            }
+        });
+    }
+
+    /**
+     * Muestra u oculta los campos de impuesto personalizado
+     */
+    window.toggleImpuestoOtros = function() {
+        const select = document.getElementById('fac-impuesto-porc');
+        const container = document.getElementById('fac-otros-container');
+        
+        if (select.value === 'otros') {
+            container.style.display = 'grid';
         } else {
-            // Casos 18%, 10.5%, 0%: SUMAN al monto base
-            total = base + (base * (porcentaje / 100));
+            container.style.display = 'none';
+            // Limpiamos el valor de otros para no crear confusión
+            document.getElementById('fac-otros-porcentaje').value = '';
+        }
+    };
+
+    /**
+     * 🧮 CALCULAR TOTAL IMPUESTO (Actualizado: Soporte para 'Otros' y Adicionales No Gravados)
+     * Sincronizado para sumar montos que no afectan el cálculo del impuesto (ej. Propinas).
+     */
+    window.calcularTotalImpuesto = function() {
+        // 1. Capturar valores base
+        const base = parseFloat(document.getElementById('fac-base').value) || 0;
+        const impuestoSelect = document.getElementById('fac-impuesto-porc').value;
+        
+        // 🚀 NUEVO: Capturar el monto adicional (No gravado)
+        const montoAdicional = parseFloat(document.getElementById('fac-adicional-monto').value) || 0;
+        
+        let porcentaje = 0;
+        let operacion = 'suma'; // Por defecto la mayoría suma
+
+        // 2. Lógica de selección de impuesto
+        if (impuestoSelect === 'otros') {
+            // Si es "Otros", leemos los campos personalizados
+            porcentaje = parseFloat(document.getElementById('fac-otros-porcentaje').value) || 0;
+            operacion = document.getElementById('fac-otros-operacion').value;
+        } else {
+            // Si es una opción estándar
+            porcentaje = parseFloat(impuestoSelect) || 0;
+            // El 8% es la única opción estándar que resta (Retención)
+            if (porcentaje === 8) operacion = 'resta';
         }
 
-        // Mostrar resultado bloqueado
-        document.getElementById('fac-total-final').value = total.toFixed(2);
+        // 3. Cálculo del Subtotal (Base +/- Impuesto)
+        let subtotalConImpuesto = 0;
+        const montoImpuesto = base * (porcentaje / 100);
+
+        if (operacion === 'resta') {
+            subtotalConImpuesto = base - montoImpuesto;
+        } else {
+            subtotalConImpuesto = base + montoImpuesto;
+        }
+
+        // NUEVA LÓGICA: Sumar todos los adicionales
+        let sumaAdicionales = 0;
+        const inputsMonto = document.querySelectorAll('.adicional-monto');
+        
+        inputsMonto.forEach(input => {
+            sumaAdicionales += parseFloat(input.value) || 0;
+        });
+
+        const totalFinal = subtotalConImpuesto + sumaAdicionales;
+        document.getElementById('fac-total-final').value = totalFinal.toFixed(2);
     };
 
     // 🆕 FUNCIÓN ALERTA VENCIMIENTOS
@@ -425,46 +615,51 @@
         }
     }
 
-    // --- 4. GUARDAR FACTURA (GASTO) ---
+    // --- 4. GUARDAR FACTURA (ACTUALIZADO: Soporte para Lista Dinámica de Adicionales y Normalización) ---
     async function guardarFactura() {
         // 1. Obtener IDs y valores básicos
         const id = document.getElementById('fac-id').value;
         const proveedorId = document.getElementById('fac-proveedor').value;
         const totalCalculado = document.getElementById('fac-total-final').value;
+        
+        // 🛡️ CORRECCIÓN PARA CLASIFICACIÓN
+        let selectClasif = document.getElementById('fac-clasificacion');
+        let clasificacion = (selectClasif.value && selectClasif.value.trim() !== "") 
+                            ? selectClasif.value 
+                            : "Operativo"; 
 
         // 2. Validaciones básicas
         if (!proveedorId) return showToast("Seleccione un proveedor", "warning");
         if (!totalCalculado || parseFloat(totalCalculado) <= 0) return showToast("El monto total no es válido", "warning");
 
-        // 3. UI: Bloquear botón (Buscamos dentro del modal activo)
+        // 3. UI: Bloquear botón para evitar duplicados
         const btn = document.querySelector('#modal-factura button.btn-primary');
         const txtOriginal = btn ? btn.innerText : "Guardar";
         if(btn) { btn.innerText = "Guardando..."; btn.disabled = true; }
 
-        // 4. Preparar datos para enviar
+        // 4. Preparar datos para enviar (FormData para soportar archivos)
         const formData = new FormData();
         
-        // -- IDs y Clasificación --
+        // -- IDs y Clasificación Normalizada --
+        if (clasificacion === 'Implementacion') clasificacion = 'Implementación';
+        
         formData.append('proveedorId', proveedorId); 
         formData.append('sede', document.getElementById('fac-sede').value);
-        formData.append('categoria', document.getElementById('fac-clasificacion').value);
+        formData.append('clasificacion', clasificacion); 
         
         // -- Datos del Documento --
         formData.append('glosa', document.getElementById('fac-glosa').value);
+        formData.append('categoria', document.getElementById('fac-linea').value); 
         
-        // Lógica Dinámica de Documento
         const tipoDoc = document.getElementById('fac-tipo').value;
         formData.append('tipo', tipoDoc);
 
         let numeroDocumentoFinal = '';
-
         if (tipoDoc === 'Factura' || tipoDoc === 'Boleta') {
-            // Usamos los 2 inputs (Serie - Correlativo)
             const serie = document.getElementById('fac-serie').value.trim().toUpperCase() || 'F001';
             const correlativo = document.getElementById('fac-numero').value.trim() || '000000';
             numeroDocumentoFinal = `${serie}-${correlativo}`;
         } else {
-            // Usamos el input único
             const docUnico = document.getElementById('fac-doc-unico');
             numeroDocumentoFinal = docUnico ? docUnico.value.trim() : 'S/N';
         }
@@ -472,21 +667,44 @@
 
         // -- Fechas --
         formData.append('emision', document.getElementById('fac-emision').value);
-        // Enviamos fecha de programación (puede ir vacía)
         formData.append('programacion', document.getElementById('fac-programacion').value); 
         formData.append('vencimiento', document.getElementById('fac-vencimiento').value);
         
         // -- MONTOS E IMPUESTOS --
         formData.append('moneda', document.getElementById('fac-moneda').value);
-        
-        // 🚨 CORRECCIÓN CLAVE PARA EL ERROR NUMERIC: "" 🚨
-        // Si el input está vacío, enviamos "0"
         const montoBase = document.getElementById('fac-base').value || "0";
         formData.append('monto_base', montoBase); 
         
-        const impuesto = document.getElementById('fac-impuesto-porc').value || "0";
-        formData.append('impuesto_porcentaje', impuesto); 
-        
+        const impuestoSelect = document.getElementById('fac-impuesto-porc').value;
+        let impuestoFinal = 0;
+        if (impuestoSelect === 'otros') {
+            impuestoFinal = document.getElementById('fac-otros-porcentaje').value || "0";
+        } else {
+            impuestoFinal = impuestoSelect;
+        }
+        formData.append('impuesto_porcentaje', impuestoFinal); 
+
+        // 🚀 LÓGICA ACTUALIZADA PARA MÚLTIPLES ADICIONALES 🚀
+        const adicionales = [];
+        let sumaMontoAdicionales = 0;
+
+        document.querySelectorAll('.fila-adicional').forEach(fila => {
+            const glosaAdj = fila.querySelector('.adicional-glosa').value.trim();
+            const montoAdj = parseFloat(fila.querySelector('.adicional-monto').value) || 0;
+
+            if (montoAdj !== 0) {
+                adicionales.push({ descripcion: glosaAdj, monto: montoAdj });
+                sumaMontoAdicionales += montoAdj;
+            }
+        });
+
+        // Enviamos el total de adicionales como número para el backend antiguo 
+        // y enviamos el detalle como JSON para el nuevo soporte de múltiples filas
+        formData.append('monto_adicional', sumaMontoAdicionales);
+        formData.append('detalles_adicionales', JSON.stringify(adicionales)); 
+        formData.append('glosa_adicional', adicionales.length > 0 ? adicionales[0].descripcion : "");
+
+        // El total ya incluye la base + impuesto + adicionales
         formData.append('total', totalCalculado); 
 
         // -- DATOS BANCARIOS --
@@ -520,84 +738,165 @@
             const data = await res.json();
 
             if (res.ok) {
-                showToast(id ? "Gasto actualizado" : "Gasto registrado", "success");
+                showToast(id ? "✅ Gasto actualizado" : "✅ Gasto registrado", "success");
                 cerrarModalFactura();
+                
+                // Recargar datos
                 await cargarGastos();           
                 if(window.cargarCuentasPorPagar) await cargarCuentasPorPagar(); 
+                if(window.cargarTesoriaDiaria) await cargarTesoriaDiaria(); 
+                
             } else {
-                showToast(data.msg || "Error al guardar (Backend)", "error");
+                showToast(data.msg || "Error al guardar", "error");
                 console.error("Error servidor:", data);
             }
         } catch (e) {
             console.error("Error JS/Red:", e);
-            showToast("Error de conexión", "error");
+            showToast("Error de conexión con el servidor", "error");
         } finally {
             // 6. UI: Restaurar botón
             if(btn) { btn.innerText = txtOriginal; btn.disabled = false; }
         }
     }
 
-    // --- GESTIÓN DE PAGOS ---
+    function agregarFilaAdicional() {
+        const contenedor = document.getElementById('contenedor-adicionales');
+        const nuevaFila = document.createElement('div');
+        nuevaFila.className = 'row-grid fila-adicional';
+        nuevaFila.style = 'grid-template-columns: 2fr 1fr auto; gap: 10px; margin-bottom: 8px;';
+        
+        nuevaFila.innerHTML = `
+            <div class="input-group" style="margin-bottom: 0;">
+                <input type="text" class="adicional-glosa" placeholder="Otro concepto...">
+            </div>
+            <div class="input-group" style="margin-bottom: 0;">
+                <input type="number" class="adicional-monto" placeholder="0.00" step="0.01" oninput="calcularTotalImpuesto()">
+            </div>
+            <button type="button" onclick="this.parentElement.remove(); calcularTotalImpuesto();" 
+                    style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:20px; align-self:center;">
+                <i class='bx bx-trash'></i>
+            </button>
+        `;
+        contenedor.appendChild(nuevaFila);
+    }
+
+    // --- GESTIÓN DE PAGOS (ACTUALIZADO: Sincronización de IDs y Descripciones) ---
     window.abrirModalPago = function(tipo, idRef, saldoPendiente, nombreEntidad = '', detalleCuota = '') {
         // 1. Guardar referencias ocultas
-        document.getElementById('pago-tipo-origen').value = tipo; 
-        document.getElementById('pago-ref-id').value = idRef; // Si es PRÉSTAMO, este ID es el de la CUOTA
+        // Seteamos 'pago-factura-id' para que window.confirmarPago lo encuentre sin errores
+        const inputIdRef = document.getElementById('pago-factura-id') || document.getElementById('pago-ref-id');
+        if (inputIdRef) {
+            inputIdRef.value = idRef;
+        }
+
+        const inputTipo = document.getElementById('pago-tipo-origen');
+        if (inputTipo) {
+            inputTipo.value = tipo;
+        }
         
-        // 2. Pre-llenar monto
+        // 2. Pre-llenar monto y fecha
         const inputMonto = document.getElementById('pago-monto');
-        inputMonto.value = parseFloat(saldoPendiente).toFixed(2);
-        // inputMonto.max = saldoPendiente; // Opcional: Descomentar si quieres prohibir pagar de más
+        if (inputMonto) {
+            inputMonto.value = parseFloat(saldoPendiente).toFixed(2);
+        }
         
-        document.getElementById('pago-fecha').valueAsDate = new Date();
+        const inputFecha = document.getElementById('pago-fecha');
+        if (inputFecha) {
+            inputFecha.valueAsDate = new Date();
+        }
         
-        // 3. Generar Descripción Bonita
+        // 3. Generar Descripción Dinámica
         let descripcion = "";
         
         if (tipo === 'GASTO') {
-            // Lógica para facturas (busca en el array global facturasData)
-            const fac = facturasData.find(f => f.id === idRef);
+            // Buscamos en facturasData o tesoreriaData según lo que esté disponible
+            const listaBusqueda = (typeof facturasData !== 'undefined') ? facturasData : (window.tesoreriaData || []);
+            const fac = listaBusqueda.find(f => f.id == idRef);
+            
             if (fac) {
-                descripcion = `Pagando a: <b>${fac.proveedor}</b><br><small>Doc: ${fac.numero_documento}</small>`;
+                descripcion = `Pagando a: <b>${fac.proveedor || fac.proveedor_nombre || 'Proveedor'}</b><br>
+                            <small>Doc: ${fac.numero_documento || fac.serie || 'S/N'}</small><br>
+                            <span class="text-primary">Saldo: ${parseFloat(saldoPendiente).toFixed(2)}</span>`;
+            } else if (nombreEntidad) {
+                descripcion = `Pagando a: <b>${nombreEntidad}</b><br><small>Ref: ${idRef}</small>`;
             } else {
-                descripcion = "Pagando Factura/Gasto";
+                descripcion = "Pagando Factura / Gasto Seleccionado";
             }
-        } 
+        } else if (tipo === 'PRESTAMO') {
+            descripcion = `Amortización de Préstamo: <b>${nombreEntidad}</b><br><small>${detalleCuota}</small>`;
+        }
 
-        document.getElementById('pago-descripcion-txt').innerHTML = descripcion;
+        const txtDesc = document.getElementById('pago-descripcion-txt');
+        if (txtDesc) {
+            txtDesc.innerHTML = descripcion;
+        }
         
-        // 4. Mostrar Modal
-        document.getElementById('modal-pago').classList.add('active');
+        // 4. Mostrar Modal (Compatibilidad con clases manuales y Bootstrap)
+        const modalPago = document.getElementById('modal-pago') || document.getElementById('modal-registro-pago');
+        
+        if (modalPago) {
+            modalPago.classList.add('active'); // Para estilos personalizados
+            
+            // Si usas Bootstrap 5, forzamos la apertura
+            if (typeof bootstrap !== 'undefined') {
+                let inst = bootstrap.Modal.getInstance(modalPago);
+                if (!inst) inst = new bootstrap.Modal(modalPago);
+                inst.show();
+            }
+        } else {
+            console.error("❌ No se encontró el modal de pago en el DOM");
+            showToast("Error al abrir el panel de pago", "error");
+        }
     };
 
-    // --- 5. CONFIRMAR PAGO (MODAL) ---
-    // --- 5. CONFIRMAR PAGO (MODAL) - ACTUALIZADO PARA ACTUALIZACIÓN INSTANTÁNEA ---
+    // --- 5. CONFIRMAR PAGO (MODAL) - VERSIÓN FINAL SINCRONIZADA ---
     window.confirmarPago = async function() {
-        // 1. Obtener valores del DOM
-        const tipo = document.getElementById('pago-tipo-origen').value || 'GASTO'; 
-        const idRef = document.getElementById('pago-ref-id').value;
-        const monto = document.getElementById('pago-monto').value;
-        const metodo = document.getElementById('pago-metodo').value;
-        const fecha = document.getElementById('pago-fecha').value;
-        const operacion = document.getElementById('pago-operacion').value;
+        // 1. Obtener valores del DOM (Priorizando el ID real de tu HTML: pago-ref-id)
+        const elId = document.getElementById('pago-ref-id') || 
+                    document.getElementById('pago-factura-id') || 
+                    document.getElementById('pago-id');
 
-        // 2. Validaciones de entrada
-        if (!monto || parseFloat(monto) <= 0) return showToast("Ingrese un monto válido", "warning");
-        if (!fecha) return showToast("Seleccione una fecha de pago", "warning");
+        const idRef = elId?.value;
+        const tipo = document.getElementById('pago-tipo-origen')?.value || 'GASTO'; 
+        const monto = document.getElementById('pago-monto')?.value;
+        const metodo = document.getElementById('pago-metodo')?.value;
+        const fecha = document.getElementById('pago-fecha')?.value;
+        const operacion = document.getElementById('pago-operacion')?.value;
 
-        // 3. UI: Bloquear botón para evitar doble clic
-        const btn = document.querySelector('#modal-pago .btn-primary');
-        let txtOriginal = "Confirmar Egreso";
+        // 2. Validaciones de entrada y Depuración Crítica
+        if (!idRef || idRef === "" || idRef === "undefined") {
+            console.error("❌ Error de DOM: No se encontró el ID de referencia. IDs probados: pago-ref-id, pago-factura-id");
+            return showToast("No se detectó el ID de la factura. Reintente abrir el modal.", "error");
+        }
+        
+        if (!monto || parseFloat(monto) <= 0) {
+            return showToast("Ingrese un monto válido", "warning");
+        }
+        
+        if (!fecha) {
+            return showToast("Seleccione una fecha de pago", "warning");
+        }
+
+        // 3. UI: Bloquear botón para evitar duplicidad de transacciones
+        const btn = document.querySelector('#modal-pago .btn-primary') || 
+                    document.querySelector('#modal-registro-pago .btn-primary') ||
+                    document.querySelector('button[onclick="confirmarPago()"]');
+
+        let txtOriginal = "Confirmar Pago";
         
         if (btn) {
-            txtOriginal = btn.innerText;
+            txtOriginal = btn.innerHTML; // Guardamos HTML por si tiene iconos
             btn.disabled = true; 
-            btn.innerText = "Procesando...";
+            btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Procesando...";
         }
 
         try {
             const token = localStorage.getItem('token');
-            // Endpoint dinámico según el origen (Gasto normal o Préstamo)
-            const url = tipo === 'GASTO' ? `/api/facturas/pago/${idRef}` : `/api/facturas/prestamos/amortizar/${idRef}`;
+            
+            // Definir URL del endpoint según el tipo de origen
+            const url = tipo === 'GASTO' 
+                ? `/api/facturas/pago/${idRef}` 
+                : `/api/facturas/prestamos/amortizar/${idRef}`;
             
             const res = await fetch(url, {
                 method: 'POST',
@@ -610,8 +909,8 @@
                     monto: parseFloat(monto), 
                     metodo: metodo, 
                     operacion: operacion,
-                    // Compatibilidad con backend (mapeo de campos)
-                    fecha_pago: fecha,
+                    // redundancia para compatibilidad de controladores
+                    fecha_pago: fecha, 
                     metodo_pago: metodo,
                     descripcion: operacion ? `Operación: ${operacion}` : 'Pago de Factura'
                 })
@@ -620,25 +919,42 @@
             const data = await res.json();
 
             if (res.ok) {
-                showToast("✅ Pago registrado correctamente", "success");
+                showToast("✅ Pago registrado y saldos actualizados", "success");
                 
-                // Cerrar modal de pago
-                document.getElementById('modal-pago').classList.remove('active');
+                // --- 🔄 CIERRE DE MODAL ---
+                const modalPago = document.getElementById('modal-pago') || document.getElementById('modal-registro-pago');
+                if (modalPago) {
+                    modalPago.classList.remove('active');
+                    // Si el modal usa inline styles de display
+                    if (modalPago.style.display === 'flex' || modalPago.style.display === 'block') {
+                        modalPago.style.display = 'none';
+                    }
+                    // Limpieza de Bootstrap si aplica
+                    if (typeof bootstrap !== 'undefined') {
+                        const inst = bootstrap.Modal.getInstance(modalPago);
+                        if (inst) inst.hide();
+                    }
+                }
                 
-                // --- 🔄 FLUJO DE ACTUALIZACIÓN INSTANTÁNEA ---
+                // --- 🔄 ACTUALIZACIÓN INTEGRAL DE LA INTERFAZ ---
                 if (tipo === 'GASTO') { 
-                    // 1. Recargar los datos del servidor (esto actualiza facturasData con los nuevos saldos)
-                    await cargarGastos(); 
-                    
-                    // 2. Si estamos viendo Tesorería, actualizamos cuentasData y la tabla "Acuenta"
-                    if (typeof cargarCuentasPorPagar === 'function') {
-                        await cargarCuentasPorPagar(); 
+                    // 1. Limpiar estado de aprobación local en tesorería para evitar "fantamas" visuales
+                    if (window.tesoreriaData && Array.isArray(window.tesoreriaData)) {
+                        const facturaIdx = window.tesoreriaData.findIndex(f => f.id == idRef);
+                        if (facturaIdx !== -1) {
+                            window.tesoreriaData[facturaIdx].aprobado_tesoreria = false;
+                            window.tesoreriaData[facturaIdx].monto_aprobado = 0;
+                        }
                     }
 
-                    // 3. Refrescar los cuadros de resumen superiores (Pagado Hoy, Deuda Vencida)
-                    if (typeof cargarKpisPagos === 'function') {
-                        await cargarKpisPagos(); 
-                    }
+                    // 2. Ejecutar recargas de datos (solo si las funciones existen)
+                    const promesas = [];
+                    if (typeof cargarGastos === 'function') promesas.push(cargarGastos()); 
+                    if (typeof window.cargarTesoriaDiaria === 'function') promesas.push(window.cargarTesoriaDiaria());
+                    if (typeof cargarCuentasPorPagar === 'function') promesas.push(cargarCuentasPorPagar());
+                    if (typeof cargarKpisPagos === 'function') promesas.push(cargarKpisPagos());
+                    
+                    await Promise.all(promesas);
                 }
 
                 if (tipo === 'PRESTAMO') {
@@ -649,13 +965,12 @@
                 showToast(data.msg || "Error al procesar el pago", "error");
             }
         } catch (e) {
-            console.error("❌ Error en confirmarPago:", e);
+            console.error("❌ Error fatal en confirmarPago:", e);
             showToast("Error de conexión con el servidor", "error");
         } finally {
-            // 4. UI: Restaurar botón original
             if(btn) {
                 btn.disabled = false; 
-                btn.innerText = txtOriginal; 
+                btn.innerHTML = txtOriginal; 
             }
         }
     };
@@ -695,39 +1010,7 @@
         }
     };
 
-
-
-    // =======================================================
-    // 9. HELPERS Y CIERRE
-    // =======================================================
-    function exposeGlobalFunctions() {
-        // Exponer funciones necesarias para los botones HTML onclick=""
-        window.initFacturas = initModulo;
-        window.guardarFactura = guardarFactura;
-        window.eliminarFactura = eliminarFactura;
-        window.editarFactura = editarFactura;
-        window.subirArchivoFaltante = subirArchivoFaltante;
-        
-        // Modales Factura
-        window.abrirModalFactura = () => {
-            const modal = document.getElementById('modal-factura');
-            if(modal) modal.classList.add('active');
-        };
-        
-        window.cerrarModalFactura = () => {
-            const modal = document.getElementById('modal-factura');
-            if(modal) modal.classList.remove('active');
-            document.getElementById('form-nueva-factura').reset();
-            document.getElementById('fac-id').value = "";
-        };
-        
-        // Modales Pago
-        window.cerrarModalPago = () => {
-            const modal = document.getElementById('modal-pago');
-            if(modal) modal.classList.remove('active');
-        };
-    }
-
+    
     function renderizarPaginacion(containerId, totalItems, pagActual, callback) {
         const container = document.getElementById(containerId);
         if (!container) return;
@@ -855,38 +1138,45 @@
         }
     }
 
-   // Edición: Cargar datos en el modal para editar (CORREGIDO % IMPUESTO)
+   // Edición: Cargar datos en el modal para editar (ACTUALIZADO: Clasificación y Tesorería)
     async function editarFactura(id) {
+        // Buscamos la factura en el set de datos actual
         const factura = facturasData.find(f => f.id === id);
         if (!factura) return;
 
+        // Seteamos el ID oculto para el modo edición
         document.getElementById('fac-id').value = factura.id;
         
-        // Abrir modal
+        // Abrir modal visualmente
         document.getElementById('modal-factura').classList.add('active');
 
-        // Usamos setTimeout para asegurar que los selects se llenen y el DOM esté listo
+        // Usamos setTimeout para asegurar que los selects (proveedores/sedes) ya estén cargados en el DOM
         setTimeout(() => {
-            // 1. Datos Básicos
+            // 1. Datos de Identificación y Sede
             document.getElementById('fac-proveedor').value = factura.proveedor_id;
             document.getElementById('fac-sede').value = factura.sede_id;
             document.getElementById('fac-glosa').value = factura.descripcion;
             
-            // Clasificación (Manejo de nombres antiguos o nuevos del ID)
-            const comboCategoria = document.getElementById('fac-clasificacion') || document.getElementById('fac-linea');
-            if(comboCategoria) comboCategoria.value = factura.categoria_gasto;
+            // 🆕 NUEVO: Cargar Clasificación para Tesorería (Operativo, Implementación, Financiero)
+            const inputClasificacion = document.getElementById('fac-clasificacion');
+            if (inputClasificacion) {
+                inputClasificacion.value = factura.clasificacion || 'Operativo';
+            }
 
-            // 2. Tipo de Documento y Lógica Visual
+            // Categoría Operativa (Gasto/Insumos/RRHH, etc)
+            const comboLinea = document.getElementById('fac-linea');
+            if (comboLinea) comboLinea.value = factura.categoria_gasto;
+
+            // 2. Lógica del Documento
             const tipoDoc = factura.tipo_documento;
             document.getElementById('fac-tipo').value = tipoDoc;
 
-            // 🔥 Ejecutamos la función visual para mostrar los inputs correctos (Doble o Único)
+            // 🔥 Ejecutamos la función visual para mostrar los inputs correctos (Serie-Número o Único)
             if (typeof toggleInputsDocumento === 'function') toggleInputsDocumento();
 
-            // 3. Carga de Serie/Número según el tipo
             const docCompleto = factura.numero_documento || ''; 
 
-            if (tipoDoc === 'Factura' || tipoDoc === 'Boleta') {
+            if (tipoDoc === 'Factura' || tipoDoc === 'Boleta' || tipoDoc === 'RHE') {
                 // Lógica de 2 inputs (Serie y Correlativo)
                 let serieVal = '';
                 let numeroVal = '';
@@ -902,73 +1192,65 @@
                 document.getElementById('fac-serie').value = serieVal;
                 document.getElementById('fac-numero').value = numeroVal;
             } else {
-                // Lógica de 1 input (Invoice, RHE, Sin Doc)
+                // Lógica de 1 input (Invoice, Sin Documento)
                 const inputUnico = document.getElementById('fac-doc-unico');
                 if (inputUnico) inputUnico.value = docCompleto;
             }
 
-            // 4. Fechas
+            // 3. Fechas (Carga limpia de strings de fecha)
             document.getElementById('fac-emision').value = factura.fecha_emision ? factura.fecha_emision.slice(0, 10) : '';
             document.getElementById('fac-vencimiento').value = factura.fecha_vencimiento ? factura.fecha_vencimiento.slice(0, 10) : '';
             
-            // 🆕 Fecha Programación
+            // 🆕 Fecha Programación (Si existe)
             const inputProg = document.getElementById('fac-programacion');
             if (inputProg) {
                 inputProg.value = factura.fecha_programacion ? factura.fecha_programacion.slice(0, 10) : '';
             }
 
-            // 5. Datos Financieros (Base, Impuesto, Total)
+            // 4. Datos Financieros
             document.getElementById('fac-moneda').value = factura.moneda;
             
-            // Cargar Monto Base 
-            // Si base_imponible es null (registros viejos), usamos monto_neto o 0
+            // Cargar Monto Base (Manejo de registros antiguos sin base_imponible)
             const base = factura.base_imponible !== null ? factura.base_imponible : (factura.monto_neto_pagar || 0); 
             document.getElementById('fac-base').value = parseFloat(base).toFixed(2);
 
-            // --- 🚨 CORRECCIÓN DEL SELECT DE IMPUESTO 🚨 ---
+            // --- 🚨 SELECT DE IMPUESTO 🚨 ---
             let impuestoVal = factura.porcentaje_detraccion;
+            if (impuestoVal === null || impuestoVal === undefined) impuestoVal = 0;
 
-            // Si es null/undefined, ponemos 0
-            if (impuestoVal === null || impuestoVal === undefined) {
-                impuestoVal = 0;
-            }
-
-            // Truco: Convertir a float y luego a string elimina los decimales extra innecesarios (.00)
-            // Ejemplo: "18.00" se convierte en "18", que SÍ coincide con <option value="18">
+            // Formateamos para que coincida con los values del select ("18", "8", etc)
             const impuestoStr = parseFloat(impuestoVal).toString();
-
             const selectImpuesto = document.getElementById('fac-impuesto-porc');
             selectImpuesto.value = impuestoStr;
 
-            // Fallback: Si el valor no existe en el select, forzamos "0"
-            if (!selectImpuesto.value) {
-                selectImpuesto.value = "0";
-            }
+            // Fallback al 0% si el valor no coincide
+            if (!selectImpuesto.value) selectImpuesto.value = "0";
 
-            // Cargar Total Final (Readonly)
+            // Total Final (Readonly)
             document.getElementById('fac-total-final').value = parseFloat(factura.monto_total).toFixed(2);
 
-            // 6. Datos Bancarios
+            // 5. Datos Bancarios
             document.getElementById('fac-banco').value = factura.banco || '';
             document.getElementById('fac-cuenta').value = factura.numero_cuenta || '';
             document.getElementById('fac-cci').value = factura.cci || '';
 
-            // Forzar recálculo visual para que todo cuadre
+            // Forzar recálculo visual de impuestos para consistencia
             if(window.calcularTotalImpuesto) window.calcularTotalImpuesto();
 
+            // 6. Lógica del Check de Pago
             const checkPago = document.getElementById('check-pagar-ahora');
             if (checkPago) {
-                // Verificamos si ya está pagado o si fue al contado
+                // Si la factura ya está marcada como pagada o fue al contado, bloqueamos el check
                 if (factura.estado_pago === 'pagado' || factura.forma_pago === 'Contado') {
                     checkPago.checked = true;
-                    checkPago.disabled = true; // Lo bloqueamos por seguridad
+                    checkPago.disabled = true;
                 } else {
                     checkPago.checked = false;
-                    checkPago.disabled = false; // Habilitado para que puedan marcarlo si se olvidaron antes
+                    checkPago.disabled = false;
                 }
             }
-        }, 100);
-    } 
+        }, 150); // Aumentamos ligeramente el delay para asegurar carga de componentes dinámicos
+    }
     
     async function subirArchivoFaltante(id) {
         // Simular click en input file oculto para subir directo
@@ -996,6 +1278,7 @@
             }
         };
     }
+    
     // 🆕 LÓGICA VISUAL: CAMBIAR INPUTS SEGÚN TIPO DOC
     window.toggleInputsDocumento = function() {
         const tipo = document.getElementById('fac-tipo').value;
@@ -1003,11 +1286,11 @@
         const bloqueUnico = document.getElementById('bloque-unico-input');
 
         // Si es Factura o Boleta -> Mostrar 2 inputs
-        if (tipo === 'Factura' || tipo === 'Boleta') {
+        if (tipo === 'Factura' || tipo === 'Boleta'|| tipo === 'RHE') {
             bloqueDoble.style.display = 'contents'; // Mantiene el grid
             bloqueUnico.style.display = 'none';
         } else {
-            // Invoice, RHE, Sin Documento -> Mostrar 1 input
+            // Invoice, Sin Documento -> Mostrar 1 input
             bloqueDoble.style.display = 'none';
             bloqueUnico.style.display = 'block';
         }
@@ -1115,25 +1398,98 @@
         document.getElementById(`btn-next-${idContenedor}`).onclick = () => callback(pagActual + 1);
     }
 
-    // --- EXPONER FUNCIONES AL HTML (WINDOW) ---
+    /**
+     * --- EXPONER FUNCIONES AL HTML (WINDOW) ---
+     * Centraliza todas las funciones necesarias para los eventos onclick="" del HTML.
+     * Incluye limpieza de datos, gestión de estados de aprobación y confirmaciones por modal.
+     */
     function exposeGlobalFunctions() {
+        // 1. Gestión Básica de Facturas y CRUD
         window.initFacturas = initModulo;
-        window.guardarFactura = guardarFactura; // Asegurate de tener esta funcion definida arriba
+        window.guardarFactura = guardarFactura; 
         window.eliminarFactura = eliminarFactura;
         window.editarFactura = editarFactura;
         window.subirArchivoFaltante = subirArchivoFaltante;
         
-        // Modales
-        window.abrirModalFactura = () => document.getElementById('modal-factura').classList.add('active');
-        window.cerrarModalFactura = () => {
-            document.getElementById('modal-factura').classList.remove('active');
-            document.getElementById('form-nueva-factura').reset();
-            document.getElementById('fac-id').value = "";
+        // 2. Gestión de Tesorería y Flujo de Aprobación
+        window.alternarProgramacionHoy = alternarProgramacionHoy;
+        window.toggleAprobacionIndividual = toggleAprobacionIndividual;
+        window.toggleAprobacionMasiva = toggleAprobacionMasiva;
+        window.enviarPlanPagosEmail = enviarPlanPagosEmail;
+        window.actualizarMontoLocal = actualizarMontoLocal;
+        window.abrirModalPagoAprobado = abrirModalPagoAprobado; // Carga el monto autorizado
+        window.confirmarPago = confirmarPago;
+
+        // 3. Sistema de Confirmación por Modal (Nuevo)
+        window.solicitarConfirmacionFlujo = solicitarConfirmacionFlujo;
+        window.cerrarModalFlujo = () => {
+            const modal = document.getElementById('modal-confirmar-flujo');
+            if (modal) {
+                modal.classList.remove('active');
+                // Resetear el botón de confirmación para el siguiente uso
+                const btn = document.getElementById('flujo-modal-btn');
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = "Sí, Confirmar";
+                }
+            }
+        };
+
+        // 4. Control de Modales (Factura)
+        window.abrirModalFactura = () => {
+            const modal = document.getElementById('modal-factura');
+            if (modal) modal.classList.add('active');
         };
         
-        window.cerrarModalPago = () => document.getElementById('modal-pago').classList.remove('active');
-        window.abrirModalPrestamo = () => document.getElementById('modal-prestamo').classList.add('active');
-        window.cerrarModalPrestamo = () => document.getElementById('modal-prestamo').classList.remove('active');
+        window.cerrarModalFactura = () => {
+            const modal = document.getElementById('modal-factura');
+            const form = document.getElementById('form-nueva-factura');
+            if (modal) modal.classList.remove('active');
+            if (form) form.reset();
+            const idField = document.getElementById('fac-id');
+            if (idField) idField.value = "";
+        };
+
+        // 5. Control de Modales (Pago) con Limpieza de Datos
+        window.cerrarModalPago = () => {
+            const modal = document.getElementById('modal-pago');
+            if (modal) {
+                modal.classList.remove('active');
+                
+                // Limpiar campos de entrada para evitar rastro de datos anteriores
+                const fields = ['pago-ref-id', 'pago-monto', 'pago-operacion', 'pago-tipo-origen'];
+                fields.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = '';
+                });
+
+                // Limpiar etiquetas de texto informativas
+                const labels = ['pago-proveedor-txt', 'pago-doc-txt', 'pago-saldo-txt'];
+                labels.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.innerText = '-';
+                });
+            }
+        };
+
+        // 6. Gestión de Préstamos y Detalles
+        window.abrirModalPrestamo = () => {
+            const modal = document.getElementById('modal-prestamo');
+            if (modal) modal.classList.add('active');
+        };
+        
+        window.cerrarModalPrestamo = () => {
+            const modal = document.getElementById('modal-prestamo');
+            if (modal) modal.classList.remove('active');
+        };
+
+        window.abrirModalDetallesVer = abrirModalDetallesVer;
+        window.cerrarModalDetallesVer = () => {
+            const modal = document.getElementById('modal-detalles-ver');
+            if (modal) modal.classList.remove('active');
+        };
+
+        console.log("✅ Todas las funciones globales (incluyendo confirmación) expuestas correctamente.");
     }
 
 // --- FUNCIÓN PARA CARGAR TOTALES Y FECHAS DINÁMICAS (ACTUALIZADA SOLES/DÓLARES) ---
@@ -1312,26 +1668,51 @@
     // FASE 4: LÓGICA DEL SÚPER MODAL "VER", DOCUMENTOS Y FLUJO DE APROBACIÓN
     // =====================================================================
 
-    // 1. ABRIR EL SÚPER MODAL Y LLENAR DATOS
+   // 1. ABRIR EL SÚPER MODAL Y LLENAR DATOS (ACTUALIZADO: Glosa, Sede, Categoría y Estado)
     window.abrirModalDetallesVer = async function(id) {
-        // Buscar la factura en nuestros datos cargados
+        // 1. Buscar la factura en nuestros datos cargados (Historial, Cuentas o Tesorería)
         const factura = (typeof facturasData !== 'undefined' ? facturasData.find(f => f.id === id) : null) 
-                    || (typeof cuentasData !== 'undefined' ? cuentasData.find(f => f.id === id) : null);
+                    || (typeof cuentasData !== 'undefined' ? cuentasData.find(f => f.id === id) : null)
+                    || (typeof tesoreriaData !== 'undefined' ? tesoreriaData.find(f => f.id === id) : null);
         
         if (!factura) {
             return showToast("Error: No se encontró la información de la factura.", "error");
         }
 
-        // Llenar Pestaña "Información"
+        // --- A. Llenar Encabezado y Pestaña "Información" ---
+        // Título del modal
         document.getElementById('ver-modal-doc').innerText = `${factura.tipo_documento || 'Doc'} ${factura.numero_documento || ''}`;
-        document.getElementById('ver-info-proveedor').innerText = factura.proveedor || 'Sin Proveedor';
-        document.getElementById('ver-info-clasificacion').innerText = factura.categoria_gasto || 'Gasto General';
         
+        // Proveedor y Clasificación (Badge azul)
+        document.getElementById('ver-info-proveedor').innerText = factura.proveedor || 'Sin Proveedor';
+        document.getElementById('ver-info-clasificacion').innerText = (factura.clasificacion || 'Operativo').toUpperCase();
+        
+        // Sede y Categoría
+        document.getElementById('ver-info-sede').innerText = factura.sede || 'No especificada';
+        document.getElementById('ver-info-categoria').innerText = factura.categoria_gasto || 'General';
+
+        // Glosa / Descripción (Campo nuevo)
+        document.getElementById('ver-info-glosa').innerText = factura.descripcion || 'Sin descripción detallada registrada.';
+
+        // Datos del Documento y Estado
+        document.getElementById('ver-info-tipo-doc').innerText = factura.tipo_documento || '-';
+        document.getElementById('ver-info-num-doc').innerText = factura.numero_documento || '-';
+        
+        // Lógica de color para el Estado de Pago
+        const estado = factura.estado_pago || 'pendiente';
+        let colorEstado = '#ef4444'; // Rojo Pendiente
+        if (estado === 'pagado') colorEstado = '#10b981'; // Verde Pagado
+        if (estado === 'parcial') colorEstado = '#f59e0b'; // Naranja Parcial
+        
+        const badgeEstado = `<span class="badge" style="background:${colorEstado}15; color:${colorEstado}; border: 1px solid ${colorEstado}30;">${estado.toUpperCase()}</span>`;
+        document.getElementById('ver-info-estado-pago').innerHTML = badgeEstado;
+
+        // --- B. Llenar Fechas ---
         document.getElementById('ver-info-emision').innerText = factura.fecha_emision ? factura.fecha_emision.slice(0, 10) : '-';
         document.getElementById('ver-info-vencimiento').innerText = factura.fecha_vencimiento ? factura.fecha_vencimiento.slice(0, 10) : '-';
         document.getElementById('ver-info-programacion').innerText = factura.fecha_programacion ? factura.fecha_programacion.slice(0, 10) : 'No programada';
 
-        // Cálculos Monetarios
+        // --- C. Cálculos Monetarios ---
         const monedaSym = factura.moneda === 'USD' ? '$' : 'S/';
         const total = parseFloat(factura.monto_total || 0);
         const pagado = parseFloat(factura.monto_pagado || 0);
@@ -1343,12 +1724,13 @@
         document.getElementById('ver-info-pagado').innerText = fmt(pagado);
         document.getElementById('ver-info-deuda').innerText = fmt(deuda);
 
-        // Datos Bancarios
+        // --- D. Datos Bancarios ---
         document.getElementById('ver-info-banco').innerText = factura.banco || 'No registrado';
         document.getElementById('ver-info-cuenta').innerText = factura.numero_cuenta || 'No registrado';
         document.getElementById('ver-info-cci').innerText = factura.cci || 'No registrado';
 
-        // Guardar el ID de la factura activa en un campo oculto
+        // --- E. Finalizar y Cargar Datos Extras ---
+        // Guardar el ID de la factura activa en el campo oculto
         document.getElementById('ver-modal-factura-id').value = id;
 
         // Reiniciar las pestañas a la primera (Información)
@@ -1358,8 +1740,8 @@
         document.getElementById('modal-detalles-ver').classList.add('active');
 
         // Cargar asíncronamente los documentos y pagos desde el Backend
-        cargarDocumentosExtra(id);
-        cargarHistorialPagos(id);
+        if (typeof cargarDocumentosExtra === 'function') cargarDocumentosExtra(id);
+        if (typeof cargarHistorialPagos === 'function') cargarHistorialPagos(id);
     };
 
     // 2. CERRAR EL MODAL
@@ -1625,25 +2007,790 @@
         }
     };
 
-    // ABRIR MODAL DE PAGO CON INFORMACIÓN EXTENDIDA
+    /**
+     * ABRIR MODAL DE PAGO CON INFORMACIÓN EXTENDIDA (Sincronizado con Aprobación de Gerencia)
+     * @param {number} id - ID de la factura
+     * @param {number} saldoPendiente - Saldo total pendiente de la factura
+     * @param {string} proveedor - Nombre del proveedor
+     * @param {string} documento - Número de documento
+     * @param {string} moneda - PEN o USD
+     */
     window.abrirModalPagoExtendido = function(id, saldoPendiente, proveedor, documento, moneda) {
-        // Rellenar la tarjeta informativa superior
+        // 1. Rellenar la tarjeta informativa superior
         document.getElementById('pago-proveedor-txt').innerText = proveedor || 'Proveedor Desconocido';
         document.getElementById('pago-doc-txt').innerText = documento || 'S/N';
         
         const monedaSym = moneda === 'USD' ? '$' : 'S/';
         document.getElementById('pago-saldo-txt').innerText = `${monedaSym} ${parseFloat(saldoPendiente).toFixed(2)}`;
 
-        // Rellenar los inputs del formulario
+        // 2. LÓGICA DE MONTO SUGERIDO (Prioriza el monto aprobado por Gerencia)
+        let montoASugerir = parseFloat(saldoPendiente);
+
+        // Buscamos si la factura está en el listado de tesorería y tiene monto_aprobado
+        if (typeof tesoreriaData !== 'undefined') {
+            const facturaTesoreria = tesoreriaData.find(f => f.id === id);
+            if (facturaTesoreria && facturaTrobado && facturaTesoreria.aprobado_tesoreria) {
+                // Si Gerencia aprobó un monto específico (ej: 500 de 1000), sugerimos ese monto
+                montoASugerir = parseFloat(facturaTesoreria.monto_aprobado);
+            }
+        }
+
+        // 3. Rellenar los inputs del formulario
         document.getElementById('pago-ref-id').value = id;
-        document.getElementById('pago-monto').value = parseFloat(saldoPendiente).toFixed(2); // Sugiere pagar el total por defecto
+        document.getElementById('pago-monto').value = montoASugerir.toFixed(2);
         
-        // Fecha actual por defecto
+        // 4. Configuración por defecto
         document.getElementById('pago-fecha').value = new Date().toISOString().split('T')[0];
         document.getElementById('pago-operacion').value = '';
 
-        // Mostrar modal
-        document.getElementById('modal-pago').classList.add('active');
+        // 5. Mostrar modal
+        const modalPago = document.getElementById('modal-pago');
+        if (modalPago) {
+            modalPago.classList.add('active');
+            
+            // Foco automático en el monto por si se desea ajustar manualmente
+            setTimeout(() => {
+                document.getElementById('pago-monto').focus();
+                document.getElementById('pago-monto').select();
+            }, 300);
+        }
+    };
+
+    // =======================================================
+    // 10. NUEVAS FUNCIONES: MÓDULO TESORERÍA DIARIA 🚀
+    // =======================================================
+
+    /**
+     * 10.1 ALTERNAR PROGRAMACIÓN (ACTUALIZADO: Bloqueo de facturas autorizadas)
+     * Mueve la factura entre 'Cuentas por Pagar' y 'Tesorería Diaria'.
+     */
+    window.alternarProgramacionHoy = async function(id, estado) {
+        try {
+            const token = localStorage.getItem('token');
+            
+            // 🛡️ PASO DE SEGURIDAD: Si se intenta regresar (estado false), verificar aprobación
+            if (estado === false && typeof tesoreriaData !== 'undefined') {
+                const factura = tesoreriaData.find(f => f.id === id);
+                if (factura && factura.aprobado_tesoreria === true) {
+                    return showToast("⚠️ No se puede regresar una factura que ya ha sido AUTORIZADA. Desapruebe el pago primero.", "warning");
+                }
+            }
+
+            // 1. Petición al backend para actualizar la columna programado_hoy
+            const res = await fetch(`/api/facturas/${id}/programar`, {
+                method: 'PUT',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-auth-token': token 
+                },
+                body: JSON.stringify({ estado: estado })
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                showToast(data.msg, "success");
+                
+                // 2. 🔄 ACTUALIZACIÓN DINÁMICA DE VISTAS (Paralela para mejor rendimiento)
+                await cargarGastos(); 
+                
+                const actualizaciones = [];
+                if (window.cargarCuentasPorPagar) actualizaciones.push(cargarCuentasPorPagar());
+                if (window.cargarKpisPagos) actualizaciones.push(cargarKpisPagos());
+                
+                // Si el estado es true, pre-cargamos la tesorería antes del salto
+                if (estado === true && window.cargarTesoriaDiaria) {
+                    actualizaciones.push(cargarTesoriaDiaria());
+                }
+
+                await Promise.all(actualizaciones);
+                
+                // 3. 🚀 SALTO AUTOMÁTICO Y FEEDBACK VISUAL
+                if (estado === true) {
+                    // Pequeño delay para que el usuario note que la fila desapareció de la tabla actual
+                    setTimeout(() => {
+                        cambiarTab('tab-tesoreria');
+                    }, 250);
+                } else {
+                    // Si estamos regresando la factura de Tesorería a Cuentas, 
+                    // nos aseguramos de refrescar la vista actual de tesorería
+                    if (window.cargarTesoriaDiaria) await cargarTesoriaDiaria();
+                }
+
+            } else {
+                showToast(data.msg || "Error al procesar la programación", "error");
+            }
+        } catch (error) {
+            console.error("❌ Error en alternarProgramacionHoy:", error);
+            showToast("Error de conexión con el servidor", "error");
+        }
+    };
+
+    /**
+     * 10.2 CARGAR DATOS DE TESORERÍA (Actualizado: Persistencia en tesoreriaData)
+     * Ejecuta las cargas y sincroniza la variable global para evitar errores de referencia.
+     */
+    window.cargarTesoriaDiaria = async function() {
+        try {
+            const token = localStorage.getItem('token');
+            
+            // 🚀 Asegurar que tesoreriaData esté disponible globalmente para evitar ReferenceError
+            if (typeof window.tesoreriaData === 'undefined') {
+                window.tesoreriaData = [];
+            }
+            
+            // Ejecutamos ambas cargas en paralelo para mayor velocidad
+            const [resTabla, resResumen] = await Promise.all([
+                fetch('/api/facturas/programacion/hoy', { headers: { 'x-auth-token': token } }),
+                fetch('/api/facturas/programacion/resumen', { headers: { 'x-auth-token': token } })
+            ]);
+
+            if (resTabla.ok && resResumen.ok) {
+                const facturasProgramadas = await resTabla.json();
+                const resumenBloques = await resResumen.json();
+
+                // 🚀 ASIGNACIÓN CRÍTICA: Guardar los datos en la variable global
+                // Esto permite que el buscador y los aprobadores individuales funcionen correctamente.
+                window.tesoreriaData = facturasProgramadas;
+
+                // Renderizar componentes visuales
+                renderizarTablaTesoreria(facturasProgramadas);
+                cargarBloquesResumen(resumenBloques);
+                
+                console.log("✅ Tesorería sincronizada con tesoreriaData");
+            } else {
+                console.error("Error en respuesta de servidor:", resTabla.status, resResumen.status);
+                showToast("Error al obtener datos del servidor.", "error");
+            }
+        } catch (error) {
+            console.error("❌ Error cargando Tesorería Diaria:", error);
+            showToast("Error al obtener datos de tesorería.", "error");
+        }
+    };
+
+
+    /**
+     * 10.3 RENDERIZAR TABLA DE TESORERÍA (PERSISTENTE Y SEGURA)
+     * Muestra el estado de aprobación, bloquea montos autorizados y deshabilita retrocesos.
+     */
+    function renderizarTablaTesoreria(datos) {
+        const tbody = document.getElementById('tabla-tesoreria-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        if (!datos || datos.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:40px; color:#64748b;">
+                <i class='bx bx-info-circle' style="font-size: 2rem; display: block; margin-bottom: 10px; color: #cbd5e1;"></i>
+                No hay pagos programados para hoy.</td></tr>`;
+            return;
+        }
+
+        // Asegura que los botones de Aprobar Todo / Desaprobar Todo estén visibles
+        renderizarControlesMasivosTesoreria();
+
+        datos.forEach(f => {
+            const tr = document.createElement('tr');
+            tr.id = `fila-tesoreria-${f.id}`; 
+            
+            const clasif = f.clasificacion || 'Operativo';
+            let colorClasif = '#3b82f6';
+            if (clasif.includes('Implement')) colorClasif = '#8b5cf6';
+            if (clasif === 'Financiero') colorClasif = '#f59e0b';
+
+            // 🛡️ ESTADO DE APROBACIÓN
+            const isAprobado = f.aprobado_tesoreria === true;
+            
+            // Priorizamos el monto_aprobado (local o de DB) sobre el saldo original
+            const montoAMostrar = f.monto_aprobado !== undefined ? f.monto_aprobado : f.saldo_pendiente;
+            const montoAutorizado = parseFloat(montoAMostrar).toFixed(2);
+            
+            const badgeAprobacion = isAprobado 
+                ? `<span class="badge" style="background:#dcfce7; color:#16a34a; border:1px solid #bbf7d0; font-weight:700;">AUTORIZADO</span>`
+                : `<span class="badge" style="background:#f1f5f9; color:#64748b; border:1px solid #e2e8f0;">PENDIENTE</span>`;
+
+            // 💰 INPUT DE MONTO (BLOQUEO DINÁMICO)
+            const inputMontoAprobado = `
+                <div style="display:flex; align-items:center; gap:5px; justify-content:flex-end;">
+                    <span style="font-size:0.8rem; font-weight:700;">${f.moneda === 'USD' ? '$' : 'S/'}</span>
+                    <input type="number" 
+                        id="input-aprob-amount-${f.id}"
+                        value="${montoAutorizado}" 
+                        step="0.01" 
+                        ${isAprobado ? 'disabled' : ''} 
+                        style="width:90px; padding:4px; border:1px solid #cbd5e1; border-radius:4px; font-weight:bold; text-align:right; 
+                            color:${isAprobado ? '#16a34a' : '#ef4444'}; 
+                            background:${isAprobado ? '#f8fafc' : '#ffffff'}; 
+                            cursor:${isAprobado ? 'not-allowed' : 'auto'};"
+                        oninput="actualizarMontoLocal(${f.id}, this.value)">
+                </div>
+            `;
+
+            const datosBancos = `<div style="font-size:0.8rem; line-height:1.2;">
+                <strong style="color:#1e293b;">${f.banco || 'S/B'}</strong><br>
+                <span style="color:#64748b;">CCI: ${f.cci || f.numero_cuenta || '-'}</span>
+            </div>`;
+
+            // 🛡️ BOTÓN REGRESAR (BLOQUEO SI ESTÁ AUTORIZADO)
+            const btnRegresar = `
+                <button class="btn-icon" 
+                    style="color:#64748b; background:${isAprobado ? '#f8fafc' : '#f1f5f9'}; cursor:${isAprobado ? 'not-allowed' : 'pointer'}; opacity:${isAprobado ? '0.5' : '1'};" 
+                    ${isAprobado ? 'disabled' : `onclick="alternarProgramacionHoy(${f.id}, false)"`} 
+                    title="${isAprobado ? 'Acción Bloqueada: El pago ya fue autorizado' : 'Regresar a Cuentas por Pagar'}">
+                    <i class='bx bx-undo'></i>
+                </button>`;
+
+            tr.innerHTML = `
+                <td><span class="badge" style="background:${colorClasif}15; color:${colorClasif}; border:1px solid ${colorClasif}30;">${clasif.toUpperCase()}</span></td>
+                <td style="font-weight:600; color:#1e293b;">${f.proveedor}</td>
+                <td><small>${f.tipo_documento}</small><br><strong>${f.numero_documento}</strong></td>
+                <td>${datosBancos}</td>
+                <td style="text-align:center;">${badgeAprobacion}</td>
+                <td style="color:#64748b; font-size:0.85rem; text-align:right;">
+                    Original: ${f.moneda === 'USD' ? '$' : 'S/'} ${parseFloat(f.saldo_pendiente).toFixed(2)}
+                </td>
+                <td>${inputMontoAprobado}</td>
+                <td>
+                    <div style="display:flex; gap:6px; justify-content:center;">
+                        <button class="btn-icon" 
+                            style="color:${isAprobado ? '#ef4444' : '#10b981'}; background:${isAprobado ? '#fee2e2' : '#ecfdf5'}; border: 1px solid ${isAprobado ? '#fecaca' : '#a7f3d0'};" 
+                            onclick="toggleAprobacionIndividual(${f.id}, ${!isAprobado})" 
+                            title="${isAprobado ? 'Quitar Aprobación' : 'Aprobar Pago'}">
+                            <i class='bx ${isAprobado ? 'bx-x-circle' : 'bx-check-shield'}'></i>
+                        </button>
+
+                        ${btnRegresar}
+                        
+                        <button class="btn-icon" 
+                            style="color:#ffffff; background:${isAprobado ? '#10b981' : '#cbd5e1'}; cursor:${isAprobado ? 'pointer' : 'not-allowed'};" 
+                            ${isAprobado ? `onclick="abrirModalPagoAprobado(${f.id})"` : 'disabled'}
+                            title="${isAprobado ? 'Registrar Salida de Dinero' : 'Requiere autorización de Gerencia'}">
+                            <i class='bx bx-dollar-circle'></i>
+                        </button>
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    /**
+     * 2.3 ABRIR MODAL DE PAGO (ACTUALIZADO: Sincronización exacta con el DOM)
+     * Carga el monto autorizado por Gerencia y llena los campos informativos.
+     */
+    window.abrirModalPagoAprobado = function(id) {
+        // 1. Buscar la factura en la memoria global
+        const dataLocal = window.tesoreriaData || [];
+        const factura = dataLocal.find(f => f.id === parseInt(id));
+
+        if (!factura) {
+            return showToast("No se encontró la información de la factura.", "error");
+        }
+
+        // 2. Verificar aprobación (Seguridad para el flujo de caja)
+        // Se admite true o 1 para compatibilidad con la base de datos
+        if (factura.aprobado_tesoreria !== true && factura.aprobado_tesoreria != 1) {
+            return showToast("Esta factura aún no ha sido autorizada para pago.", "warning");
+        }
+
+        // 3. Referenciar elementos según los IDs reales de tu HTML
+        const modal = document.getElementById('modal-pago'); 
+        const inputMonto = document.getElementById('pago-monto');
+        const inputIdRef = document.getElementById('pago-ref-id'); // Campo oculto en tu HTML
+        const inputTipoOrigen = document.getElementById('pago-tipo-origen');
+        
+        // Elementos informativos del modal
+        const txtProveedor = document.getElementById('pago-proveedor-txt');
+        const txtDocumento = document.getElementById('pago-doc-txt');
+        const txtSaldo = document.getElementById('pago-saldo-txt');
+
+        // Validación de existencia en el DOM
+        if (!modal || !inputMonto || !inputIdRef) {
+            console.error("❌ Error: No se encontraron los elementos críticos del modal-pago en el DOM.");
+            return;
+        }
+
+        // 🚀 PASO CRÍTICO: Cargar el monto autorizado
+        // Usamos el monto_aprobado capturado en la tabla de tesorería
+        const montoFinal = factura.monto_aprobado !== undefined ? factura.monto_aprobado : factura.saldo_pendiente;
+        
+        // 4. Llenado de datos en el modal
+        inputIdRef.value = id;
+        if (inputTipoOrigen) inputTipoOrigen.value = 'GASTO';
+        
+        inputMonto.value = parseFloat(montoFinal).toFixed(2);
+        
+        // Actualizar textos visuales para que el cajero sepa qué está pagando
+        if (txtProveedor) txtProveedor.innerText = factura.proveedor;
+        if (txtDocumento) txtDocumento.innerText = `${factura.tipo_documento} ${factura.numero_documento}`;
+        if (txtSaldo) {
+            const simbolo = factura.moneda === 'USD' ? '$' : 'S/';
+            txtSaldo.innerText = `${simbolo} ${parseFloat(factura.saldo_pendiente).toFixed(2)}`;
+        }
+
+        // 5. Mostrar el modal activando la clase de visibilidad
+        modal.classList.add('active');
+        
+        console.log(`✅ Modal de pago abierto para factura ${id} con monto autorizado: ${montoFinal}`);
+    };
+
+    /**
+     * Aprobación Individual: Guarda el monto específico y protege los demás cambios locales
+     */
+    window.toggleAprobacionIndividual = async function(id, nuevoEstado) {
+        // 1. Obtener el monto actual del input de ESTA factura
+        const inputActual = document.getElementById(`input-aprob-amount-${id}`);
+        const monto = inputActual ? parseFloat(inputActual.value) : 0;
+
+        if (nuevoEstado && (isNaN(monto) || monto <= 0)) {
+            return showToast("Ingrese un monto válido para aprobar", "warning");
+        }
+
+        try {
+            // 🚀 PASO CLAVE: Sincronizar todos los montos de la tabla al array local 
+            // antes de la petición para que no se pierdan al recargar
+            tesoreriaData.forEach(f => {
+                const el = document.getElementById(`input-aprob-amount-${f.id}`);
+                if (el && !f.aprobado_tesoreria) {
+                    f.monto_aprobado = parseFloat(el.value);
+                }
+            });
+
+            const res = await fetch('/api/facturas/aprobar-individual', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'x-auth-token': localStorage.getItem('token') 
+                },
+                body: JSON.stringify({ 
+                    id, 
+                    aprobado: nuevoEstado, 
+                    monto_aprobado: monto 
+                })
+            });
+
+            if (res.ok) {
+                // Actualizar el estado en el array local para reflejar el cambio inmediato
+                const index = tesoreriaData.findIndex(f => f.id === id);
+                if (index !== -1) {
+                    tesoreriaData[index].aprobado_tesoreria = nuevoEstado;
+                    tesoreriaData[index].monto_aprobado = monto;
+                }
+
+                showToast(nuevoEstado ? "Pago autorizado con éxito" : "Aprobación removida", "success");
+                
+                // Recargar datos del servidor para asegurar sincronización total
+                await cargarTesoriaDiaria(); 
+            } else {
+                const error = await res.json();
+                showToast(error.msg || "Error al procesar aprobación", "error");
+            }
+        } catch (e) {
+            console.error("Error en toggleAprobacionIndividual:", e);
+            showToast("Error al conectar con el servidor", "error");
+        }
+    };
+
+    /**
+     * Aprobación Masiva: Captura montos manuales, sincroniza memoria global y procesa
+     * la acción mediante un modal de confirmación en lugar de un alert.
+     * @param {boolean} aprobado - true para aprobar, false para desaprobar
+     */
+    window.toggleAprobacionMasiva = async function(aprobado) {
+        // 1. Configuración del mensaje y estilo del modal
+        const configModal = {
+            titulo: aprobado ? "Autorización Masiva" : "Desautorización Masiva",
+            mensaje: aprobado 
+                ? "¿Desea autorizar todos los pagos con los montos indicados en la tabla?" 
+                : "¿Desea quitar la autorización a todos los pagos programados?",
+            tipo: aprobado ? "primary" : "danger",
+            accion: async () => {
+                try {
+                    // 2. Acceso a la variable global de datos
+                    const dataLocal = window.tesoreriaData || (typeof tesoreriaData !== 'undefined' ? tesoreriaData : []);
+
+                    if (dataLocal.length === 0) {
+                        return showToast("No hay facturas para procesar", "warning");
+                    }
+
+                    // 3. 🚀 CAPTURA Y ACTUALIZACIÓN DE MEMORIA GLOBAL
+                    const facturasConMontos = dataLocal.map(f => {
+                        const inputMonto = document.getElementById(`input-aprob-amount-${f.id}`);
+                        let montoFinal;
+
+                        if (inputMonto) {
+                            montoFinal = parseFloat(inputMonto.value);
+                        } else {
+                            montoFinal = f.monto_aprobado !== undefined ? f.monto_aprobado : f.saldo_pendiente;
+                        }
+
+                        const montoValidado = isNaN(montoFinal) ? 0 : montoFinal;
+
+                        // Sincronización inmediata en memoria para persistencia
+                        f.monto_aprobado = montoValidado;
+                        f.aprobado_tesoreria = aprobado;
+
+                        return {
+                            id: f.id,
+                            monto_aprobado: montoValidado
+                        };
+                    });
+
+                    // Validar montos si se va a aprobar
+                    if (aprobado && facturasConMontos.some(f => f.monto_aprobado <= 0)) {
+                        return showToast("Hay facturas con monto 0 o inválido. Verifique antes de aprobar.", "error");
+                    }
+
+                    // 4. Petición al Servidor
+                    const res = await fetch('/api/facturas/aprobar-masiva', {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json', 
+                            'x-auth-token': localStorage.getItem('token') 
+                        },
+                        body: JSON.stringify({ 
+                            aprobado, 
+                            facturas: facturasConMontos 
+                        })
+                    });
+
+                    if (res.ok) {
+                        const resultData = await res.json();
+                        showToast(resultData.msg, "success");
+
+                        // 5. 🔄 RECARGA Y SINCRONIZACIÓN DE VISTAS
+                        await cargarTesoriaDiaria(); 
+                        
+                        if (typeof renderizarTablaTesoreria === 'function') {
+                            renderizarTablaTesoreria(window.tesoreriaData);
+                        }
+                    } else {
+                        const errorData = await res.json();
+                        showToast(errorData.msg || "Error en el proceso masivo", "error");
+                    }
+                } catch (e) {
+                    console.error("❌ Error en toggleAprobacionMasiva:", e);
+                    showToast("Error de conexión con el servidor", "error");
+                }
+            }
+        };
+
+        // 6. Disparar el modal de confirmación personalizado
+        if (typeof window.solicitarConfirmacionFlujo === 'function') {
+            window.solicitarConfirmacionFlujo(configModal);
+        } else {
+            // Fallback de seguridad por si el modal no está cargado
+            if (confirm(configModal.mensaje)) configModal.accion();
+        }
+    };
+
+    /**
+     * Renderiza los botones de Aprobar Todo y Enviar Correo en el Toolbar
+     */
+    function renderizarControlesMasivosTesoreria() {
+        const container = document.querySelector('#tab-tesoreria .filter-actions');
+        if (!container) return;
+
+        // Evitar duplicados
+        if (document.getElementById('btn-email-tesoreria')) return;
+
+        const controlesExtra = `
+            <button class="btn-primary" style="background:#8b5cf6; border:none;" onclick="toggleAprobacionMasiva(true)" title="Aprobar todo el listado">
+                <i class='bx bx-done-all'></i> Aprobar Todo
+            </button>
+            <button class="btn-cancel" style="background:#f1f5f9; color:#475569;" onclick="toggleAprobacionMasiva(false)" title="Desaprobar todo">
+                Desaprobar Todo
+            </button>
+            <button id="btn-email-tesoreria" class="btn-icon" onclick="enviarPlanPagosEmail()" title="Enviar Plan de Pagos por Correo">
+                <i class='bx bx-envelope' style="color: #4f46e5; font-size: 1.8rem;"></i>
+            </button>
+        `;
+        container.insertAdjacentHTML('afterbegin', controlesExtra);
+    }
+
+    /**
+     * Actualiza el monto en el array local cuando gerencia edita el input.
+     * Se sincroniza con window.tesoreriaData para evitar errores de ReferenceError.
+     */
+    window.actualizarMontoLocal = function(id, valor) {
+        // 🛡️ Verificamos que la variable global exista antes de buscar
+        const data = window.tesoreriaData || (typeof tesoreriaData !== 'undefined' ? tesoreriaData : null);
+        
+        if (!data) {
+            console.warn("⚠️ Advertencia: tesoreriaData aún no ha sido inicializada.");
+            return;
+        }
+
+        // Buscamos la factura específica por ID
+        const factura = data.find(f => f.id === id);
+        
+        if (factura) {
+            // Convertimos el valor del input a número, manejando casos vacíos como 0
+            factura.monto_aprobado = parseFloat(valor) || 0;
+            
+            // Log de seguimiento para depuración en consola
+            console.log(`✅ Monto local actualizado: ID ${id} -> ${factura.monto_aprobado}`);
+        } else {
+            console.error(`❌ No se encontró la factura con ID ${id} en tesoreriaData.`);
+        }
+    };
+
+    // ==========================================
+    // SECCIÓN: UTILIDADES DE CONTROL DE FLUJO
+    // ==========================================
+
+    /**
+     * Abre el modal de confirmación dinámico en lugar de usar confirm() nativo.
+     * Se sincroniza con el HTML 'modal-confirmar-flujo'.
+     */
+    window.solicitarConfirmacionFlujo = function(config) {
+        const modal = document.getElementById('modal-confirmar-flujo');
+        const title = document.getElementById('flujo-modal-title');
+        const text = document.getElementById('flujo-modal-text');
+        const btn = document.getElementById('flujo-modal-btn');
+        const iconContainer = document.getElementById('flujo-modal-icon');
+
+        if (!modal) {
+            console.warn("⚠️ Error: No se encontró el modal-confirmar-flujo en el HTML.");
+            return;
+        }
+
+        // 1. Configurar contenido dinámico
+        title.innerText = config.titulo || "Confirmar Acción";
+        text.innerText = config.mensaje || "¿Estás seguro de continuar?";
+        
+        // 2. Configurar icono y color de botón según el tipo (danger o primary)
+        if (config.tipo === 'danger') {
+            iconContainer.innerHTML = "<i class='bx bx-error-circle' style='color: #ef4444; font-size: 3.5rem;'></i>";
+            btn.style.backgroundColor = "#ef4444";
+            btn.style.borderColor = "#ef4444";
+        } else {
+            iconContainer.innerHTML = "<i class='bx bx-help-circle' style='color: #3b82f6; font-size: 3.5rem;'></i>";
+            btn.style.backgroundColor = "#3b82f6";
+            btn.style.borderColor = "#3b82f6";
+        }
+
+        // 3. Asignar la acción de ejecución al botón
+        btn.onclick = async () => {
+            btn.disabled = true;
+            btn.innerText = "Procesando...";
+            
+            try {
+                await config.accion(); // Ejecuta la función (aprobar, enviar correo, etc.)
+            } catch (error) {
+                console.error("Error en la acción del modal:", error);
+            } finally {
+                cerrarModalFlujo();
+                btn.disabled = false;
+                btn.innerText = "Sí, Confirmar";
+            }
+        };
+
+        // 4. Activar el modal visualmente
+        modal.classList.add('active');
+    };
+
+    /**
+     * Cierra el modal de confirmación de flujo
+     */
+    window.cerrarModalFlujo = () => {
+        const modal = document.getElementById('modal-confirmar-flujo');
+        if (modal) modal.classList.remove('active');
+    };
+
+    /**
+     * Envía el Plan de Pagos vía Email con los montos finales aprobados,
+     * utilizando el modal de confirmación personalizado del sistema.
+     */
+    window.enviarPlanPagosEmail = async function() {
+        // 1. Acceso robusto a la data global para evitar ReferenceError
+        const dataActual = window.tesoreriaData || (typeof tesoreriaData !== 'undefined' ? tesoreriaData : []);
+        
+        // 2. Filtro de facturas autorizadas
+        const aprobados = dataActual.filter(f => f.aprobado_tesoreria === true || f.aprobado_tesoreria == 1);
+        
+        if (aprobados.length === 0) {
+            return showToast("No hay facturas aprobadas para enviar el reporte. Verifique que aparezcan como 'AUTORIZADO'.", "warning");
+        }
+
+        // 3. Configuración del Modal de Confirmación en lugar de alert/confirm
+        const configModal = {
+            titulo: "Enviar Reporte de Pagos",
+            mensaje: `¿Desea enviar el reporte de los ${aprobados.length} pagos autorizados a Gerencia por correo electrónico?`,
+            tipo: "primary",
+            accion: async () => {
+                try {
+                    // 4. Mapeo de datos con montos capturados de los inputs
+                    const datosParaEnvio = aprobados.map(f => {
+                        const inputMonto = document.getElementById(`input-aprob-amount-${f.id}`);
+                        
+                        // Prioridad: 1. Valor del input visual, 2. Valor guardado en el objeto
+                        const montoFinal = inputMonto ? parseFloat(inputMonto.value) : (f.monto_aprobado || f.saldo_pendiente);
+                        
+                        return {
+                            proveedor: f.proveedor,
+                            numero_documento: f.numero_documento,
+                            moneda: f.moneda,
+                            monto_aprobado: montoFinal,
+                            banco: f.banco || 'S/B',
+                            cci: f.cci || f.numero_cuenta || '-'
+                        };
+                    });
+
+                    // 5. Petición de envío al servidor
+                    const res = await fetch('/api/facturas/enviar-plan-pagos', {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json', 
+                            'x-auth-token': localStorage.getItem('token') 
+                        },
+                        body: JSON.stringify({ facturas: datosParaEnvio })
+                    });
+
+                    const data = await res.json();
+
+                    if (res.ok) {
+                        showToast("✅ Plan de pagos enviado correctamente", "success");
+                    } else {
+                        showToast(data.msg || "Error al enviar el reporte por correo", "error");
+                    }
+                } catch (e) {
+                    console.error("❌ Error envío email:", e);
+                    showToast("Error de conexión al servidor", "error");
+                }
+            }
+        };
+
+        // 6. Ejecutar el modal personalizado
+        if (typeof window.solicitarConfirmacionFlujo === 'function') {
+            window.solicitarConfirmacionFlujo(configModal);
+        } else {
+            // Fallback preventivo
+            if (confirm(configModal.mensaje)) configModal.accion();
+        }
+    };
+
+    /**
+     * 10.4 CARGAR BLOQUES DE RESUMEN (KPIs Superiores)
+     */
+    function cargarBloquesResumen(data) {
+        const fmt = (m, mon) => (mon === 'pen' ? 'S/ ' : '$ ') + parseFloat(m || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        // Bloque Operativo
+        document.getElementById('block-op-pen').innerText = fmt(data.Operativo.pen, 'pen');
+        document.getElementById('block-op-usd').innerText = fmt(data.Operativo.usd, 'usd');
+
+        // Bloque Implementación
+        document.getElementById('block-imp-pen').innerText = fmt(data.Implementacion.pen, 'pen');
+        document.getElementById('block-imp-usd').innerText = fmt(data.Implementacion.usd, 'usd');
+
+        // Bloque Financiero
+        document.getElementById('block-fin-pen').innerText = fmt(data.Financiero.pen, 'pen');
+        document.getElementById('block-fin-usd').innerText = fmt(data.Financiero.usd, 'usd');
+    }
+
+    // Variables para controlar el estado del orden (fuera de la función)
+    let ordenColumnaGasto = '';
+    let ordenAscendenteGasto = true;
+
+   /**
+     * 10.6 ORDENAR GASTOS (Corregido para Días de Mora)
+     */
+    window.ordenarGastos = function(columna) {
+        console.log("Ordenando por:", columna);
+
+        if (ordenColumnaGasto === columna) {
+            ordenAscendenteGasto = !ordenAscendenteGasto;
+        } else {
+            ordenColumnaGasto = columna;
+            ordenAscendenteGasto = true;
+        }
+
+        facturasData.sort((a, b) => {
+            let valA = a[columna];
+            let valB = b[columna];
+
+            // --- CASO ESPECIAL: DÍAS DE MORA ---
+            if (columna === 'dias_mora' || columna === 'dias_vencimiento') {
+                // Convertimos a número puro. Si es null/undefined, usamos 0.
+                // Si viene como string "10 días", parseInt extraerá el 10.
+                let numA = parseInt(valA) || 0;
+                let numB = parseInt(valB) || 0;
+                
+                return ordenAscendenteGasto ? numA - numB : numB - numA;
+            }
+
+            // --- CASO ESPECIAL: MONTOS ---
+            if (columna === 'monto_total') {
+                let montoA = parseFloat(valA) || 0;
+                let montoB = parseFloat(valB) || 0;
+                return ordenAscendenteGasto ? montoA - montoB : montoB - montoA;
+            }
+
+            // --- CASO GENERAL: FECHAS O TEXTO ---
+            valA = (valA || '').toString().toLowerCase();
+            valB = (valB || '').toString().toLowerCase();
+
+            if (ordenAscendenteGasto) {
+                return valA.localeCompare(valB);
+            } else {
+                return valB.localeCompare(valA);
+            }
+        });
+
+        // Reiniciar paginación para ver los resultados desde el principio
+        if (typeof paginaGastos !== 'undefined') paginaGastos = 1;
+        
+        // IMPORTANTE: Volver a dibujar la tabla
+        renderizarTablaGastos();
+    };
+
+    /**
+     * 10.5 FILTRAR POR COLUMNA (Para Registro de Compras y Cuentas por Pagar)
+     * Filtra de manera instantánea sobre las filas renderizadas en el DOM.
+     */
+    window.filtrarColumna = function(input, colIndex, tbodyId) {
+        // 1. Convertimos el texto de búsqueda a minúsculas y quitamos espacios extra
+        const filter = input.value.toLowerCase().trim();
+        const tbody = document.getElementById(tbodyId);
+        
+        if (!tbody) return; // Seguridad por si el ID no existe
+        
+        const rows = tbody.getElementsByTagName('tr');
+
+        // 2. Recorremos todas las filas del body indicado
+        for (let i = 0; i < rows.length; i++) {
+            // Ignorar filas que digan "No se encontraron registros"
+            if (rows[i].cells.length < 2) continue; 
+
+            const td = rows[i].getElementsByTagName('td')[colIndex];
+            
+            if (td) {
+                // Capturamos el texto de la celda (Priorizando el nombre del proveedor o número)
+                const textValue = td.textContent || td.innerText;
+                
+                // 3. Decidimos si mostrar u ocultar la fila
+                if (textValue.toLowerCase().indexOf(filter) > -1) {
+                    rows[i].style.display = ""; // Se muestra
+                } else {
+                    rows[i].style.display = "none"; // Se oculta
+                }
+            }
+        }
+    };
+
+    /**
+     * 10.6 EXPORTAR EXCEL ESPECÍFICO DE TESORERÍA
+     */
+    window.exportarExcelTesoreria = function() {
+        // Reutilizamos la lógica de exportarExcel pero filtrando solo lo que está en la tabla de tesorería
+        const tabla = document.getElementById('tabla-tesoreria-body');
+        if (tabla.rows.length === 0 || tabla.innerText.includes("No hay pagos")) {
+            return showToast("No hay datos para exportar en el plan de hoy", "warning");
+        }
+        
+        // Aquí puedes llamar a tu función exportarExcel() pasándole un flag o filtrar facturasData 
+        // donde programado_hoy === true. Por simplicidad, ejecutaremos la exportación general.
+        exportarExcel(); 
     };
 
     // INICIAR

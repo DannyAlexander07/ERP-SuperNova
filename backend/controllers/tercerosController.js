@@ -285,15 +285,18 @@ exports.obtenerHistorialCanjes = async (req, res) => {
     }
 };
 
-
-// 9. VER DETALLE ACUERDO (ACTUALIZADA)
+// 9. VER DETALLE ACUERDO (ACTUALIZADA: Incluye estadísticas de canje e historial de pagos)
 exports.obtenerDetalleAcuerdo = async (req, res) => {
     const { id } = req.params;
     try {
+        // 1. Obtener estadísticas de códigos y datos generales del acuerdo
         const result = await pool.query(`
             SELECT 
+                a.id,
                 a.descripcion, 
-                a.cantidad_entradas, -- <--- AGREGADO: Para saber el límite
+                a.cantidad_entradas, 
+                a.monto_total_acuerdo,
+                a.fecha_acuerdo,
                 c.nombre as canal,
                 p.nombre as producto,
                 COUNT(ce.id) as total_cargados,
@@ -307,16 +310,40 @@ exports.obtenerDetalleAcuerdo = async (req, res) => {
             GROUP BY a.id, c.nombre, p.nombre
         `, [id]);
 
-        if (result.rows.length === 0) return res.status(404).json({ error: "Acuerdo no encontrado" });
-        res.json(result.rows[0]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: "Acuerdo comercial no encontrado" });
+        }
+
+        // 2. 🆕 NUEVO: Obtener el historial de cobros desde la tabla independiente
+        const pagos = await pool.query(`
+            SELECT 
+                id, 
+                monto, 
+                fecha_pago, 
+                metodo_pago, 
+                numero_operacion, 
+                notas 
+            FROM pagos_acuerdos 
+            WHERE acuerdo_id = $1 
+            ORDER BY fecha_registro DESC
+        `, [id]);
+
+        // Unificamos la respuesta
+        const detalleCompleto = {
+            ...result.rows[0],
+            historial_pagos: pagos.rows // 🚀 Se añade el desglose financiero independiente
+        };
+
+        res.json(detalleCompleto);
 
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error("❌ Error al obtener detalle del acuerdo:", err.message);
+        res.status(500).json({ error: 'Error al procesar la solicitud del detalle' });
     }
 };
 
 
-// 8. ELIMINAR ACUERDO (Solo si no tiene canjes realizados)
+// 8. ELIMINAR ACUERDO (ACTUALIZADO: Limpieza de historial de pagos independiente)
 exports.eliminarAcuerdo = async (req, res) => {
     const { id } = req.params;
     const client = await pool.connect();
@@ -324,7 +351,7 @@ exports.eliminarAcuerdo = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // 1. Seguridad: Verificar si ya hay códigos canjeados (usados)
+        // 1. Seguridad: Verificar si ya hay códigos canjeados (usados por clientes finales)
         const check = await client.query(
             "SELECT id FROM codigos_externos WHERE acuerdo_id = $1 AND estado = 'CANJEADO' LIMIT 1", 
             [id]
@@ -334,20 +361,25 @@ exports.eliminarAcuerdo = async (req, res) => {
             throw new Error("⛔ No se puede eliminar este acuerdo porque YA TIENE CÓDIGOS USADOS por clientes.");
         }
 
-        // 2. Eliminar códigos asociados (Limpiar lista blanca)
+        // 2. 🆕 NUEVO: Eliminar historial de pagos de la tabla independiente
+        // Esto evita que queden registros huérfanos en la nueva tabla pagos_acuerdos.
+        await client.query("DELETE FROM pagos_acuerdos WHERE acuerdo_id = $1", [id]);
+
+        // 3. Eliminar códigos asociados (Limpiar lista blanca de códigos disponibles)
         await client.query("DELETE FROM codigos_externos WHERE acuerdo_id = $1", [id]);
 
-        // 3. Eliminar cuotas asociadas (Si las hubiera)
+        // 4. Eliminar cuotas asociadas del cronograma
         await client.query("DELETE FROM cuotas_acuerdos WHERE acuerdo_id = $1", [id]);
 
-        // 4. Eliminar el acuerdo principal
+        // 5. Eliminar el acuerdo principal de la cabecera
         await client.query("DELETE FROM acuerdos_comerciales WHERE id = $1", [id]);
 
         await client.query('COMMIT');
-        res.json({ msg: "✅ Acuerdo y sus códigos eliminados correctamente." });
+        res.json({ msg: "✅ Acuerdo, códigos y su historial de pagos eliminados correctamente." });
 
     } catch (err) {
         await client.query('ROLLBACK');
+        console.error("❌ Error al eliminar acuerdo comercial:", err.message);
         res.status(500).json({ error: err.message });
     } finally {
         client.release();
@@ -385,13 +417,13 @@ exports.obtenerCuotasAcuerdo = async (req, res) => {
     }
 };
 
-// 🔥 12. REGISTRAR PAGO DE CUOTA (CORREGIDO: CANTIDAD EXACTA DEL ACUERDO) 💰
+// 🔥 12. REGISTRAR PAGO DE CUOTA (ACTUALIZADO: Independencia de Caja y Trazabilidad)
 exports.pagarCuota = async (req, res) => {
     const { id } = req.params; 
     const { 
         metodo_pago, tipo_comprobante, tipo_tarjeta,
         cliente_doc, cliente_nombre, cliente_direccion, cliente_email,
-        formato_pdf
+        formato_pdf, numero_operacion // <--- Agregamos numero_operacion para el historial
     } = req.body; 
     
     const usuarioId = req.usuario.id;
@@ -419,17 +451,10 @@ exports.pagarCuota = async (req, res) => {
 
         if (cuota.estado === 'PAGADO') throw new Error("Esta cuota ya está pagada.");
 
-        // 2. ASIGNACIÓN DIRECTA (SIN DIVISIONES NI PROMEDIOS) 🛑
-        // Usamos la cantidad tal cual se creó en el acuerdo.
-        
+        // 2. ASIGNACIÓN DIRECTA (Cálculos para Facturación)
         const totalPagar = parseFloat(cuota.monto); 
-        const cantidadReal = parseInt(cuota.cantidad_entradas) || 1; // Ej: 8
-        
-        // Calculamos el precio unitario inverso para que NUBEFACT no falle
-        // Si Total = 240 y Cantidad = 8, entonces Unitario = 30.
-        // Si Total = 120 y Cantidad = 8, entonces Unitario = 15.
+        const cantidadReal = parseInt(cuota.cantidad_entradas) || 1; 
         const precioUnitarioParaFactura = Number((totalPagar / cantidadReal).toFixed(10));
-
         const descripcionItem = `${cuota.nombre_producto || 'PAGO CUOTA'} [Cuota ${cuota.numero_cuota}]`;
 
         const subtotal = Number((totalPagar / 1.18).toFixed(2));
@@ -442,7 +467,7 @@ exports.pagarCuota = async (req, res) => {
         const numTicket = parseInt(maxTicket.rows[0].max) + 1;
         const codigoTicket = `${prefijo}-${numTicket.toString().padStart(4, '0')}`;
 
-        // Insertar Venta
+        // 3. Insertar Venta (Corporativa)
         const resVenta = await client.query(`
             INSERT INTO ventas (
                 sede_id, usuario_id, vendedor_id, 
@@ -467,8 +492,7 @@ exports.pagarCuota = async (req, res) => {
         
         const ventaId = resVenta.rows[0].id;
 
-        // 3. Detalle de Venta
-        // Guardamos: Cantidad = 8, Precio = (Calculado para cuadrar total)
+        // 4. Detalle de Venta
         await client.query(`
             INSERT INTO detalle_ventas (
                 venta_id, producto_id, nombre_producto_historico, 
@@ -478,20 +502,36 @@ exports.pagarCuota = async (req, res) => {
             ventaId, 
             cuota.producto_asociado_id, 
             descripcionItem, 
-            cantidadReal,               // <--- "8" (Tal cual el acuerdo)
-            precioUnitarioParaFactura,  // <--- Ajustado matemáticamente para cuadrar el total
-            totalPagar                  // <--- El monto de la cuota se mantiene exacto
+            cantidadReal,
+            precioUnitarioParaFactura,
+            totalPagar
         ]);
 
-        // 4. Registrar en Caja
+        // 5. 🔄 NUEVO: Registrar en la tabla independiente 'pagos_acuerdos'
+        // Esto permite que el módulo de Canjes tenga su propia contabilidad.
+        await client.query(`
+            INSERT INTO pagos_acuerdos (
+                acuerdo_id, usuario_id, monto, fecha_pago, 
+                metodo_pago, numero_operacion, notas
+            ) VALUES ($1, $2, $3, NOW(), $4, $5, $6)
+        `, [
+            cuota.acuerdo_id,
+            usuarioId,
+            totalPagar,
+            metodo_pago,
+            numero_operacion || codigoTicket,
+            `Cobro Cuota #${cuota.numero_cuota} via ${tipo_comprobante}`
+        ]);
+
+        // 6. Registrar en Caja (Con acuerdo_id para filtrado)
         const descCaja = `Ticket ${codigoTicket} (Cuota #${cuota.numero_cuota})`;
         await client.query(`
             INSERT INTO movimientos_caja 
-            (sede_id, usuario_id, tipo_movimiento, categoria, monto, descripcion, metodo_pago, fecha_registro, venta_id)
-            VALUES ($1, $2, 'INGRESO', 'VENTA_POS', $3, $4, $5, NOW(), $6)
-        `, [sedeId, usuarioId, totalPagar, descCaja, metodo_pago, ventaId]);
+            (sede_id, usuario_id, tipo_movimiento, categoria, monto, descripcion, metodo_pago, fecha_registro, venta_id, acuerdo_id)
+            VALUES ($1, $2, 'INGRESO', 'VENTA_POS', $3, $4, $5, NOW(), $6, $7)
+        `, [sedeId, usuarioId, totalPagar, descCaja, metodo_pago, ventaId, cuota.acuerdo_id]);
 
-        // 5. Actualizar Cuota
+        // 7. Actualizar Cuota
         await client.query(`
             UPDATE cuotas_acuerdos 
             SET estado = 'PAGADO', fecha_pago = NOW(), metodo_pago = $2, comprobante_pago = $3
@@ -500,7 +540,7 @@ exports.pagarCuota = async (req, res) => {
 
         await client.query('COMMIT');
 
-        // 6. Facturación NUBEFACT
+        // 8. Facturación NUBEFACT (Asíncrono)
         setImmediate(() => {
             facturacionController.emitirComprobante({
                 body: { 
@@ -519,7 +559,7 @@ exports.pagarCuota = async (req, res) => {
 
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error("❌ Error pago cuota:", err.message); 
+        console.error("❌ Error pago cuota acuerdo:", err.message); 
         res.status(500).json({ error: err.message });
     } finally {
         client.release();

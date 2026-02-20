@@ -102,4 +102,77 @@ const enviarCorreoComprobante = async (destinatario, datos) => {
     }
 };
 
-module.exports = { enviarCorreoComprobante };
+/**
+ * Envía el Plan de Pagos Aprobado a Gerencia
+ * @param {Array} facturasAprobadas - Lista de objetos con datos de la factura
+ */
+const enviarPlanPagosAprobado = async (facturasAprobadas) => {
+    try {
+        const destinatarios = "eherrera@gruposp.pe, aarellano@gruposp.pe";
+        
+        // Generar filas de la tabla dinámicamente
+        const filasHtml = facturasAprobadas.map(f => `
+            <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">${f.proveedor}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">${f.numero_documento}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #10b981;">
+                    ${f.moneda === 'USD' ? '$' : 'S/'} ${parseFloat(f.monto_aprobado).toFixed(2)}
+                </td>
+                <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 11px; color: #64748b;">
+                    ${f.banco || '-'} / ${f.cci || f.numero_cuenta || '-'}
+                </td>
+            </tr>
+        `).join('');
+
+        const totalPEN = facturasAprobadas.filter(x => x.moneda !== 'USD').reduce((acc, cur) => acc + parseFloat(cur.monto_aprobado), 0);
+        const totalUSD = facturasAprobadas.filter(x => x.moneda === 'USD').reduce((acc, cur) => acc + parseFloat(cur.monto_aprobado), 0);
+
+        const htmlContent = `
+        <div style="font-family: 'Segoe UI', sans-serif; color: #334155; max-width: 700px; margin: auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+            <div style="background: #1e293b; padding: 30px; text-align: center; color: white;">
+                <h2 style="margin: 0;">📅 Plan de Pagos Autorizado</h2>
+                <p style="opacity: 0.8; font-size: 14px;">Fecha de Ejecución: ${new Date().toLocaleDateString('es-PE')}</p>
+            </div>
+            <div style="padding: 30px;">
+                <p>Estimados, se ha generado el reporte de pagos aprobados para su ejecución hoy:</p>
+                <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                    <thead>
+                        <tr style="background: #f8fafc; text-align: left; font-size: 13px; color: #64748b;">
+                            <th style="padding: 10px; border-bottom: 2px solid #e2e8f0;">Proveedor</th>
+                            <th style="padding: 10px; border-bottom: 2px solid #e2e8f0;">Documento</th>
+                            <th style="padding: 10px; border-bottom: 2px solid #e2e8f0;">Monto Aprob.</th>
+                            <th style="padding: 10px; border-bottom: 2px solid #e2e8f0;">Datos Bancarios</th>
+                        </tr>
+                    </thead>
+                    <tbody style="font-size: 13px;">
+                        ${filasHtml}
+                    </tbody>
+                </table>
+
+                <div style="background: #f1f5f9; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                    <p style="margin: 0; font-weight: bold; color: #1e293b;">Resumen Total a Pagar:</p>
+                    <h3 style="margin: 5px 0 0 0; color: #0f172a;">S/ ${totalPEN.toFixed(2)} | $ ${totalUSD.toFixed(2)}</h3>
+                </div>
+            </div>
+            <div style="background: #f8fafc; padding: 15px; text-align: center; font-size: 11px; color: #94a3b8;">
+                Sistema SuperNova POS - Control de Tesorería Diaria
+            </div>
+        </div>
+        `;
+
+        const info = await transporter.sendMail({
+            from: '"SuperNova Tesorería" <aarellano@gruposp.pe>',
+            to: destinatarios,
+            subject: `🚀 Plan de Pagos Aprobado - ${facturasAprobadas.length} documentos`,
+            html: htmlContent
+        });
+
+        return { success: true, messageId: info.messageId };
+    } catch (error) {
+        console.error("❌ Error enviando plan de pagos:", error);
+        return { success: false, error: error.message };
+    }
+};
+
+// Actualizamos las exportaciones
+module.exports = { enviarCorreoComprobante, enviarPlanPagosAprobado };

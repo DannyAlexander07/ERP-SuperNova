@@ -34,29 +34,55 @@ const upload = multer({ storage: storage });
 // 1. RUTAS DE GASTOS / FACTURAS
 // ==========================================
 
-// Obtener lista de facturas (GET)
+// Obtener lista de facturas pendientes (GET)
 router.get('/', checkAuth, facturasController.obtenerFacturas);
 
-// Crear nueva factura con evidencia (POST)
+// Crear nueva factura con evidencia y clasificación (POST)
 router.post('/', checkAuth, upload.single('evidencia'), facturasController.crearFactura);
 
 // Actualizar factura existente (PUT)
 router.put('/:id', checkAuth, upload.single('evidencia'), facturasController.actualizarFactura);
 
-// Registrar PAGO de factura (Parcial o Total) (POST)
+// Registrar PAGO de factura (POST) - Ahora resetea programación automáticamente
 router.post('/pago/:id', checkAuth, facturasController.pagarFactura);
 
 // Subir archivo faltante a una factura (POST)
 router.post('/upload/:id', checkAuth, upload.single('archivo'), facturasController.subirArchivo);
 
-// Eliminar factura (DELETE) - Solo Admins por seguridad financiera
+// Eliminar factura (DELETE)
 router.delete('/:id', checkAuth, checkRole(['admin', 'superadmin']), facturasController.eliminarFactura);
 
-// KPIs Financieros
+// KPIs Financieros Generales
 router.get('/kpis/resumen-pagos', checkAuth, facturasController.obtenerKpisPagos);
 
 // ==========================================
-// 2. NUEVAS RUTAS: FLUJO DE APROBACIÓN Y MODAL "VER" (FASE 2)
+// 2. PROGRAMACIÓN DE TESORERÍA (PAGOS DE HOY)
+// ==========================================
+
+// Obtener lista de facturas marcadas para pagar hoy
+router.get('/programacion/hoy', checkAuth, facturasController.obtenerFacturasProgramadas);
+
+// Obtener los 3 bloques de resumen (Operativo, Implementación, Financiero)
+router.get('/programacion/resumen', checkAuth, facturasController.obtenerResumenTesoria);
+
+// Acción de Programar o Desprogramar (Mover entre ventanas)
+router.put('/:id/programar', checkAuth, facturasController.alternarProgramacion);
+
+// ==========================================
+// 3. FLUJO DE APROBACIÓN Y NOTIFICACIONES (NUEVO 🚀)
+// ==========================================
+
+// Aprobar o Desaprobar una factura individualmente (POST)
+router.post('/aprobar-individual', checkAuth, checkRole(['admin', 'superadmin']), facturasController.aprobarFacturaIndividual);
+
+// Aprobar o Desaprobar todos los programados masivamente (POST)
+router.post('/aprobar-masiva', checkAuth, checkRole(['admin', 'superadmin']), facturasController.aprobarFacturasMasiva);
+
+// Enviar el Plan de Pagos por correo a Gerencia (POST)
+router.post('/enviar-plan-pagos', checkAuth, facturasController.notificarPlanPagos);
+
+// ==========================================
+// 4. HISTORIAL Y MODAL "VER"
 // ==========================================
 
 // Cambiar estado del flujo (Programado, Pendiente, etc.)
@@ -68,11 +94,10 @@ router.get('/:id/pagos', checkAuth, facturasController.obtenerHistorialPagos);
 // Ver todos los documentos extra de una factura
 router.get('/:id/documentos', checkAuth, facturasController.obtenerDocumentos);
 
-// Subir un documento nuevo a la factura (Múltiples archivos)
+// Subir un documento nuevo a la factura
 router.post('/:id/documentos', checkAuth, upload.single('archivo'), facturasController.subirDocumentoExtra);
 
 // Eliminar un documento específico
 router.delete('/documentos/:docId', checkAuth, facturasController.eliminarDocumento);
-
 
 module.exports = router;

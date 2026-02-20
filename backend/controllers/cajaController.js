@@ -1,7 +1,7 @@
 // Ubicación: SuperNova/backend/controllers/cajaController.js
 const pool = require('../db');
 
-// 1. OBTENER MOVIMIENTOS (CORREGIDO: s.prefijo_ticket en lugar de v.prefijo_ticket)
+// 1. OBTENER MOVIMIENTOS (LIMPIEZA TOTAL: Triple filtro por ID y por Descripción)
 exports.obtenerMovimientos = async (req, res) => {
     try {
         if (!req.usuario) return res.status(401).json({ msg: "No autorizado" });
@@ -22,7 +22,7 @@ exports.obtenerMovimientos = async (req, res) => {
                 v.tipo_tarjeta,
                 v.numero_ticket_sede,
                 
-                -- CORRECCIÓN AQUÍ: El prefijo viene de la SEDE (s), no de la venta (v)
+                -- Prefijo desde la SEDE
                 s.prefijo_ticket
 
             FROM movimientos_caja mc
@@ -30,6 +30,19 @@ exports.obtenerMovimientos = async (req, res) => {
             JOIN sedes s ON mc.sede_id = s.id
             LEFT JOIN ventas v ON mc.venta_id = v.id 
             WHERE 1=1
+            -- 🚀 FILTROS POR ID (Para movimientos nuevos vinculados)
+            -- Excluimos facturas, préstamos y acuerdos comerciales del flujo de caja
+            AND mc.gasto_id IS NULL
+            AND mc.prestamo_id IS NULL
+            AND mc.acuerdo_id IS NULL
+            
+            -- 🛡️ FILTROS POR TEXTO (Seguridad para registros antiguos o huérfanos)
+            -- Esto asegura que los montos de canjes, facturas y préstamos no afecten el historial
+            AND mc.descripcion NOT ILIKE 'Amortización Fac%'
+            AND mc.descripcion NOT ILIKE 'Cuota #%'
+            AND mc.descripcion NOT ILIKE 'Pago Contado Fac%'
+            AND mc.descripcion NOT ILIKE 'Ticket % (Cuota #%)'
+            AND mc.categoria NOT IN ('prestamos', 'facturas', 'CORPORATIVO')
         `;
 
         const params = [];
@@ -89,7 +102,7 @@ exports.registrarMovimiento = async (req, res) => {
     }
 };
 
-// 3. OBTENER RESUMEN (CORREGIDO: Incluye JOIN con ventas para distinguir tarjetas y evitar errores de alias)
+// 3. OBTENER RESUMEN (ACTUALIZADO: Blindaje total contra Facturas, Préstamos y Acuerdos Comerciales)
 exports.obtenerResumenCaja = async (req, res) => {
     try {
         if (!req.usuario) return res.status(401).json({msg: "Sin sesión"});
@@ -122,7 +135,7 @@ exports.obtenerResumenCaja = async (req, res) => {
             }
         }
 
-        // CONSULTA MAESTRA CORREGIDA: Se añade LEFT JOIN ventas v para habilitar el alias 'v'
+        // CONSULTA MAESTRA REFORZADA: Triple filtro de exclusión
         const query = `
             WITH MovimientosNormalizados AS (
                 SELECT 
@@ -135,7 +148,6 @@ exports.obtenerResumenCaja = async (req, res) => {
                         WHEN mc.metodo_pago ILIKE '%plin%' THEN 'PLIN'
                         WHEN mc.metodo_pago ILIKE '%transferencia%' THEN 'TRANSFERENCIA'
                         
-                        -- 🔥 CORRECCIÓN CRÍTICA: Mapeo de Tarjetas usando la tabla de ventas (v)
                         WHEN (mc.metodo_pago ILIKE '%tarjeta%' OR mc.metodo_pago ILIKE '%pago%') 
                              AND (v.tipo_tarjeta ILIKE '%credito%' OR v.tipo_tarjeta ILIKE '%crédito%') THEN 'CREDITO'
                         
@@ -146,11 +158,23 @@ exports.obtenerResumenCaja = async (req, res) => {
                         ELSE 'OTROS'
                     END AS metodo_normalizado
                 FROM movimientos_caja mc
-                LEFT JOIN ventas v ON mc.venta_id = v.id -- 🛡️ ESTA LÍNEA HABILITA EL USO DE 'v'
+                LEFT JOIN ventas v ON mc.venta_id = v.id 
                 WHERE ($1::int IS NULL OR mc.sede_id = $1::int)
+                -- 🚀 TRIPLE BLINDAJE CRÍTICO:
+                -- 1. Excluir por IDs vinculados (Nuevos registros)
+                AND mc.gasto_id IS NULL
+                AND mc.prestamo_id IS NULL
+                AND mc.acuerdo_id IS NULL
+                -- 2. Excluir por Texto (Registros antiguos o huérfanos)
+                AND mc.descripcion NOT ILIKE 'Amortización Fac%'
+                AND mc.descripcion NOT ILIKE 'Cuota #%'
+                AND mc.descripcion NOT ILIKE 'Pago Contado Fac%'
+                AND mc.descripcion NOT ILIKE 'Ticket % (Cuota #%)'
+                -- 3. Excluir por categorías específicas de módulos externos
+                AND mc.categoria NOT IN ('prestamos', 'facturas', 'CORPORATIVO')
             )
             SELECT 
-                -- 1. TOTALES GENERALES
+                -- 1. TOTALES GENERALES (NETOS OPERATIVOS)
                 SUM(CASE WHEN fecha_registro::date = CURRENT_DATE THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS neto_hoy,
                 SUM(CASE WHEN EXTRACT(WEEK FROM fecha_registro) = EXTRACT(WEEK FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS neto_semana,
                 SUM(CASE WHEN EXTRACT(MONTH FROM fecha_registro) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM fecha_registro) = EXTRACT(YEAR FROM CURRENT_DATE) THEN (CASE WHEN tipo_movimiento = 'INGRESO' THEN monto ELSE -monto END) ELSE 0 END) AS neto_mes,

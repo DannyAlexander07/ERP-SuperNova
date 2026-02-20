@@ -12,47 +12,66 @@
             <button class="tab-btn" onclick="cambiarTab('tab-cuentas')">
                 <i class='bx bx-money-withdraw'></i> Cuentas por Pagar
             </button>
+            <button class="tab-btn" onclick="cambiarTab('tab-tesoreria')">
+                <i class='bx bx-calendar-check'></i> Tesorería (Hoy)
+            </button>
         </div>
     </div>
 
     <div id="tab-gastos" class="tab-content active">
-        <div class="table-toolbar">
-            <div class="search-box">
-                <i class='bx bx-search'></i>
-                <input type="text" id="buscador-facturas" placeholder="Buscar factura, RUC o proveedor...">
-            </div>
-            <div class="filter-actions">
-                <input type="date" id="filtro-fecha" class="date-filter" onchange="filtrarPorFecha()">
+        <div class="table-toolbar" style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 15px;">
+            <div class="actions" style="display: flex; gap: 10px;">
                 <button class="btn-primary" onclick="abrirModalFactura()">
                     <i class='bx bx-plus-circle'></i> Nueva Compra
                 </button>
                 <button class="btn-icon" onclick="exportarExcel()" title="Exportar Excel">
-                    <i class='bx bxs-file-export' style="color: #1D6F42;"></i>
+                    <i class='bx bxs-file-export' style="color: #1D6F42; font-size: 1.8rem;"></i>
                 </button>
             </div>
         </div>
 
-        <div class="table-responsive">
-            <table class="premium-table">
-                <thead>
-                    <tr>
-                        <th>Emisión</th>
-                        <th>Programación</th>
-                        <th>Vencimiento</th>
-                        <th>Proveedor</th>
-                        <th>Documento</th>
-                        <th>Total</th>
-                        <th>Estado</th>
-                        <th>Días Venc.</th>
-                        <th>Clasificación</th>
-                        <th>Evidencia</th>
-                        <th>Acciones</th>
-                    </tr>
-                </thead>
-                <tbody id="tabla-facturas-body">
-                    </tbody>
-            </table>
-        </div>
+    <div class="table-responsive">
+        <table class="premium-table">
+            <thead>
+                <tr>
+                    <th onclick="ordenarGastos('fecha_emision')" style="cursor:pointer;">
+                        Emisión <i class='bx bx-sort-alt-2'></i>
+                    </th>
+                    <th onclick="ordenarGastos('fecha_programacion')" style="cursor:pointer;">
+                        Programación <i class='bx bx-sort-alt-2'></i>
+                    </th>
+                    <th onclick="ordenarGastos('fecha_vencimiento')" style="cursor:pointer;">
+                        Vencimiento <i class='bx bx-sort-alt-2'></i>
+                    </th>
+                    <th>Proveedor</th>
+                    <th>Documento</th>
+                    <th onclick="ordenarGastos('monto_total')" style="cursor:pointer;">
+                        Total <i class='bx bx-sort-alt-2'></i>
+                    </th>
+                    <th>Estado</th>
+                    <th onclick="ordenarGastos('dias_mora')" style="cursor:pointer;">
+                        Días Venc. <i class='bx bx-sort-alt-2'></i>
+                    </th>
+                    <th>Clasificación</th>
+                    <th style="text-align:center;">Evidencia</th>
+                    <th style="text-align:center;">Acciones</th>
+                </tr>
+                <tr id="row-filtros-gastos" class="filter-row-header">
+                    <td></td> <td></td> <td></td>
+                    <td>
+                        <input type="text" class="column-filter" placeholder="🔍 Proveedor..." 
+                            onkeyup="filtrarColumna(this, 3, 'tabla-facturas-body')">
+                    </td>
+                    <td>
+                        <input type="text" class="column-filter" placeholder="🔍 N°..." 
+                            onkeyup="filtrarColumna(this, 4, 'tabla-facturas-body')">
+                    </td>
+                    <td></td> <td></td> <td></td> <td></td> <td></td> <td></td>
+                </tr>
+            </thead>
+            <tbody id="tabla-facturas-body"></tbody>
+        </table>
+    </div>
         <div id="facturas-paginacion" class="pagination-container"></div>
     </div>
 
@@ -103,25 +122,111 @@
                 <small style="margin-top: 8px; display: block;">¡Atención!</small>
             </div>
         </div>
+
+        <div class="table-toolbar" style="display: flex; justify-content: flex-end; margin-bottom: 15px;">
+            <div class="filter-actions">
+                <button class="btn-icon" onclick="exportarExcelCuentas()" title="Exportar Cuentas por Pagar">
+                    <i class='bx bxs-file-export' style="color: #1D6F42; font-size: 1.8rem;"></i>
+                </button>
+            </div>
+        </div>
+
         <div class="table-responsive">
             <table class="premium-table">
                 <thead>
                     <tr>
-                        <th>Vencimiento</th>
+                        <th onclick="ordenarCuentas('fecha_vencimiento')" style="cursor:pointer;">
+                            Vencimiento <i class='bx bx-sort-alt-2'></i>
+                        </th>
                         <th>Semáforo</th>
+                        <th onclick="ordenarCuentas('fecha_programacion')" style="cursor:pointer;">
+                            Programación <i class='bx bx-sort-alt-2'></i>
+                        </th>
                         <th>Proveedor</th>
                         <th>Factura</th>
-                        <th>Deuda Total</th>
-                        <th>Acuenta</th>
-                        <th>Saldo Pendiente</th>
-                        <th>Acciones</th>
+                        <th onclick="ordenarCuentas('monto_total')" style="cursor:pointer;">
+                            Deuda Total <i class='bx bx-sort-alt-2'></i>
+                        </th>
+                        <th>Amortizacion</th>
+                        <th onclick="ordenarCuentas('saldo_pendiente')" style="cursor:pointer;">
+                            Saldo Pendiente <i class='bx bx-sort-alt-2'></i>
+                        </th>
+                        <th style="text-align: center;">Acciones</th>
                     </tr>
+                    <tr id="row-filtros-cuentas" class="filter-row-header">
+                        <td></td> <td></td> <td></td> <td><input type="text" class="column-filter" placeholder="🔍 Proveedor..." onkeyup="filtrarColumna(this, 3, 'tabla-cuentas-body')"></td>
+                        <td><input type="text" class="column-filter" placeholder="🔍 N°..." onkeyup="filtrarColumna(this, 4, 'tabla-cuentas-body')"></td>
+                        <td></td> <td></td> <td></td> <td></td> </tr>
                 </thead>
                 <tbody id="tabla-cuentas-body">
                     </tbody>
             </table>
         </div>
         <div id="cuentas-paginacion" class="pagination-container"></div>
+    </div>
+
+    <div id="tab-tesoreria" class="tab-content">
+        
+        <div class="kpi-resumen-bar" style="grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 25px;">
+            
+            <div class="kpi-card" style="border-left: 5px solid #3b82f6; background: #eff6ff;">
+                <span style="color: #1e40af; font-weight: 700; font-size: 0.9rem;">⚡ FLUJO OPERATIVO</span>
+                <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+                    <h3 id="block-op-pen" style="margin: 0; font-size: 1.5rem; color: #1e3a8a;">S/ 0.00</h3>
+                    <h3 id="block-op-usd" style="margin: 0; font-size: 1.2rem; color: #3b82f6;">$ 0.00</h3>
+                </div>
+                <small style="color: #64748b;">Mantenimiento y servicios</small>
+            </div>
+
+            <div class="kpi-card" style="border-left: 5px solid #8b5cf6; background: #f5f3ff;">
+                <span style="color: #5b21b6; font-weight: 700; font-size: 0.9rem;">🛠️ IMPLEMENTACIÓN</span>
+                <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+                    <h3 id="block-imp-pen" style="margin: 0; font-size: 1.5rem; color: #4c1d95;">S/ 0.00</h3>
+                    <h3 id="block-imp-usd" style="margin: 0; font-size: 1.2rem; color: #8b5cf6;">$ 0.00</h3>
+                </div>
+                <small style="color: #64748b;">Nuevos activos y mejoras</small>
+            </div>
+
+            <div class="kpi-card" style="border-left: 5px solid #f59e0b; background: #fffbeb;">
+                <span style="color: #92400e; font-weight: 700; font-size: 0.9rem;">🏦 FINANCIERO</span>
+                <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+                    <h3 id="block-fin-pen" style="margin: 0; font-size: 1.5rem; color: #78350f;">S/ 0.00</h3>
+                    <h3 id="block-fin-usd" style="margin: 0; font-size: 1.2rem; color: #f59e0b;">$ 0.00</h3>
+                </div>
+                <small style="color: #64748b;">Préstamos e impuestos</small>
+            </div>
+        </div>
+
+        <div class="table-toolbar">
+            <div class="header-titles">
+                <h3 style="margin:0; color:#1e293b;">📅 Pagos Programados para Hoy</h3>
+                <p style="margin:0; font-size:0.85rem; color:#64748b;">Confirme los egresos para que impacten en el balance real.</p>
+            </div>
+            <div class="filter-actions">
+                <button class="btn-icon" onclick="exportarExcelTesoreria()" title="Exportar Plan de Pagos">
+                    <i class='bx bxs-file-export' style="color: #1D6F42; font-size: 1.8rem;"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="premium-table">
+                <thead>
+                    <tr>
+                        <th>Clasificación</th>
+                        <th>Proveedor</th>
+                        <th>Documento</th>
+                        <th>Banco / Cuenta / CCI</th>
+                        <th>Vencimiento</th>
+                        <th>Moneda</th>
+                        <th>Saldo a Pagar</th>
+                        <th style="text-align: center;">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-tesoreria-body">
+                    </tbody>
+            </table>
+        </div>
     </div>
 
     <div id="modal-factura" class="modal-overlay">
@@ -186,12 +291,12 @@
                     </div>
 
                     <div class="input-group">
-                            <input type="date" id="fac-programacion">
-                            <label class="static">Fecha Programación</label>
-                        </div>
+                        <input type="date" id="fac-programacion">
+                        <label class="static">Fecha Programación</label>
+                    </div>
 
                     <h4 class="form-subtitle">Detalles Financieros (Cálculo Automático)</h4>
-                    <div class="row-grid" style="grid-template-columns: 1fr 1fr 1fr;"> 
+                    <div class="row-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-bottom: 10px;"> 
                         <div class="input-group">
                             <select id="fac-moneda">
                                 <option value="PEN">S/ (Soles)</option>
@@ -202,33 +307,75 @@
                         
                         <div class="input-group">
                             <input type="number" id="fac-base" required placeholder="0.00" step="0.01" oninput="calcularTotalImpuesto()">
-                            <label>Monto Base</label>
+                            <label>Monto Base (Gravado)</label>
                         </div>
 
                         <div class="input-group">
-                            <select id="fac-impuesto-porc" onchange="calcularTotalImpuesto()">
+                            <select id="fac-impuesto-porc" onchange="toggleImpuestoOtros(); calcularTotalImpuesto();">
                                 <option value="18">18% (IGV - Suma)</option>
                                 <option value="10.5">10.5% (Suma)</option>
                                 <option value="0">0% (Exonerado)</option>
                                 <option value="8">8% (Resta / Retención)</option>
+                                <option value="otros">Otros (Personalizado)</option>
                             </select>
                             <label class="static">% Impuesto</label>
                         </div>
                     </div>
 
+                    <div id="fac-otros-container" class="row-grid" style="display: none; grid-template-columns: 1fr 1fr; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px dashed #cbd5e1; margin-bottom: 15px; gap: 15px;">
+                        <div class="input-group">
+                            <select id="fac-otros-operacion" onchange="calcularTotalImpuesto()">
+                                <option value="suma">Suma (+)</option>
+                                <option value="resta">Resta (-)</option>
+                            </select>
+                            <label class="static">Tipo de Operación</label>
+                        </div>
+                        <div class="input-group">
+                            <input type="number" id="fac-otros-porcentaje" placeholder="Ej: 5" step="0.1" oninput="calcularTotalImpuesto()">
+                            <label>Porcentaje Manual (%)</label>
+                        </div>
+                    </div>
+
+                    <div style="background: #f1f5f9; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #e2e8f0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <p style="font-size: 0.75rem; font-weight: bold; color: #64748b; text-transform: uppercase; margin: 0;">
+                                Adicionales No Gravados (No suman impuesto)
+                            </p>
+                            <button type="button" onclick="agregarFilaAdicional()" style="padding: 2px 8px; background: #64748b; color: white; border-radius: 4px; border: none; cursor: pointer; font-size: 12px;">
+                                <i class='bx bx-plus'></i> Añadir
+                            </button>
+                        </div>
+
+                        <div id="contenedor-adicionales">
+                            <div class="row-grid fila-adicional" style="grid-template-columns: 2fr 1fr auto; gap: 10px; margin-bottom: 8px;">
+                                <div class="input-group" style="margin-bottom: 0;">
+                                    <input type="text" class="adicional-glosa" placeholder="Ej: Propina">
+                                    <label>Descripción</label>
+                                </div>
+                                <div class="input-group" style="margin-bottom: 0;">
+                                    <input type="number" class="adicional-monto" placeholder="0.00" step="0.01" oninput="calcularTotalImpuesto()">
+                                    <label>Monto</label>
+                                </div>
+                                <div style="width: 30px;"></div> 
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="input-group">
-                        <input type="number" id="fac-total-final" readonly style="background-color: #f1f5f9; font-weight: bold; color: var(--primary-color);">
-                        <label class="static">Monto Total Incluido Impuesto</label>
+                        <input type="number" id="fac-total-final" readonly style="background-color: #f1f5f9; font-weight: 900; color: #0f172a; font-size: 1.2rem; border: 2px solid #cbd5e1;">
+                        <label class="static">Monto Total a Pagar</label>
                     </div>
 
                     <div class="input-group">
                         <input type="text" id="fac-glosa" required placeholder="Ej: Compra de gaseosas para el mes">
                         <label>Descripción del Gasto</label>
                     </div>
+
                     <h4 class="form-subtitle">Datos Bancarios y Clasificación</h4>
                     <div class="row-grid">
                         <div class="input-group">
-                            <select id="fac-banco"> <option value="">-- Seleccionar Banco --</option>
+                            <select id="fac-banco"> 
+                                <option value="">-- Seleccionar Banco --</option>
                                 <option value="BCP">BCP</option>
                                 <option value="BBVA">BBVA</option>
                                 <option value="Scotiabank">Scotiabank</option>
@@ -237,7 +384,8 @@
                             <label class="static">Banco</label>
                         </div>
                         <div class="input-group">
-                            <select id="fac-clasificacion" required> <option value="Operativo">Operativo</option>
+                            <select id="fac-clasificacion" required> 
+                                <option value="Operativo">Operativo</option>
                                 <option value="Implementacion">Implementación</option>
                                 <option value="Financiero">Financiero</option>
                             </select>
@@ -253,6 +401,7 @@
                             <input type="text" id="fac-cci" placeholder="CCI"> <label>Cuenta Interbancaria (CCI)</label>
                         </div>
                     </div>
+
                     <div class="row-grid">
                         <div class="input-group">
                             <select id="fac-sede" required>
@@ -358,7 +507,7 @@
     </div>
 
     <div id="modal-detalles-ver" class="modal-overlay" style="z-index: 2000;">
-        <div class="modal-content slide-in-right" style="max-width: 800px; padding: 0;">
+        <div class="modal-content slide-in-right" style="max-width: 850px; padding: 0;">
             
             <div class="modal-header" style="padding: 20px;">
                 <h3>Detalles de Compra <span id="ver-modal-doc" class="badge bg-blue" style="font-size: 0.9rem;"></span></h3>
@@ -381,11 +530,30 @@
                 <div style="padding: 20px;">
                     
                     <div id="tab-ver-info" style="display: block;">
-                        <div class="row-grid" style="margin-bottom: 20px;">
+                        <div class="row-grid" style="margin-bottom: 20px; grid-template-columns: 1.5fr 1fr;">
                             <div>
-                                <h4 class="form-subtitle">Proveedor</h4>
-                                <p style="font-weight: 600; font-size: 1.1rem; color: #1e293b;" id="ver-info-proveedor">-</p>
-                                <p style="color: #64748b; font-size: 0.9rem;" id="ver-info-clasificacion">-</p>
+                                <h4 class="form-subtitle">Proveedor y Clasificación</h4>
+                                <p style="font-weight: 600; font-size: 1.1rem; color: #1e293b; margin-bottom: 4px;" id="ver-info-proveedor">-</p>
+                                <span id="ver-info-clasificacion" class="badge" style="background:#eff6ff; color:#3b82f6; font-size: 0.75rem;">-</span>
+                            </div>
+                            <div>
+                                <h4 class="form-subtitle">Sede y Categoría</h4>
+                                <p><strong>Sede:</strong> <span id="ver-info-sede">-</span></p>
+                                <p><strong>Categoría:</strong> <span id="ver-info-categoria" style="text-transform: capitalize;">-</span></p>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: 20px; padding: 12px; background: #fdfdfd; border: 1px solid #f1f5f9; border-radius: 8px;">
+                            <h4 class="form-subtitle">Glosa / Descripción</h4>
+                            <p id="ver-info-glosa" style="color: #475569; line-height: 1.5; font-style: italic;">-</p>
+                        </div>
+
+                        <div class="row-grid" style="margin-bottom: 20px; grid-template-columns: 1fr 1fr;">
+                            <div>
+                                <h4 class="form-subtitle">Documento</h4>
+                                <p><strong>Tipo:</strong> <span id="ver-info-tipo-doc">-</span></p>
+                                <p><strong>N° Documento:</strong> <span id="ver-info-num-doc" style="font-family: monospace; font-weight: bold;">-</span></p>
+                                <p><strong>Estado:</strong> <span id="ver-info-estado-pago">-</span></p>
                             </div>
                             <div>
                                 <h4 class="form-subtitle">Fechas</h4>
@@ -396,40 +564,38 @@
                         </div>
 
                         <h4 class="form-subtitle">Resumen Financiero</h4>
-                        <div class="row-grid" style="background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px;">
+                        <div class="row-grid" style="background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px; grid-template-columns: repeat(3, 1fr);">
                             <div>
-                                <p style="color: #64748b; font-size: 0.9rem;">Monto Total</p>
-                                <p style="font-weight: bold; font-size: 1.2rem; color: #0f172a;" id="ver-info-total">-</p>
+                                <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 5px;">Monto Total</p>
+                                <p style="font-weight: 800; font-size: 1.25rem; color: #0f172a;" id="ver-info-total">-</p>
                             </div>
                             <div>
-                                <p style="color: #64748b; font-size: 0.9rem;">A Cuenta (Pagado)</p>
-                                <p style="font-weight: bold; font-size: 1.2rem; color: #10b981;" id="ver-info-pagado">-</p>
+                                <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 5px;">A Cuenta (Pagado)</p>
+                                <p style="font-weight: 800; font-size: 1.25rem; color: #10b981;" id="ver-info-pagado">-</p>
                             </div>
                             <div>
-                                <p style="color: #64748b; font-size: 0.9rem;">Saldo Pendiente</p>
-                                <p style="font-weight: bold; font-size: 1.2rem; color: #ef4444;" id="ver-info-deuda">-</p>
+                                <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 5px;">Saldo Pendiente</p>
+                                <p style="font-weight: 800; font-size: 1.25rem; color: #ef4444;" id="ver-info-deuda">-</p>
                             </div>
                         </div>
 
                         <h4 class="form-subtitle">Datos Bancarios para Pago</h4>
-                        <div class="row-grid" style="background: #f0fdf4; padding: 15px; border-radius: 8px; border: 1px solid #bbf7d0;">
-                            <p><strong>Banco:</strong> <span id="ver-info-banco">-</span></p>
-                            <p><strong>Cuenta:</strong> <span id="ver-info-cuenta">-</span></p>
-                            <p><strong>CCI:</strong> <span id="ver-info-cci">-</span></p>
+                        <div class="row-grid" style="background: #f0fdf4; padding: 15px; border-radius: 8px; border: 1px solid #bbf7d0; grid-template-columns: 1fr 1fr 1fr;">
+                            <p><strong>Banco:</strong> <br><span id="ver-info-banco">-</span></p>
+                            <p><strong>Cuenta:</strong> <br><span id="ver-info-cuenta">-</span></p>
+                            <p><strong>CCI:</strong> <br><span id="ver-info-cci">-</span></p>
                         </div>
                     </div>
 
                     <div id="tab-ver-docs" style="display: none;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                             <h4 class="form-subtitle" style="margin: 0;">Archivos Relacionados</h4>
-                            
                             <input type="hidden" id="ver-modal-factura-id">
                             <input type="file" id="input-subir-doc-extra" style="display: none;" onchange="ejecutarSubidaDocumentoExtra(event)">
                             <button class="btn-primary btn-sm" onclick="document.getElementById('input-subir-doc-extra').click()">
                                 <i class='bx bx-cloud-upload'></i> Agregar Documento
                             </button>
                         </div>
-                        
                         <div class="table-responsive">
                             <table class="premium-table">
                                 <thead>
@@ -439,8 +605,7 @@
                                         <th style="text-align: center;">Acciones</th>
                                     </tr>
                                 </thead>
-                                <tbody id="ver-tabla-docs-body">
-                                    </tbody>
+                                <tbody id="ver-tabla-docs-body"></tbody>
                             </table>
                         </div>
                     </div>
@@ -457,8 +622,7 @@
                                         <th>Detalle / Operación</th>
                                     </tr>
                                 </thead>
-                                <tbody id="ver-tabla-pagos-body">
-                                    </tbody>
+                                <tbody id="ver-tabla-pagos-body"></tbody>
                             </table>
                         </div>
                     </div>
@@ -471,6 +635,7 @@
             </div>
         </div>
     </div>
+
     <div id="modal-confirmar-eliminar-doc" class="modal-overlay" style="z-index: 2200;">
         <div class="modal-content center-modal" style="max-width: 350px; text-align: center; padding: 30px 20px;">
             <div style="color: #ef4444; font-size: 3.5rem; margin-bottom: 10px;">

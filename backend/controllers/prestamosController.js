@@ -145,9 +145,11 @@ exports.obtenerPrestamos = async (req, res) => {
 // =======================================================
 // 3. OBTENER DETALLE (PARA EL CONTRATO Y VISTA)
 // =======================================================
+// 3. OBTENER DETALLE (ACTUALIZADO: Incluye historial de pagos independiente)
 exports.obtenerDetallePrestamo = async (req, res) => {
     const { id } = req.params;
     try {
+        // 1. Obtener cabecera con datos del tercero
         const cabecera = await pool.query(`
             SELECT p.*, prov.razon_social, prov.ruc, prov.direccion, 
                    prov.representante_legal, prov.dni_representante, prov.partida_registral
@@ -156,18 +158,42 @@ exports.obtenerDetallePrestamo = async (req, res) => {
             WHERE p.id = $1
         `, [id]);
 
+        if (cabecera.rows.length === 0) {
+            return res.status(404).json({ msg: "Préstamo no encontrado" });
+        }
+
+        // 2. Obtener cronograma de cuotas
         const cronograma = await pool.query(`
-            SELECT * FROM prestamos_cronograma WHERE prestamo_id = $1 ORDER BY numero_cuota ASC
+            SELECT * FROM prestamos_cronograma 
+            WHERE prestamo_id = $1 
+            ORDER BY numero_cuota ASC
         `, [id]);
 
-        if(cabecera.rows.length === 0) return res.status(404).json({msg: "No encontrado"});
+        // 3. 🆕 NUEVO: Obtener historial de pagos desde la tabla independiente
+        // Esto permite ver los abonos sin consultar el flujo de caja operativo.
+        const pagos = await pool.query(`
+            SELECT 
+                id, 
+                fecha_pago, 
+                monto, 
+                metodo_pago, 
+                numero_operacion, 
+                notas 
+            FROM pagos_prestamos 
+            WHERE prestamo_id = $1 
+            ORDER BY fecha_registro DESC
+        `, [id]);
 
+        // Enviamos la respuesta completa al frontend
         res.json({
             datos: cabecera.rows[0],
-            cronograma: cronograma.rows
+            cronograma: cronograma.rows,
+            pagos: pagos.rows // 🚀 Nueva lista de pagos incluida
         });
+
     } catch (err) {
-        res.status(500).json({ msg: 'Error al obtener detalle' });
+        console.error("❌ Error al obtener detalle del préstamo:", err.message);
+        res.status(500).json({ msg: 'Error al obtener detalle del préstamo' });
     }
 };
 
@@ -245,6 +271,7 @@ exports.simularPrestamo = async (req, res) => {
 // =======================================================
 // 5. REGISTRAR PAGO DE CUOTA (Cobranza / Amortización)
 // =======================================================
+// 5. REGISTRAR PAGO DE CUOTA (Actualizado: Independencia de Caja y Trazabilidad)
 exports.pagarCuota = async (req, res) => {
     const { id } = req.params; // ID de la cuota (prestamos_cronograma)
     const { fecha_pago, metodo_pago, numero_operacion } = req.body;
@@ -257,7 +284,7 @@ exports.pagarCuota = async (req, res) => {
 
         // 1. Obtener datos de la cuota y del préstamo padre
         const qCuota = await client.query(`
-            SELECT c.*, p.tipo_flujo, p.codigo_prestamo, p.moneda 
+            SELECT c.*, p.tipo_flujo, p.codigo_prestamo, p.moneda, p.id AS p_id
             FROM prestamos_cronograma c
             JOIN prestamos p ON c.prestamo_id = p.id
             WHERE c.id = $1
@@ -268,31 +295,53 @@ exports.pagarCuota = async (req, res) => {
 
         if (cuota.estado === 'PAGADO') throw new Error('Esta cuota ya está pagada.');
 
-        // 2. Actualizar estado de la cuota
+        // 2. Actualizar estado de la cuota en el cronograma
         await client.query(`
             UPDATE prestamos_cronograma 
             SET estado = 'PAGADO', fecha_pago = $1 
             WHERE id = $2
         `, [fecha_pago, id]);
 
-        // 3. IMPACTO EN CAJA (Movimiento de Dinero)
-        // Si el préstamo fue 'OTORGADO' (prestamos dinero), el cobro de la cuota es un 'INGRESO'.
-        // Si el préstamo fue 'RECIBIDO' (nos prestaron), el pago de la cuota es un 'EGRESO'.
-        
+        // 3. 🔄 NUEVO: Registrar el pago en la tabla independiente 'pagos_prestamos'
+        // Esto garantiza que el historial de préstamos sea autónomo
+        await client.query(`
+            INSERT INTO pagos_prestamos (
+                prestamo_id, usuario_id, monto, fecha_pago, 
+                metodo_pago, numero_operacion, notas
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, [
+            cuota.prestamo_id, 
+            usuarioId, 
+            cuota.cuota_total, 
+            fecha_pago, 
+            metodo_pago, 
+            numero_operacion,
+            `Pago Cuota #${cuota.numero_cuota}`
+        ]);
+
+        // 4. IMPACTO EN CAJA (Identificado con prestamo_id)
         const tipoMovimientoCaja = cuota.tipo_flujo === 'OTORGADO' ? 'INGRESO' : 'EGRESO';
         const descripcion = `Cuota #${cuota.numero_cuota} del Préstamo ${cuota.codigo_prestamo}`;
 
+        // Agregamos 'prestamo_id' en la inserción para que el filtro del controlador de caja lo detecte
         await client.query(`
             INSERT INTO movimientos_caja (
                 sede_id, usuario_id, tipo_movimiento, categoria, descripcion, 
-                monto, metodo_pago, numero_operacion, fecha_creacion
-            ) VALUES ($1, $2, $3, 'prestamos', $4, $5, $6, $7, $8)
+                monto, metodo_pago, numero_operacion, fecha_creacion, prestamo_id
+            ) VALUES ($1, $2, $3, 'prestamos', $4, $5, $6, $7, $8, $9)
         `, [
-            sedeId, usuarioId, tipoMovimientoCaja, descripcion, 
-            cuota.cuota_total, metodo_pago, numero_operacion, fecha_pago
+            sedeId, 
+            usuarioId, 
+            tipoMovimientoCaja, 
+            descripcion, 
+            cuota.cuota_total, 
+            metodo_pago, 
+            numero_operacion, 
+            fecha_pago,
+            cuota.prestamo_id // 🚀 Campo clave para desvincular del balance de caja
         ]);
 
-        // 4. Verificar si el préstamo se terminó de pagar
+        // 5. Verificar si el préstamo se terminó de pagar completamente
         const pendientes = await client.query(
             "SELECT COUNT(*) FROM prestamos_cronograma WHERE prestamo_id = $1 AND estado != 'PAGADO'", 
             [cuota.prestamo_id]
@@ -303,10 +352,11 @@ exports.pagarCuota = async (req, res) => {
         }
 
         await client.query('COMMIT');
-        res.json({ msg: 'Cuota procesada correctamente.' });
+        res.json({ msg: 'Cuota procesada y registrada correctamente.' });
 
     } catch (err) {
         await client.query('ROLLBACK');
+        console.error("❌ Error al procesar pago de cuota:", err.message);
         res.status(500).json({ msg: err.message });
     } finally {
         client.release();
