@@ -213,7 +213,7 @@
             
             <div class="modal-body">
                 <div class="kardex-filters" style="display:flex; gap:10px; margin-bottom:15px;">
-                    <input type="date" class="date-filter">
+                    <input type="date" class="date-filter" id="filtro-fecha-kardex" onchange="filtrarTablaKardex()">
                     <select class="date-filter" id="filtro-producto-kardex" style="flex:1" onchange="filtrarTablaKardex()">
                         <option value="">Todos los Productos</option>
                     </select>

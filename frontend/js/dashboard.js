@@ -56,12 +56,6 @@ const menuItems = [
     { id: 'perfil', icon: 'bx-user', text: 'Mi Perfil', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'logistica', 'finanzas', 'contabilidad'], hidden: true }
 ];
 
-document.addEventListener('DOMContentLoaded', () => {
-    initSidebar();
-    renderMenu();
-    loadModule('inicio'); // Carga inicial
-});
-
 const body = document.querySelector('body');
 const sidebar = body.querySelector('nav');
 const toggle = body.querySelector(".toggle");
@@ -214,15 +208,19 @@ async function loadModule(moduleId) {
                 'ventas': 'initPOS' // Asegurando que ventas también se inicie si se llama 'initPOS' o 'initVentas'
             };
 
-            // Intentamos ejecutar el inicializador
-            const initFuncName = moduleInitializers[moduleId];
-            
-            if (initFuncName && typeof window[initFuncName] === 'function') {
-                window[initFuncName](); 
-            } else if (typeof window[`init${moduleId.charAt(0).toUpperCase() + moduleId.slice(1)}`] === 'function') {
-                // Fallback inteligente: si no está en el mapa, intenta initModulo (ej: initProveedores)
-                window[`init${moduleId.charAt(0).toUpperCase() + moduleId.slice(1)}`]();
-            }
+            // Le damos al navegador un microsegundo para parsear el JS antes de ejecutarlo
+            setTimeout(() => {
+                const initFuncName = moduleInitializers[moduleId];
+                const fallbackName = `init${moduleId.charAt(0).toUpperCase() + moduleId.slice(1)}`;
+                
+                if (initFuncName && typeof window[initFuncName] === 'function') {
+                    window[initFuncName](); 
+                } else if (typeof window[fallbackName] === 'function') {
+                    window[fallbackName]();
+                } else {
+                    console.warn(`[SuperNova] ⚠️ No se encontró la función inicializadora para ${moduleId}`);
+                }
+            }, 50); // 50ms son imperceptibles para el humano, pero salvan la vida al motor V8
         };
 
         currentModuleJs.onerror = () => {

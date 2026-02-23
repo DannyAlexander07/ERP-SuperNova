@@ -32,8 +32,7 @@
                 </div>
                 <small>Presiona ENTER después de escanear.</small>
 
-                <div id="resultado-validacion" class="result-box hidden">
-                    </div>
+                <div id="resultado-validacion" class="result-box hidden"></div>
             </div>
 
             <div class="history-card">
@@ -393,18 +392,18 @@
                     <label style="font-size:0.8rem; font-weight:bold; color:#64748b;">Cliente (DNI):</label>
                     <div style="display: flex; gap: 5px; margin-bottom:5px;">
                         <input type="text" id="cuota-dni" class="form-control" placeholder="DNI" maxlength="8">
-                        <button class="btn-sm" onclick="buscarEntidadCuota('dni')"><i class='bx bx-search'></i></button>
+                        <button type="button" class="btn-sm btn-primary" onclick="buscarEntidadCuota('dni')"><i class='bx bx-search'></i></button>
                     </div>
-                    <input type="text" id="cuota-nombre" class="form-control" placeholder="Nombre del Cliente">
+                    <input type="text" id="cuota-nombre" class="form-control" placeholder="Nombre del Cliente" readonly style="background-color: #f8fafc;">
                 </div>
 
                 <div id="grupo-ruc-cuota" style="display: none;">
                     <label style="font-size:0.8rem; font-weight:bold; color:#64748b;">Empresa (RUC):</label>
                     <div style="display: flex; gap: 5px; margin-bottom:5px;">
                         <input type="text" id="cuota-ruc" class="form-control" placeholder="RUC" maxlength="11">
-                        <button class="btn-sm" onclick="buscarEntidadCuota('ruc')"><i class='bx bx-search'></i></button>
+                        <button type="button" class="btn-sm btn-primary" onclick="buscarEntidadCuota('ruc')"><i class='bx bx-search'></i></button>
                     </div>
-                    <input type="text" id="cuota-razon" class="form-control" placeholder="Razón Social" readonly style="margin-bottom:5px;">
+                    <input type="text" id="cuota-razon" class="form-control" placeholder="Razón Social" readonly style="margin-bottom:5px; background-color: #f8fafc;">
                     <input type="text" id="cuota-direccion" class="form-control" placeholder="Dirección Fiscal">
                 </div>
             </div>

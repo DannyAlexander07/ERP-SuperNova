@@ -50,9 +50,15 @@ exports.login = async (req, res) => {
             }
         };
 
+       const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            console.error('[CRÍTICO] JWT_SECRET no está definido. Deteniendo login.');
+            return res.status(500).json({ msg: 'Error interno de configuración de seguridad.' });
+        }
+
         jwt.sign(
             payload, 
-            process.env.JWT_SECRET || 'secretoseguro', 
+            jwtSecret, 
             { expiresIn: '12h' }, 
             async (err, token) => {
                 if (err) throw err;

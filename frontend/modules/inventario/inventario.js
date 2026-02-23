@@ -32,7 +32,7 @@
     const filasPorPagina = 7;       // Cantidad de filas por hoja
 
     // 1. CARGAR DATOS
-    async function initInventario() {
+    window.initInventario = async function() {
         try {
             const token = localStorage.getItem('token');
             if (!token) return console.warn("No token");
@@ -150,7 +150,7 @@
                     </div>
                 </td>
                 <td><span class="badge-cat">${prod.categoria}</span></td>
-                <td><span class="badge-type">${prod.tipo}</span></td>
+                <td><span class="badge-type">${prod.tipo.charAt(0).toUpperCase() + prod.tipo.slice(1)}</span></td>
                 <td>${stockHtml}</td>
                 <td>S/ ${prod.precio.toFixed(2)}</td>
                 <td>
@@ -652,7 +652,9 @@ window.abrirModalStock = function(id) {
         toggleTipoProducto();
     }
 
-    window.cerrarModalProducto = function() { document.getElementById('modal-producto').classList.remove('active'); }
+    window.cerrarModalProducto = function() { 
+        document.querySelectorAll('#modal-producto').forEach(m => m.classList.remove('active')); 
+    }
 
 // --- GUARDAR PRODUCTO (VALIDACIÓN VISUAL + TIEMPO REAL) ---
 window.guardarProducto = async function() {
@@ -1058,23 +1060,25 @@ window.toggleTipoProducto = function() {
         return 'bg-default';
     }
 
-// --- EDICIÓN MULTIOBJETIVO (Con Carga de Receta) ---
-window.editarProducto = async function(id) {
-    console.log("📝 Editando ID:", id);
-    
-    // 1. Buscar producto en memoria
-    const prod = productosData.find(p => p.id === id);
-    if(!prod) return;
+    // --- EDICIÓN MULTIOBJETIVO (Con Carga de Receta) ---
+    window.editarProducto = async function(id) {
+        console.log("📝 Editando ID:", id);
+        
+        // 1. Buscar producto en memoria
+        const prod = productosData.find(p => p.id === id);
+        if(!prod) return;
 
-    // 2. DETECTAR TODOS LOS MODALES (Fantasmas y Reales)
-    const modales = document.querySelectorAll('#modal-producto');
-    console.log(`⚠️ Se encontraron ${modales.length} modales en pantalla.`);
+        // 2. OBTENER EL MODAL ACTIVO (El último del DOM para evitar fantasmas)
+        const modales = document.querySelectorAll('#modal-producto');
+        console.log(`ℹ️ Se encontraron ${modales.length} modales en pantalla.`);
+        
+        const modal = modales[modales.length - 1]; // Tomamos siempre el más reciente
+        if(!modal) return;
 
-    // 3. ACTUALIZARLOS TODOS
-    modales.forEach((modal) => {
+        // 3. ACTUALIZAR EL MODAL CORRECTO
         modal.classList.add('active');
         
-        // Buscamos los inputs
+        // Buscamos los inputs dentro de ESTE modal específico
         const titulo = modal.querySelector('#modal-title');
         const iId = modal.querySelector('#prod-id');
         const iNombre = modal.querySelector('#prod-nombre');
@@ -1117,54 +1121,51 @@ window.editarProducto = async function(id) {
             sTipo.value = tipoBD;
             if (sTipo.selectedIndex === -1) sTipo.value = 'fisico';
         }
-    });
 
-    // 4. FORZAR VISIBILIDAD DE STOCK (Toggle Visual)
-    if(window.toggleTipoProducto) window.toggleTipoProducto();
+        // 4. FORZAR VISIBILIDAD DE STOCK (Toggle Visual)
+        if(window.toggleTipoProducto) window.toggleTipoProducto();
 
-    // 5. 🔥 CARGAR RECETA SI ES COMBO 🔥
-    // Esta es la parte nueva que te faltaba
-    if (prod.tipo === 'combo') {
-        try {
-            // Mostrar "Cargando..." en la tabla del combo
-            document.querySelectorAll('#tabla-combo-items').forEach(tbody => {
-                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center">Cargando ingredientes...</td></tr>';
-            });
+        // 5. 🔥 CARGAR RECETA SI ES COMBO 🔥
+        if (prod.tipo === 'combo') {
+            try {
+                // Mostrar "Cargando..." en la tabla del combo
+                document.querySelectorAll('#tabla-combo-items').forEach(tbody => {
+                    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center">Cargando ingredientes...</td></tr>';
+                });
 
-            // Pedir receta al backend
-            const res = await fetch(`/api/inventario/${id}/receta`, {
-                headers: { 'x-auth-token': localStorage.getItem('token') }
-            });
-            
-            if (res.ok) {
-                const receta = await res.json();
-                // Llenar variable global
-                comboDetallesTemp = receta.map(r => ({
-                    id_producto: r.id_producto,
-                    nombre: r.nombre,
-                    cantidad: r.cantidad,
-                    costo: parseFloat(r.costo) || 0
-                }));
+                // Pedir receta al backend
+                const res = await fetch(`/api/inventario/${id}/receta`, {
+                    headers: { 'x-auth-token': localStorage.getItem('token') }
+                });
                 
-                // Actualizar UI
-                renderizarTablaCombo();
-                recalcularCostoCombo();
-            } else {
-                console.error("Error al cargar receta:", await res.text());
-                comboDetallesTemp = [];
-                renderizarTablaCombo();
+                if (res.ok) {
+                    const receta = await res.json();
+                    // Llenar variable global
+                    comboDetallesTemp = receta.map(r => ({
+                        id_producto: r.id_producto,
+                        nombre: r.nombre,
+                        cantidad: r.cantidad,
+                        costo: parseFloat(r.costo) || 0
+                    }));
+                    
+                    // Actualizar UI
+                    renderizarTablaCombo();
+                    recalcularCostoCombo();
+                } else {
+                    console.error("Error al cargar receta:", await res.text());
+                    comboDetallesTemp = [];
+                    renderizarTablaCombo();
+                }
+            } catch (e) {
+                console.error("Error de red cargando receta", e);
             }
-        } catch (e) {
-            console.error("Error de red cargando receta", e);
+        } else {
+            // Si no es combo, limpiamos la memoria de combos
+            comboDetallesTemp = [];
+            renderizarTablaCombo();
         }
-    } else {
-        // Si no es combo, limpiamos la memoria de combos
-        comboDetallesTemp = [];
-        renderizarTablaCombo();
-    }
-}
-    // Asegúrate de que esta función sea global (window.)
-    window.editarProducto = editarProducto;
+    };
+
 
         // --- ELIMINAR PRODUCTO (MODERNO) ---
     async function eliminarProducto(id) {
@@ -1422,6 +1423,6 @@ function renderizarTablaCombo() {
     }
 
     // INICIO
-    initInventario();
+    window.initInventario();
 
 })();

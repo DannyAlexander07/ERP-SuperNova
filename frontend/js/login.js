@@ -2,7 +2,6 @@
 
 const loginForm = document.getElementById('loginForm');
 const btnLogin = document.getElementById('btnLogin');
-const btnText = document.querySelector('.btn-text');
 
 // --- 🆕 NUEVA FUNCIÓN: Toast de Notificación Elegante ---
 function mostrarNotificacionLogin(mensaje) {
@@ -53,13 +52,18 @@ loginForm.addEventListener('submit', async (e) => {
         // 1. Petición al Backend
         const response = await fetch('/api/auth/login', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
         });
 
-        const data = await response.json();
+        // Validamos si la respuesta es realmente un JSON antes de parsearlo
+        let data;
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+            data = await response.json();
+        } else {
+            throw new Error('Error de conexión con el servidor. Intente nuevamente.');
+        }
 
         if (response.ok) {
             // 2. Éxito: Guardar Token y Datos

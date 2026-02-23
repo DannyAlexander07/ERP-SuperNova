@@ -69,6 +69,9 @@ exports.crearProducto = async (req, res) => {
         else if (catUpper === 'MERCH') lineaNegocio = 'MERCH';
         else if (catUpper === 'ARCADE') lineaNegocio = 'JUEGOS';
         else if (catUpper === 'EVENTOS') lineaNegocio = 'EVENTOS';
+        // 🛡️ BLINDAJE DE DATOS FINANCIEROS
+        const precioDecimal = parseFloat(precio) || 0;
+        const costoDecimal = parseFloat(costo) || 0;
         
         // A. Insertar Ficha Maestra
         const resProd = await client.query(
@@ -77,7 +80,7 @@ exports.crearProducto = async (req, res) => {
                 precio_venta, costo_compra, unidad_medida, imagen_url, 
                 linea_negocio
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-            [nombre, codigo, categoria, tipoLimpio, precio, costo, unidad, imagen, lineaNegocio]
+            [nombre, codigo, categoria, tipoLimpio, precioDecimal, costoDecimal, unidad, imagen, lineaNegocio]
         );
         const nuevoId = resProd.rows[0].id;
 
@@ -100,14 +103,14 @@ exports.crearProducto = async (req, res) => {
                 await client.query(
                     `INSERT INTO inventario_lotes (sede_id, producto_id, cantidad_inicial, cantidad_actual, costo_unitario, estado) 
                      VALUES ($1, $2, $3, $3, $4, 'ACTIVO')`,
-                    [sedeId, nuevoId, stockInicial, costo]
+                    [sedeId, nuevoId, stockInicial, costoDecimal] // <--- AHORA SÍ ESTÁ 100% BLINDADO
                 );
 
                 // Registro en Kardex para auditoría
                 await client.query(
                     `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
-                     VALUES ($1, $2, $3, 'entrada', $4, $5, 'Stock Inicial', $6)`,
-                    [sedeId, nuevoId, usuarioId, stockInicial, stockInicial, costo]
+                    VALUES ($1, $2, $3, 'entrada', $4, $5, 'Stock Inicial', $6)`,
+                    [sedeId, nuevoId, usuarioId, stockInicial, stockInicial, costoDecimal]
                 );
             }
         }
@@ -319,12 +322,15 @@ exports.actualizarProducto = async (req, res) => {
         let tipoLimpio = (tipo || 'fisico').toLowerCase().trim();
         if (tipoLimpio === 'físico') tipoLimpio = 'fisico';
 
+        const precioDecimal = parseFloat(precio) || 0;
+        const costoDecimal = parseFloat(costo) || 0;
+
         // 1. Actualizar Datos Globales (CORREGIDO: Se agregó codigo_interno)
         await client.query(
             `UPDATE productos 
              SET nombre=$1, codigo_interno=$2, precio_venta=$3, categoria=$4, costo_compra=$5, tipo_item=$6 
              WHERE id=$7`,
-            [nombre, codigo, precio, categoria, costo, tipoLimpio, id]
+            [nombre, codigo, precioDecimal, categoria, costoDecimal, tipoLimpio, id]
         );
 
         // 2. Lógica de Stock (Sin cambios)

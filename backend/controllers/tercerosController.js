@@ -457,8 +457,15 @@ exports.pagarCuota = async (req, res) => {
         const precioUnitarioParaFactura = Number((totalPagar / cantidadReal).toFixed(10));
         const descripcionItem = `${cuota.nombre_producto || 'PAGO CUOTA'} [Cuota ${cuota.numero_cuota}]`;
 
-        const subtotal = Number((totalPagar / 1.18).toFixed(2));
-        const igv = Number((totalPagar - subtotal).toFixed(2));
+        // 🛡️ CORRECCIÓN: Si es Recibo Interno (no oficial), no se calcula IGV.
+        let subtotal, igv;
+        if (tipo_comprobante === 'Recibo Interno') {
+            subtotal = totalPagar;
+            igv = 0;
+        } else {
+            subtotal = Number((totalPagar / 1.18).toFixed(2));
+            igv = Number((totalPagar - subtotal).toFixed(2));
+        }
 
         // Correlativo Ticket Interno
         const sedeRes = await client.query('SELECT prefijo_ticket FROM sedes WHERE id = $1', [sedeId]);
@@ -540,20 +547,22 @@ exports.pagarCuota = async (req, res) => {
 
         await client.query('COMMIT');
 
-        // 8. Facturación NUBEFACT (Asíncrono)
-        setImmediate(() => {
-            facturacionController.emitirComprobante({
-                body: { 
-                    venta_id: ventaId, 
-                    formato_pdf: formato_pdf || '3', 
-                    cliente_email 
-                },
-                usuario: req.usuario
-            }, {
-                json: (d) => console.log(`[B2B] Factura enviada: ${ventaId}`),
-                status: () => ({ json: () => {} })
+        // 8. Facturación NUBEFACT (Solo si es documento oficial)
+        if (tipo_comprobante === 'Factura' || tipo_comprobante === 'Boleta') {
+            setImmediate(() => {
+                facturacionController.emitirComprobante({
+                    body: { 
+                        venta_id: ventaId, 
+                        formato_pdf: formato_pdf || '3', 
+                        cliente_email 
+                    },
+                    usuario: req.usuario
+                }, {
+                    json: (d) => console.log(`[B2B] Comprobante oficial enviado: ${ventaId}`),
+                    status: () => ({ json: (e) => console.error(`[B2B] Error de facturación:`, e) })
+                });
             });
-        });
+        }
 
         res.json({ msg: "Pago registrado y factura generada.", ticketCodigo: codigoTicket, ventaId });
 
@@ -751,7 +760,7 @@ exports.obtenerHistorialTotal = async (req, res) => {
         } else {
             // MODO TABLA: Con Paginación
             const pagina = parseInt(page) || 1;
-            const limite = parseInt(limit) || 20;
+            const limite = Math.min(parseInt(limit) || 20, 100); // MÁXIMO 100 por página, por seguridad
             const offset = (pagina - 1) * limite;
 
             queryFinal = `

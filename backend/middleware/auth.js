@@ -14,7 +14,13 @@ const checkAuth = function(req, res, next) {
     }
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secretoseguro');
+        // 🛡️ SEGURIDAD EXTREMA: Si no hay secreto en el entorno, fallamos la autenticación
+        if (!process.env.JWT_SECRET) {
+            console.error('[CRÍTICO] JWT_SECRET no está definido en las variables de entorno.');
+            throw new Error('Configuración de seguridad interna comprometida.');
+        }
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
         
         // 🛡️ REGLA DE ORO RETAIL: El usuario DEBE tener un ID y una Sede
         if (!decoded.usuario || !decoded.usuario.id || !decoded.usuario.sede_id) {
@@ -23,6 +29,7 @@ const checkAuth = function(req, res, next) {
 
         req.usuario = decoded.usuario; 
         next();
+        
     } catch (err) {
         console.error(`[AUTH] Token inválido o expirado: ${err.message}`);
         res.status(401).json({ msg: 'Su sesión ha expirado o el token no es válido. Re-ingrese al sistema.' });

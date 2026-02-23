@@ -1,14 +1,10 @@
 // Ubicacion: SuperNova/backend/controllers/facturasController.js
 const pool = require('../db');
 
-// =======================================================
-// 1. GESTIÓN DE FACTURAS / GASTOS
-// =======================================================
-
-// 1.1 OBTENER TODAS LAS FACTURAS (ACTUALIZADO: Registro de Compras Completo)
+// 1.1 OBTENER TODAS LAS FACTURAS (ACTUALIZADO: Soporte para JSONB, Impuestos y Registro de Compras)
 exports.obtenerFacturas = async (req, res) => {
     try {
-        // 🚀 SE INCLUYEN montos adicionales y glosas para la vista global
+        // 🚀 SE INCLUYEN TODOS los campos necesarios para la reconstrucción en el Front-end
         const result = await pool.query(`
             SELECT 
                 f.id,
@@ -34,9 +30,12 @@ exports.obtenerFacturas = async (req, res) => {
                 f.cci,                
                 f.clasificacion,      
                 f.programado_hoy,
-                -- 🚀 NUEVOS CAMPOS INCLUIDOS
+                f.forma_pago,
+                -- 🚀 CAMPOS CRÍTICOS PARA EL MODAL DE EDICIÓN
                 f.monto_adicional,
                 f.glosa_adicional,
+                f.adicionales,        -- El JSONB con todos los conceptos
+                f.operacion_impuesto, -- 'suma' o 'resta'
                 
                 p.razon_social AS proveedor,
                 s.nombre AS sede,
@@ -53,9 +52,8 @@ exports.obtenerFacturas = async (req, res) => {
             FROM facturas f
             LEFT JOIN proveedores p ON f.proveedor_id = p.id
             LEFT JOIN sedes s ON f.sede_id = s.id
-            -- El Registro de Compras no lleva filtros para ser un historial total
             ORDER BY f.fecha_emision DESC
-            LIMIT 500
+            LIMIT 700
         `);
         
         const facturasConSaldo = result.rows.map(f => ({
@@ -63,8 +61,16 @@ exports.obtenerFacturas = async (req, res) => {
             // Aseguramos que los cálculos usen los valores numéricos correctos
             saldo_pendiente: Number(f.monto_total) - Number(f.monto_pagado),
             dias_vencidos_count: parseInt(f.dias_mora),
-            // Parseamos los nuevos montos para evitar problemas de strings en el front
-            monto_adicional: Number(f.monto_adicional || 0)
+            
+            // Parseamos montos para evitar problemas de strings en el front
+            monto_adicional: Number(f.monto_adicional || 0),
+            monto_total: Number(f.monto_total || 0),
+            base_imponible: Number(f.base_imponible || 0),
+            porcentaje_detraccion: Number(f.porcentaje_detraccion || 0),
+
+            // 🚀 IMPORTANTE: Si 'adicionales' viene como string (depende de la config del driver), 
+            // lo parseamos a objeto real para que el JS lo recorra fácilmente.
+            adicionales: typeof f.adicionales === 'string' ? JSON.parse(f.adicionales) : (f.adicionales || [])
         }));
 
         res.json(facturasConSaldo);
@@ -75,54 +81,53 @@ exports.obtenerFacturas = async (req, res) => {
     }
 };
 
-// 1.2 CREAR NUEVA FACTURA (ACTUALIZADO: Independiente de Caja y con Adicionales Dinámicos)
+// 1.2 CREAR NUEVA FACTURA (ACTUALIZADO: Soporte para JSONB y Operación de Impuesto)
 exports.crearFactura = async (req, res) => {
     let {
         proveedorId, glosa, sede, tipo, serie, emision, vencimiento,
         moneda, total, formaPago, categoria,
         monto_base, impuesto_porcentaje, banco, cuenta, cci, programacion,
         clasificacion,
-        // 🚀 RECIBIMOS EL DETALLE DINÁMICO DESDE EL FRONTEND
-        detalles_adicionales 
+        // 🚀 RECIBIMOS LOS NUEVOS CAMPOS
+        adicionales, 
+        operacion_impuesto 
     } = req.body;
 
     const usuarioId = req.usuario ? req.usuario.id : null; 
     const evidenciaUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
-    // --- 🛡️ PROCESAMIENTO DE ADICIONALES DINÁMICOS ---
+    // --- 🛡️ PROCESAMIENTO DE ADICIONALES DINÁMICOS (JSONB) ---
     let montoAdicionalTotal = 0;
     let glosaAdicionalConcatenada = "";
+    let adicionalesJson = '[]'; // Valor por defecto para JSONB
 
-    if (detalles_adicionales) {
+    if (adicionales) {
         try {
             // Parseamos el JSON que viene del frontend
-            const listaAdicionales = JSON.parse(detalles_adicionales);
+            const listaAdicionales = JSON.parse(adicionales);
             if (Array.isArray(listaAdicionales)) {
-                // Sumamos todos los montos de la lista
+                adicionalesJson = adicionales; // Guardamos el string original para la columna JSONB
+                
+                // Sumamos montos para la columna numérica
                 montoAdicionalTotal = listaAdicionales.reduce((acc, curr) => acc + parseFloat(curr.monto || 0), 0);
-                // Concatenamos las descripciones para guardarlas en una sola columna
+                
+                // Concatenamos para la glosa de texto (fallback)
                 glosaAdicionalConcatenada = listaAdicionales
-                    .map(item => `${item.descripcion}: ${item.monto}`)
+                    .map(item => `${item.glosa || 'Adicional'}: ${item.monto}`)
                     .join(" | ");
             }
         } catch (e) {
             console.error("Error al parsear adicionales:", e);
-            // Fallback por seguridad
             montoAdicionalTotal = parseFloat(req.body.monto_adicional) || 0;
-            glosaAdicionalConcatenada = req.body.glosa_adicional || "";
         }
     }
 
-    // --- 🛡️ CORRECCIÓN PARA EL ERROR NUMERIC ---
+    // --- 🛡️ PROCESAMIENTO DE IMPUESTO ---
     let impuestoNumerico = parseFloat(impuesto_porcentaje);
-    if (isNaN(impuestoNumerico)) {
-        impuestoNumerico = 0; 
-    }
+    if (isNaN(impuestoNumerico)) impuestoNumerico = 0;
 
     // --- 🛡️ NORMALIZACIÓN DE CLASIFICACIÓN ---
-    if (clasificacion === 'Implementacion') {
-        clasificacion = 'Implementación';
-    }
+    if (clasificacion === 'Implementacion') clasificacion = 'Implementación';
     const clasificacionFinal = clasificacion || 'Operativo';
 
     // Validaciones básicas
@@ -133,15 +138,13 @@ exports.crearFactura = async (req, res) => {
         return res.status(400).json({ msg: 'El Monto Total debe ser mayor a cero.' });
     }
 
-    // Estado interno de la factura
-    const estadoPago = formaPago === 'Contado' ? 'pagado' : 'pendiente';
+    const estadoPago = 'pendiente';
     const client = await pool.connect();
 
     try {
         await client.query('BEGIN');
 
-        // A. Insertar en la tabla facturas
-        // Nota: Se eliminó cualquier inserción en movimientos_caja para mantener la independencia
+        // A. Insertar en la tabla facturas (Incluyendo adicionales y operacion_impuesto)
         const result = await client.query(
             `INSERT INTO facturas (
                 proveedor_id, usuario_id, sede_id, descripcion, tipo_documento, 
@@ -149,51 +152,54 @@ exports.crearFactura = async (req, res) => {
                 monto_total, categoria_gasto, evidencia_url, estado_pago, 
                 base_imponible, porcentaje_detraccion, banco, numero_cuenta, 
                 cci, fecha_programacion, clasificacion, programado_hoy,
-                monto_adicional, glosa_adicional, forma_pago
+                monto_adicional, glosa_adicional, forma_pago,
+                adicionales, operacion_impuesto
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 
                 $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, FALSE,
-                $21, $22, $23
+                $21, $22, $23, $24, $25
             )
             RETURNING id, numero_documento`,
             [
-                proveedorId,               // $1
-                usuarioId,                 // $2
-                sede,                      // $3
-                glosa,                     // $4
-                tipo,                      // $5
-                serie,                     // $6
-                emision,                   // $7
-                vencimiento,               // $8
-                moneda,                    // $9
-                total,                     // $10
-                categoria,                 // $11
-                evidenciaUrl,              // $12
-                estadoPago,                // $13
-                monto_base || 0,           // $14
-                impuestoNumerico,          // $15
-                banco,                     // $16
-                cuenta,                    // $17
-                cci,                       // $18
-                programacion || null,      // $19
-                clasificacionFinal,        // $20
-                montoAdicionalTotal,       // $21
+                proveedorId,             // $1
+                usuarioId,               // $2
+                sede,                    // $3
+                glosa,                   // $4
+                tipo,                    // $5
+                serie,                   // $6
+                emision,                 // $7
+                vencimiento,             // $8
+                moneda,                  // $9
+                total,                   // $10
+                categoria,               // $11
+                evidenciaUrl,            // $12
+                estadoPago,              // $13
+                monto_base || 0,         // $14
+                impuestoNumerico,        // $15
+                banco,                   // $16
+                cuenta,                  // $17
+                cci,                     // $18
+                programacion || null,    // $19
+                clasificacionFinal,      // $20
+                montoAdicionalTotal,     // $21
                 glosaAdicionalConcatenada, // $22
-                formaPago                  // $23
+                formaPago,               // $23
+                adicionalesJson,         // $24 (JSONB)
+                operacion_impuesto || 'suma' // $25
             ]
         );
 
         const facturaId = result.rows[0].id;
 
-        // B. Registro de Auditoría (Para saber quién creó el registro)
+        // B. Registro de Auditoría
         await client.query(
             `INSERT INTO auditoria (usuario_id, accion, modulo, registro_id, detalle) 
              VALUES ($1, 'CREAR', 'FACTURAS', $2, $3)`,
-            [usuarioId, facturaId, `Creó registro de gasto N° ${result.rows[0].numero_documento} (Sin afectar Caja)`]
+            [usuarioId, facturaId, `Creó registro de gasto N° ${result.rows[0].numero_documento}`]
         );
 
         await client.query('COMMIT');
-        res.json({ msg: 'Gasto registrado correctamente (Registro independiente)', factura: result.rows[0] });
+        res.json({ msg: 'Gasto registrado correctamente', factura: result.rows[0] });
 
     } catch (err) {
         await client.query('ROLLBACK');
@@ -214,8 +220,8 @@ exports.eliminarFactura = async (req, res) => {
     try {
         await client.query('BEGIN');
         
-        // 1. Verificar si tiene pagos asociados
-        const pagosRes = await client.query('SELECT COUNT(*) FROM movimientos_caja WHERE gasto_id = $1', [id]);
+        // 1. Verificar si tiene pagos asociados en la tabla correcta
+        const pagosRes = await client.query('SELECT COUNT(*) FROM pagos_facturas WHERE factura_id = $1', [id]);
         if (parseInt(pagosRes.rows[0].count) > 0) {
             throw new Error('No se puede eliminar: La factura ya tiene pagos registrados en caja.');
         }
@@ -246,7 +252,7 @@ exports.eliminarFactura = async (req, res) => {
     }
 };
 
-// 1.4 ACTUALIZAR FACTURA (ACTUALIZADO: Independiente de Caja y con Adicionales Dinámicos)
+// 1.4 ACTUALIZAR FACTURA (ACTUALIZADO: Soporte para JSONB, Operación de Impuesto y Clasificación)
 exports.actualizarFactura = async (req, res) => {
     const { id } = req.params;
     
@@ -256,35 +262,38 @@ exports.actualizarFactura = async (req, res) => {
         moneda, total, categoria,
         monto_base, impuesto_porcentaje, banco, cuenta, cci, programacion,
         clasificacion,
-        // 🚀 RECIBIMOS EL DETALLE DINÁMICO DESDE EL FRONTEND
-        detalles_adicionales 
+        // 🚀 RECIBIMOS LOS CAMPOS ACTUALIZADOS
+        adicionales, 
+        operacion_impuesto 
     } = req.body;
     
     const usuarioId = req.usuario ? req.usuario.id : null; 
 
-    // --- 🛡️ PROCESAMIENTO DE ADICIONALES DINÁMICOS ---
+    // --- 🛡️ PROCESAMIENTO DE ADICIONALES DINÁMICOS (JSONB) ---
     let montoAdicionalTotal = 0;
     let glosaAdicionalConcatenada = "";
+    let adicionalesJson = '[]'; 
 
-    if (detalles_adicionales) {
+    if (adicionales) {
         try {
-            const listaAdicionales = JSON.parse(detalles_adicionales);
+            // Parseamos el JSON que viene del frontend
+            const listaAdicionales = JSON.parse(adicionales);
             if (Array.isArray(listaAdicionales)) {
-                // Sumamos montos y concatenamos descripciones
+                adicionalesJson = adicionales; // Mantenemos el string para la columna JSONB
+                
+                // Sumamos montos y concatenamos descripciones para compatibilidad
                 montoAdicionalTotal = listaAdicionales.reduce((acc, curr) => acc + parseFloat(curr.monto || 0), 0);
                 glosaAdicionalConcatenada = listaAdicionales
-                    .map(item => `${item.descripcion}: ${item.monto}`)
+                    .map(item => `${item.glosa || 'Adicional'}: ${item.monto}`)
                     .join(" | ");
             }
         } catch (e) {
             console.error("Error al parsear adicionales en actualización:", e);
-            // Fallback por si llega en formato simple
             montoAdicionalTotal = parseFloat(req.body.monto_adicional) || 0;
-            glosaAdicionalConcatenada = req.body.glosa_adicional || "";
         }
     }
 
-    // --- 🛡️ SANITIZACIÓN DE DATOS RESTANTES ---
+    // --- 🛡️ SANITIZACIÓN DE DATOS ---
     monto_base = (monto_base === "" || monto_base === null) ? 0 : monto_base;
     let impuestoNumerico = parseFloat(impuesto_porcentaje) || 0;
     
@@ -292,7 +301,10 @@ exports.actualizarFactura = async (req, res) => {
     cuenta = cuenta ? cuenta.trim() : null;
     cci = cci ? cci.trim() : null;
     programacion = (programacion === "" || programacion === null) ? null : programacion;
-    clasificacion = clasificacion || 'Operativo';
+    
+    // Normalización de clasificación
+    if (clasificacion === 'Implementacion') clasificacion = 'Implementación';
+    const clasificacionFinal = clasificacion || 'Operativo';
 
     // Validaciones básicas
     if (!proveedorId || !emision || !total || !categoria) {
@@ -311,14 +323,9 @@ exports.actualizarFactura = async (req, res) => {
                 'UPDATE facturas SET evidencia_url = $1 WHERE id = $2',
                 [nuevaEvidenciaUrl, id]
             );
-        }
+        };
 
-        // --- B. ESTADO DE PAGO (SIN IMPACTO EN CAJA) ---
-        // Definimos el estado basado en el formulario para control interno del módulo
-        const nuevoEstadoPago = (formaPago === 'Contado') ? 'pagado' : 'pendiente';
-
-        // --- C. ACTUALIZAR DATOS DE LA FACTURA ---
-        // Nota: Se eliminó todo el bloque de UPDATE/INSERT en movimientos_caja
+        // --- C. ACTUALIZAR DATOS DE LA FACTURA (Protegiendo el estado de pago) ---
         const result = await client.query(
             `UPDATE facturas SET
                 proveedor_id = $1, 
@@ -337,12 +344,13 @@ exports.actualizarFactura = async (req, res) => {
                 banco = $14, 
                 numero_cuenta = $15, 
                 cci = $16,
-                estado_pago = $17,
-                fecha_programacion = $19,
-                clasificacion = $20,
-                monto_adicional = $21,
-                glosa_adicional = $22
-            WHERE id = $18 RETURNING *`,
+                fecha_programacion = $17,
+                clasificacion = $18,
+                monto_adicional = $19,
+                glosa_adicional = $20,
+                adicionales = $21,
+                operacion_impuesto = $22
+            WHERE id = $23 RETURNING *`,
             [
                 proveedorId,               // $1
                 sede,                      // $2
@@ -360,24 +368,25 @@ exports.actualizarFactura = async (req, res) => {
                 banco,                     // $14
                 cuenta,                    // $15
                 cci,                       // $16
-                nuevoEstadoPago,           // $17
-                id,                        // $18
-                programacion,              // $19
-                clasificacion,             // $20
-                montoAdicionalTotal,       // $21
-                glosaAdicionalConcatenada  // $22
+                programacion,              // $17
+                clasificacionFinal,        // $18
+                montoAdicionalTotal,       // $19
+                glosaAdicionalConcatenada, // $20
+                adicionalesJson,           // $21
+                operacion_impuesto || 'suma', // $22
+                id                         // $23
             ]
         );
 
-        // Auditoría (Para trazabilidad del cambio)
+        // Auditoría
         await client.query(
             `INSERT INTO auditoria (usuario_id, accion, modulo, registro_id, detalle) 
              VALUES ($1, 'ACTUALIZAR', 'FACTURAS', $2, $3)`,
-            [usuarioId, id, `Actualizó factura N° ${serie} (Clasif: ${clasificacion}). Registro independiente de caja.`]
+            [usuarioId, id, `Actualizó factura N° ${serie}. Se actualizaron montos y conceptos adicionales.`]
         );
 
         await client.query('COMMIT');
-        res.json({ msg: 'Factura actualizada correctamente (Sin afectar flujo de caja)', factura: result.rows[0] });
+        res.json({ msg: 'Factura actualizada correctamente', factura: result.rows[0] });
 
     } catch (err) {
         await client.query('ROLLBACK');

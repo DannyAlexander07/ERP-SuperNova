@@ -426,19 +426,14 @@ exports.obtenerDetalleVenta = async (req, res) => {
                 const horaInicio = new Date(evt.fecha_inicio).toLocaleTimeString('es-PE', {hour: '2-digit', minute:'2-digit'});
                 const horaFin = new Date(evt.fecha_fin).toLocaleTimeString('es-PE', {hour: '2-digit', minute:'2-digit'});
 
-                // 🔥 HTML INYECTADO ACTUALIZADO
-                const infoExtra = `
-                    <div style="margin-top:6px; font-size:11px; color:#64748b; line-height:1.4; background:#f8fafc; padding:6px; border-radius:6px; border:1px dashed #cbd5e1;">
-                        <div style="font-weight:bold; color:#475569;">🎂 Cumpleañero: <span style="color:#000;">${evt.nombre_hijo}</span></div>
-                        <div>📅 Fecha: ${fecha}</div>
-                        <div>⏰ Hora: ${horaInicio} a ${horaFin}</div>
-                        <div>📍 Sede: <strong>${evt.nombre_sede || 'Sede Central'}</strong> - ${evt.salon || 'Sala General'}</div>
-                    </div>
-                `;
-
-                // Agregamos esta info al primer ítem de la lista
+                // Agregamos la metadata del evento limpia para que el Frontend la dibuje
                 if (items.length > 0) {
-                    items[0].nombre_producto_historico += infoExtra;
+                    items[0].metadata_evento = {
+                        cumpleanero: evt.nombre_hijo,
+                        fecha: fecha,
+                        horario: `${horaInicio} a ${horaFin}`,
+                        ubicacion: `${evt.nombre_sede || 'Sede Central'} - ${evt.salon || 'Sala General'}`
+                    };
                 }
             }
         }
@@ -530,7 +525,7 @@ exports.eliminarVenta = async (req, res) => {
         if (venta.origen !== 'COBRO_CUOTA') {
             
             // ✅ CORRECCIÓN: Traemos también 'costo_historico' para devolverlo al Kardex con valor
-            const detallesRes = await client.query('SELECT producto_id, cantidad, costo_historico FROM detalle_ventas WHERE venta_id = $1', [id]);
+            const detallesRes = await client.query('SELECT producto_id, cantidad, costo_historico FROM detalle_ventas WHERE venta_id = $1 ORDER BY producto_id ASC', [id]);
             
             for (const item of detallesRes.rows) {
                 if (!item.producto_id) continue;

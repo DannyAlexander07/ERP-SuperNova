@@ -282,12 +282,12 @@ exports.pagarCuota = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // 1. Obtener datos de la cuota y del préstamo padre
+        // 1. Obtener datos de la cuota y bloquear la fila para evitar doble pago (FOR UPDATE)
         const qCuota = await client.query(`
             SELECT c.*, p.tipo_flujo, p.codigo_prestamo, p.moneda, p.id AS p_id
             FROM prestamos_cronograma c
             JOIN prestamos p ON c.prestamo_id = p.id
-            WHERE c.id = $1
+            WHERE c.id = $1 FOR UPDATE
         `, [id]);
 
         if (qCuota.rows.length === 0) throw new Error('Cuota no encontrada');
@@ -648,22 +648,39 @@ exports.actualizarPrestamo = async (req, res) => {
     }
 };
 
-// ELIMINAR PRÉSTAMO
+// ELIMINAR PRÉSTAMO (Blindado contra ruptura de caja)
 exports.eliminarPrestamo = async (req, res) => {
     const { id } = req.params;
     const client = await pool.connect();
+    
     try {
         await client.query('BEGIN');
-        // Borrar cronograma primero (FK)
+        
+        // 1. Verificar si el préstamo ya tiene pagos registrados
+        const checkPagos = await client.query(
+            'SELECT 1 FROM pagos_prestamos WHERE prestamo_id = $1 LIMIT 1', 
+            [id]
+        );
+        
+        if (checkPagos.rows.length > 0) {
+            throw new Error("No se puede eliminar: Este préstamo ya tiene cuotas pagadas y dinero registrado en caja. Si hubo un error, debe anularse contablemente.");
+        }
+
+        // 2. Si está limpio, procedemos a borrar cronograma primero (FK)
         await client.query("DELETE FROM prestamos_cronograma WHERE prestamo_id = $1", [id]);
-        // Borrar cabecera
+        
+        // 3. Borrar cabecera
         await client.query("DELETE FROM prestamos WHERE id = $1", [id]);
         
         await client.query('COMMIT');
-        res.json({ msg: "Eliminado" });
+        res.json({ msg: "Préstamo eliminado correctamente del sistema" });
+        
     } catch (e) {
         await client.query('ROLLBACK');
-        res.status(500).json({ msg: "Error al eliminar" });
+        console.error("❌ Error al eliminar préstamo:", e.message);
+        // Si el error es nuestro (el throw new Error de arriba), mandamos código 400
+        const status = e.message.includes('No se puede eliminar') ? 400 : 500;
+        res.status(status).json({ msg: e.message });
     } finally {
         client.release();
     }

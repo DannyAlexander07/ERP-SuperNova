@@ -393,181 +393,192 @@
         }
     }
 
-// --- PROCESAR VENTA (ACTUALIZADO: VALIDACIÓN ESTRICTA DE DNI/NOMBRE) ---
-window.procesarVenta = async function() {
-    // 0. Validación inicial de carrito
-    if (carrito.length === 0) {
-        return mostrarModalResultado("⚠️ Carrito vacío", "Por favor, añade productos antes de procesar.", "warning");
-    }
-
-    const btn = document.querySelector('.btn-primary.full-width');
-    const originalText = btn.innerText;
-    
-    // 1. Recopilar datos básicos y de asignación
-    const vendedorId = document.getElementById('modal-vendedor').value;
-    const tipoVenta = document.getElementById('modal-tipo-venta').value;
-    
-    // Datos de Descuento
-    const selectorConvenio = document.getElementById('modal-convenio');
-    const descuentoFactor = parseFloat(selectorConvenio.value) || 0;
-    const nombreConvenio = selectorConvenio.options[selectorConvenio.selectedIndex].text;
-    
-    // 2. Recopilar métodos de pago y tarjeta
-    const metodoPago = document.querySelector('input[name="pago"]:checked').value;
-    let tipoTarjeta = (metodoPago === 'Tarjeta') ? document.querySelector('input[name="tipo_tarjeta"]:checked').value : null;
-
-    // 3. Recopilar datos de facturación y CLIENTE
-    const tipoComprobante = document.querySelector('input[name="tipo_comprobante"]:checked').value;
-    
-    let docCliente = "00000000";
-    let nombreCliente = "CLIENTE VARIOS"; // Valor por defecto
-    let direccionCliente = "";
-    
-    if (tipoComprobante === 'Factura') {
-        // --- LÓGICA FACTURA ---
-        docCliente = document.getElementById('cliente-ruc').value.trim();
-        nombreCliente = document.getElementById('cliente-razon').value.trim(); 
-        direccionCliente = document.getElementById('cliente-direccion').value.trim();
-
-        if(!docCliente || docCliente.length !== 11) {
-            return mostrarModalResultado("RUC Inválido", "El RUC debe tener 11 dígitos exactos.", "error");
+// --- Lógica de Seguridad: Resetear nombre si cambia el DNI ---
+    window.detectarCambioDocumento = function(valor) {
+        const inputNombre = document.getElementById('cliente-nombre-natural');
+        if (inputNombre && inputNombre.readOnly) {
+            // Si el nombre estaba bloqueado (porque lo trajo la lupa), lo limpiamos y desbloqueamos
+            inputNombre.value = "";
+            inputNombre.readOnly = false;
+            inputNombre.style.backgroundColor = "#fff";
         }
-        if(!nombreCliente) {
-            return mostrarModalResultado("Faltan Datos", "La Razón Social es obligatoria para emitir Factura.", "error");
+    };
+
+    // --- PROCESAR VENTA (ACTUALIZADO: VALIDACIÓN ESTRICTA DE DNI/NOMBRE) ---
+    window.procesarVenta = async function() {
+        // 0. Validación inicial de carrito
+        if (carrito.length === 0) {
+            return mostrarModalResultado("⚠️ Carrito vacío", "Por favor, añade productos antes de procesar.", "warning");
         }
-    } else {
-        // --- LÓGICA BOLETA / TICKET ---
-        const dniVal = document.getElementById('cliente-dni').value.trim();
-        // 🔥 AQUI LEEMOS EL CAMPO DONDE LA LUPA O EL USUARIO PUSO EL NOMBRE
-        const nombreVal = document.getElementById('cliente-nombre-natural').value.trim();
+
+        const btn = document.getElementById('btn-confirmar-venta');
+        const originalText = btn.innerText;
         
-        if(dniVal) {
-            // Si hay DNI escrito...
-            if(dniVal.length !== 8) {
-                return mostrarModalResultado("DNI Inválido", "El DNI debe tener 8 dígitos.", "error");
+        // 1. Recopilar datos básicos y de asignación
+        const vendedorId = document.getElementById('modal-vendedor').value;
+        const tipoVenta = document.getElementById('modal-tipo-venta').value;
+        
+        // Datos de Descuento
+        const selectorConvenio = document.getElementById('modal-convenio');
+        const descuentoFactor = parseFloat(selectorConvenio.value) || 0;
+        const nombreConvenio = selectorConvenio.options[selectorConvenio.selectedIndex].text;
+        
+        // 2. Recopilar métodos de pago y tarjeta
+        const metodoPago = document.querySelector('input[name="pago"]:checked').value;
+        let tipoTarjeta = (metodoPago === 'Tarjeta') ? document.querySelector('input[name="tipo_tarjeta"]:checked').value : null;
+
+        // 3. Recopilar datos de facturación y CLIENTE
+        const tipoComprobante = document.querySelector('input[name="tipo_comprobante"]:checked').value;
+        
+        let docCliente = "00000000";
+        let nombreCliente = "CLIENTE VARIOS"; // Valor por defecto
+        let direccionCliente = "";
+        
+        if (tipoComprobante === 'Factura') {
+            // --- LÓGICA FACTURA ---
+            docCliente = document.getElementById('cliente-ruc').value.trim();
+            nombreCliente = document.getElementById('cliente-razon').value.trim(); 
+            direccionCliente = document.getElementById('cliente-direccion').value.trim();
+
+            if(!docCliente || docCliente.length !== 11) {
+                return mostrarModalResultado("RUC Inválido", "El RUC debe tener 11 dígitos exactos.", "error");
             }
-            
-            // 🔥 VALIDACIÓN NUEVA: OBLIGAR A TENER NOMBRE
-            if (!nombreVal) {
-                return mostrarModalResultado(
-                    "Falta Nombre", 
-                    "Por favor, presiona la LUPA 🔍 para buscar el nombre o escríbelo manualmente.", 
-                    "warning"
-                );
+            if(!nombreCliente) {
+                return mostrarModalResultado("Faltan Datos", "La Razón Social es obligatoria para emitir Factura.", "error");
             }
-
-            docCliente = dniVal;
-            nombreCliente = nombreVal; 
-        } 
-        // Si dniVal está vacío, se mantienen los defaults ("00000000" y "CLIENTE VARIOS")
-    }
-
-    // 4. CAPTURAR EMAIL
-    const emailInput = document.getElementById('cliente-email');
-    let clienteEmail = emailInput ? emailInput.value.trim().toLowerCase() : "";
-    
-    if (clienteEmail && !/^\S+@\S+\.\S+$/.test(clienteEmail)) {
-        return mostrarModalResultado("Email Inválido", "Por favor, ingresa un correo válido.", "warning");
-    }
-
-    // 5. Capturar Formato de Impresión
-    const radioFormato = document.querySelector('input[name="formato_impresion"]:checked');
-    const formatoImpresion = radioFormato ? radioFormato.value : "3"; 
-
-    // Bloqueo de botón visual
-    btn.disabled = true;
-    btn.innerText = "Procesando...";
-
-    try {
-        // Generador de UUID para seguridad (Anti-duplicidad)
-        const uuidSeguridad = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        });
-
-        // 6. Preparar Payload (DATOS LISTOS PARA EL BACKEND)
-        const payload = {
-            carrito: carrito.map(i => ({ id: i.id, cantidad: i.cantidad })),
-            vendedor_id: vendedorId,
-            tipo_venta: tipoVenta,
-            metodoPago: metodoPago,
-            tipo_comprobante: tipoComprobante,
-            
-            // Datos del Cliente Procesados
-            clienteDni: docCliente, 
-            cliente_nombre_completo: nombreCliente, // Este es el nombre que saldrá en el ticket
-            cliente_razon_social: (tipoComprobante === 'Factura') ? nombreCliente : null,
-            cliente_direccion: direccionCliente,
-            cliente_email: clienteEmail,
-            
-            tipo_tarjeta: tipoTarjeta,
-            // Texto de observaciones para el ticket (si hay descuento)
-            observaciones: (descuentoFactor > 0) ? `[Descuento: ${(descuentoFactor * 100).toFixed(0)}%] ${nombreConvenio}` : "",
-            
-            formato_pdf: formatoImpresion,
-            descuento_factor: descuentoFactor,
-            uuid_unico: uuidSeguridad
-        };
-
-        const token = localStorage.getItem('token');
-        const res = await fetch('/api/ventas', {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'x-auth-token': token
-            },
-            body: JSON.stringify(payload)
-        });
-
-        const data = await res.json();
-
-        if (res.ok) {
-            cerrarModalCobro(); 
-
-            // Limpieza de UI y Carrito
-            carrito = []; 
-            if(typeof renderCarrito === 'function') renderCarrito(); 
-            
-            // Resetear inputs del formulario de cliente
-            const idsReset = [
-                'cliente-dni', 
-                'cliente-nombre-natural', // 🔥 Limpiamos el nombre también
-                'cliente-ruc', 
-                'cliente-razon', 
-                'cliente-direccion', 
-                'cliente-email'
-            ];
-            idsReset.forEach(id => {
-                const el = document.getElementById(id);
-                if(el) {
-                    el.value = '';
-                    el.readOnly = false; // Desbloquear por si acaso
-                }
-            });
-            
-            // Resetear descuento
-            if(document.getElementById('modal-convenio')) document.getElementById('modal-convenio').value = "0";
-
-            mostrarModalResultado(`Venta: ${data.ticketCodigo || 'Exitosa'}`, "Venta procesada correctamente.", "success");
-            
-            // Cerrar carrito lateral móvil si está abierto
-            const ticketPanel = document.querySelector('.pos-ticket');
-            if(ticketPanel) ticketPanel.classList.remove('active');
-            
-            // Recargar stock visual
-            if(typeof initPOS === 'function') initPOS(); 
-
         } else {
-            mostrarModalResultado("❌ Error en Venta", data.msg || "Error desconocido", "error");
+            // --- LÓGICA BOLETA / TICKET ---
+            const dniVal = document.getElementById('cliente-dni').value.trim();
+            // 🔥 AQUI LEEMOS EL CAMPO DONDE LA LUPA O EL USUARIO PUSO EL NOMBRE
+            const nombreVal = document.getElementById('cliente-nombre-natural').value.trim();
+            
+            if(dniVal) {
+                // Si hay DNI escrito...
+                if(dniVal.length !== 8) {
+                    return mostrarModalResultado("DNI Inválido", "El DNI debe tener 8 dígitos.", "error");
+                }
+                
+                // 🔥 VALIDACIÓN NUEVA: OBLIGAR A TENER NOMBRE
+                if (!nombreVal) {
+                    return mostrarModalResultado(
+                        "Falta Nombre", 
+                        "Por favor, presiona la LUPA 🔍 para buscar el nombre o escríbelo manualmente.", 
+                        "warning"
+                    );
+                }
+
+                docCliente = dniVal;
+                nombreCliente = nombreVal; 
+            } 
+            // Si dniVal está vacío, se mantienen los defaults ("00000000" y "CLIENTE VARIOS")
         }
-    } catch (error) {
-        console.error("Error en el flujo de venta:", error);
-        mostrarModalResultado("❌ Error de Conexión", "No se pudo conectar con el servidor.", "error");
-    } finally {
-        btn.disabled = false;
-        btn.innerText = originalText;
-    }
-};
+
+        // 4. CAPTURAR EMAIL
+        const emailInput = document.getElementById('cliente-email');
+        let clienteEmail = emailInput ? emailInput.value.trim().toLowerCase() : "";
+        
+        if (clienteEmail && !/^\S+@\S+\.\S+$/.test(clienteEmail)) {
+            return mostrarModalResultado("Email Inválido", "Por favor, ingresa un correo válido.", "warning");
+        }
+
+        // 5. Capturar Formato de Impresión
+        const radioFormato = document.querySelector('input[name="formato_impresion"]:checked');
+        const formatoImpresion = radioFormato ? radioFormato.value : "3"; 
+
+        // Bloqueo de botón visual
+        btn.disabled = true;
+        btn.innerText = "Procesando...";
+
+        try {
+            // Generador de UUID para seguridad (Anti-duplicidad)
+            const uuidSeguridad = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+
+            // 6. Preparar Payload (DATOS LISTOS PARA EL BACKEND)
+            const payload = {
+                carrito: carrito.map(i => ({ id: i.id, cantidad: i.cantidad })),
+                vendedor_id: vendedorId,
+                tipo_venta: tipoVenta,
+                metodoPago: metodoPago,
+                tipo_comprobante: tipoComprobante,
+                
+                // Datos del Cliente Procesados
+                clienteDni: docCliente, 
+                cliente_nombre_completo: nombreCliente, // Este es el nombre que saldrá en el ticket
+                cliente_razon_social: (tipoComprobante === 'Factura') ? nombreCliente : null,
+                cliente_direccion: direccionCliente,
+                cliente_email: clienteEmail,
+                
+                tipo_tarjeta: tipoTarjeta,
+                // Texto de observaciones para el ticket (si hay descuento)
+                observaciones: (descuentoFactor > 0) ? `[Descuento: ${(descuentoFactor * 100).toFixed(0)}%] ${nombreConvenio}` : "",
+                
+                formato_pdf: formatoImpresion,
+                descuento_factor: descuentoFactor,
+                uuid_unico: uuidSeguridad
+            };
+
+            const token = localStorage.getItem('token');
+            const res = await fetch('/api/ventas', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-auth-token': token
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                cerrarModalCobro(); 
+
+                // Limpieza de UI y Carrito
+                carrito = []; 
+                if(typeof renderCarrito === 'function') renderCarrito(); 
+                
+                // Resetear inputs del formulario de cliente
+                const idsReset = [
+                    'cliente-dni', 
+                    'cliente-nombre-natural', // 🔥 Limpiamos el nombre también
+                    'cliente-ruc', 
+                    'cliente-razon', 
+                    'cliente-direccion', 
+                    'cliente-email'
+                ];
+                idsReset.forEach(id => {
+                    const el = document.getElementById(id);
+                    if(el) {
+                        el.value = '';
+                        el.readOnly = false; // Desbloquear por si acaso
+                    }
+                });
+                
+                // Resetear descuento
+                if(document.getElementById('modal-convenio')) document.getElementById('modal-convenio').value = "0";
+
+                mostrarModalResultado(`Venta: ${data.ticketCodigo || 'Exitosa'}`, data.msg || "Venta procesada correctamente.", "success");
+                
+                // Cerrar carrito lateral móvil si está abierto
+                const ticketPanel = document.querySelector('.pos-ticket');
+                if(ticketPanel) ticketPanel.classList.remove('active');
+                
+                // Recargar stock visual
+                if(typeof initPOS === 'function') initPOS(); 
+
+            } else {
+                mostrarModalResultado("❌ Error en Venta", data.msg || "Error desconocido", "error");
+            }
+        } catch (error) {
+            console.error("Error en el flujo de venta:", error);
+            mostrarModalResultado("❌ Error de Conexión", "No se pudo conectar con el servidor.", "error");
+        } finally {
+            btn.disabled = false;
+            btn.innerText = originalText;
+        }
+    };
 
     // --- JS: AGREGAR SI FALTA ---
 window.toggleCarritoMovil = function() {

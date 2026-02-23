@@ -21,6 +21,10 @@ exports.obtenerProveedores = async (req, res) => {
 exports.crearProveedor = async (req, res) => {
     let { ruc, razon, direccion, categoria, dias, contacto, email, telefono, banco, estado } = req.body;
 
+    if (!razon || razon.trim() === '') {
+            return res.status(400).json({ msg: 'La Razón Social (Nombre de la empresa) es obligatoria.' });
+        }
+
     try {
         // 🛡️ BLINDAJE 1: Sanitización (Evitar espacios accidentales en campos clave)
         const rucLimpio = ruc ? ruc.toString().trim() : null;
@@ -57,6 +61,10 @@ exports.actualizarProveedor = async (req, res) => {
     const { id } = req.params;
     let { ruc, razon, direccion, categoria, dias, contacto, email, telefono, banco, estado } = req.body;
 
+    if (!razon || razon.trim() === '') {
+            return res.status(400).json({ msg: 'La Razón Social (Nombre de la empresa) es obligatoria.' });
+        }
+
     try {
         const rucLimpio = ruc ? ruc.toString().trim() : null;
 
@@ -88,25 +96,12 @@ exports.actualizarProveedor = async (req, res) => {
     }
 };
 
-// 4. ELIMINAR PROVEEDOR (Blindaje: Soft Delete si hay facturas o compras)
+// 4. ELIMINAR PROVEEDOR (Blindaje: Borrado Físico vs Soft Delete Automático)
 exports.eliminarProveedor = async (req, res) => {
     const { id } = req.params;
 
     try {
-        // 🛡️ BLINDAJE 3: Verificar vinculación con Inventario o Facturas de compra
-        // Asumiendo que tus tablas se llaman 'compras' o 'facturas_proveedor'
-        const historialCompras = await pool.query('SELECT 1 FROM inventario WHERE proveedor_id = $1 LIMIT 1', [id]);
-        
-        // También podrías verificar en una tabla de gastos o cuentas por pagar
-        // const historialGastos = await pool.query('SELECT 1 FROM gastos WHERE proveedor_id = $1 LIMIT 1', [id]);
-
-        if (historialCompras.rows.length > 0) {
-            // Si el proveedor nos ha surtido mercadería, no podemos borrarlo físicamente
-            await pool.query("UPDATE proveedores SET estado = 'ELIMINADO' WHERE id = $1", [id]);
-            return res.json({ msg: 'Proveedor archivado. No se puede eliminar físicamente porque tiene registros de mercadería asociados.' });
-        }
-
-        // Si es un proveedor sin historial, borrado físico
+        // 1. Intentamos hacer el borrado físico de frente
         const result = await pool.query('DELETE FROM proveedores WHERE id = $1 RETURNING *', [id]);
         
         if (result.rows.length === 0) return res.status(404).json({ msg: 'Proveedor no encontrado.' });
@@ -114,12 +109,15 @@ exports.eliminarProveedor = async (req, res) => {
         res.json({ msg: 'Proveedor eliminado permanentemente del sistema.' });
 
     } catch (err) {
-        console.error("❌ Error en eliminarProveedor:", err.message);
-        // Error de llave foránea genérico de PostgreSQL
+        // 🛡️ BLINDAJE NATIVO DE POSTGRESQL (Código 23503 = Violación de Llave Foránea)
+        // Si PostgreSQL detecta que el proveedor está amarrado a un Gasto o Compra, frena el DELETE.
         if (err.code === '23503') {
+            console.log(`⚠️ Proveedor ${id} en uso. Aplicando Soft Delete.`);
             await pool.query("UPDATE proveedores SET estado = 'ELIMINADO' WHERE id = $1", [id]);
-            return res.json({ msg: 'El proveedor fue archivado debido a que tiene registros contables vinculados.' });
+            return res.json({ msg: 'Proveedor archivado. No se puede eliminar físicamente porque tiene registros contables asociados.' });
         }
+        
+        console.error("❌ Error en eliminarProveedor:", err.message);
         res.status(500).json({ msg: 'Error del servidor al procesar la eliminación' });
     }
 };

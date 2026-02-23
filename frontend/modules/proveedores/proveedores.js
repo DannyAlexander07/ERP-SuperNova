@@ -9,7 +9,7 @@
     const filasPorPagina = 10;
 
     // --- 1. CARGA DE DATOS ---
-    async function initProveedores() {
+    window.initProveedores = async function() {
         try {
             const token = localStorage.getItem('token');
             const res = await fetch('/api/proveedores', {
@@ -112,6 +112,15 @@
             estado: 'activo'
         };
 
+        // 🛡️ BLINDAJE VISUAL: Evitar doble submit
+        const btnSave = document.getElementById('btn-guardar-proveedor');
+        let txtOriginal = "Guardar Proveedor";
+        if(btnSave) {
+            txtOriginal = btnSave.innerHTML;
+            btnSave.disabled = true;
+            btnSave.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Guardando...";
+        }
+
         try {
             const token = localStorage.getItem('token');
             const url = id ? `/api/proveedores/${id}` : '/api/proveedores';
@@ -128,13 +137,19 @@
             if(res.ok) {
                 showToast(resp.msg, "success");
                 window.cerrarModalProveedor();
-                initProveedores();
+                window.initProveedores();
             } else {
                 showToast(resp.msg, "error");
             }
         } catch (e) { 
             console.error(e); 
             showToast("Error de comunicación con el servidor.", "error"); 
+        } finally {
+            // 🔄 Restaurar el botón SIEMPRE
+            if(btnSave) {
+                btnSave.disabled = false;
+                btnSave.innerHTML = txtOriginal;
+            }
         }
     };
 
@@ -172,7 +187,7 @@
             
             if(res.ok) {
                 showToast(data.msg, "success");
-                initProveedores();
+                window.initProveedores();
             } else {
                 showToast(data.msg, "error");
             }
@@ -212,9 +227,8 @@
 
         const numero = inputDoc.value.trim();
 
-        // 2. Validaciones
         if (numero.length !== 8 && numero.length !== 11) {
-            return alert("⚠️ El documento debe tener 8 (DNI) u 11 (RUC) dígitos.");
+            return showToast("El documento debe tener 8 (DNI) u 11 (RUC) dígitos.", "warning");
         }
 
         // 3. Feedback Visual (Loading)
@@ -251,7 +265,7 @@
                     
                     // Alerta si el RUC no está bien
                     if (data.estado !== 'ACTIVO' || data.condicion !== 'HABIDO') {
-                        alert(`⚠️ ALERTA: RUC ${data.estado} / ${data.condicion}`);
+                        showToast(`⚠️ ALERTA: RUC ${data.estado} / ${data.condicion}`, "warning");
                     }
                 }
 
@@ -261,12 +275,12 @@
                 inputNombre.removeAttribute('readonly');
                 inputNombre.placeholder = "No encontrado. Escriba manualmente.";
                 inputNombre.focus();
-                alert("⚠️ " + (data.msg || "No se encontraron datos."));
+                showToast((data.msg || "No se encontraron datos."), "error");
             }
 
         } catch (error) {
             console.error("❌ Error JS:", error);
-            alert("Error de conexión con el servidor.");
+            showToast("Error de conexión con el servidor.", "error");
         } finally {
             // 5. Restaurar Icono
             if(iconBtn) {
@@ -300,6 +314,6 @@
         };
     }
 
-    initProveedores();
+    window.initProveedores();
 
 })();

@@ -1,5 +1,6 @@
 // Ubicación: frontend/modules/facturas/facturas.js
 (function() {
+    window.tesoreriaData = window.tesoreriaData || [];
     console.log("🚀 Módulo Finanzas y Tesorería CONECTADO");
 
     // =======================================================
@@ -7,7 +8,6 @@
     // =======================================================
     let facturasData = []; 
     let cuentasData = []; // Para la tabla de tesorería
-    let tesoreriaData = [];
     let paginaGastos = 1;
     let paginaCuentas = 1;
     let paginaPrestamos = 1;
@@ -372,7 +372,7 @@
                 valB = new Date(valB || '1900-01-01');
             } 
             // Lógica para números
-            else if (columna === 'monto_total' || columna === 'saldo_pendiente') {
+            else if (columna === 'monto_total' || columna === 'saldo_pendiente' || columna === 'amortizar') {
                 valA = parseFloat(valA || 0);
                 valB = parseFloat(valB || 0);
             }
@@ -549,52 +549,80 @@
     };
 
     /**
-     * 🧮 CALCULAR TOTAL IMPUESTO (Actualizado: Soporte para 'Otros' y Adicionales No Gravados)
-     * Sincronizado para sumar montos que no afectan el cálculo del impuesto (ej. Propinas).
+     * 🧮 CALCULAR TOTAL IMPUESTO
+     * Soporte para: Base Gravada, Impuestos (Suma/Resta/Otros) y Múltiples Adicionales No Gravados.
+     * Actualizado con manejo de precisión decimal y validación de contenedores.
      */
     window.calcularTotalImpuesto = function() {
-        // 1. Capturar valores base
-        const base = parseFloat(document.getElementById('fac-base').value) || 0;
+        // 1. Capturar la Base Gravada (Monto que afecta el impuesto)
+        const baseInput = document.getElementById('fac-base');
+        if (!baseInput) return;
+        const base = parseFloat(baseInput.value) || 0;
+        
+        // 2. Determinar Porcentaje y Tipo de Operación
         const impuestoSelect = document.getElementById('fac-impuesto-porc').value;
-        
-        // 🚀 NUEVO: Capturar el monto adicional (No gravado)
-        const montoAdicional = parseFloat(document.getElementById('fac-adicional-monto').value) || 0;
-        
         let porcentaje = 0;
-        let operacion = 'suma'; // Por defecto la mayoría suma
+        let operacion = 'suma'; 
 
-        // 2. Lógica de selección de impuesto
         if (impuestoSelect === 'otros') {
-            // Si es "Otros", leemos los campos personalizados
-            porcentaje = parseFloat(document.getElementById('fac-otros-porcentaje').value) || 0;
-            operacion = document.getElementById('fac-otros-operacion').value;
+            // Valores desde los campos personalizados (fac-otros-container)
+            const inputOtroPorc = document.getElementById('fac-otros-porcentaje');
+            const inputOtroOper = document.getElementById('fac-otros-operacion');
+            
+            porcentaje = inputOtroPorc ? (parseFloat(inputOtroPorc.value) || 0) : 0;
+            operacion = inputOtroOper ? inputOtroOper.value : 'suma';
         } else {
-            // Si es una opción estándar
+            // Valores desde el select estándar
             porcentaje = parseFloat(impuestoSelect) || 0;
-            // El 8% es la única opción estándar que resta (Retención)
-            if (porcentaje === 8) operacion = 'resta';
+            
+            // Lógica de negocio específica: 
+            // El 8% (Recibo por Honorarios) es tradicionalmente una Retención (Resta).
+            if (porcentaje === 8) {
+                operacion = 'resta';
+            }
         }
 
-        // 3. Cálculo del Subtotal (Base +/- Impuesto)
+        // 3. Calcular el monto del impuesto
+        // Usamos redondeo a 4 decimales durante el cálculo para evitar errores de coma flotante
+        const montoImpuesto = Math.round((base * (porcentaje / 100)) * 10000) / 10000;
+        
+        // 4. Calcular Subtotal (Base con el impuesto aplicado)
         let subtotalConImpuesto = 0;
-        const montoImpuesto = base * (porcentaje / 100);
-
         if (operacion === 'resta') {
             subtotalConImpuesto = base - montoImpuesto;
         } else {
             subtotalConImpuesto = base + montoImpuesto;
         }
 
-        // NUEVA LÓGICA: Sumar todos los adicionales
+        // 5. Sumar todos los Adicionales No Gravados (Dinamismo)
         let sumaAdicionales = 0;
-        const inputsMonto = document.querySelectorAll('.adicional-monto');
+        const inputsMontoAdicional = document.querySelectorAll('.adicional-monto');
         
-        inputsMonto.forEach(input => {
-            sumaAdicionales += parseFloat(input.value) || 0;
+        inputsMontoAdicional.forEach(input => {
+            const valor = parseFloat(input.value) || 0;
+            sumaAdicionales += valor;
         });
 
+        // 6. Resultado Final
+        // Sumamos el subtotal (Base +/- Impuesto) + los adicionales (Envío, Propinas, etc.)
         const totalFinal = subtotalConImpuesto + sumaAdicionales;
-        document.getElementById('fac-total-final').value = totalFinal.toFixed(2);
+        
+        // 7. Actualizar la Interfaz de Usuario
+        const campoTotal = document.getElementById('fac-total-final');
+        if (campoTotal) {
+            // Mostramos 2 decimales fijos
+            campoTotal.value = totalFinal.toFixed(2);
+            
+            // Mejora visual: Si el total es negativo (error de entrada), ponerlo en rojo
+            if (totalFinal < 0) {
+                campoTotal.style.color = "#ef4444";
+            } else {
+                campoTotal.style.color = "#0f172a";
+            }
+        }
+
+        // Depuración en consola (útil para verificar cálculos rápidos)
+        console.log(`[Cálculo] Base: ${base.toFixed(2)} | %: ${porcentaje} (${operacion}) | Impuesto: ${montoImpuesto.toFixed(2)} | Adicionales: ${sumaAdicionales.toFixed(2)} | Total: ${totalFinal.toFixed(2)}`);
     };
 
     // 🆕 FUNCIÓN ALERTA VENCIMIENTOS
@@ -615,7 +643,11 @@
         }
     }
 
-    // --- 4. GUARDAR FACTURA (ACTUALIZADO: Soporte para Lista Dinámica de Adicionales y Normalización) ---
+   /**
+     * 💾 GUARDAR FACTURA 
+     * Actualizado: Soporte para múltiples adicionales (JSONB), operación de impuesto (suma/resta) 
+     * y sincronización total con el backend.
+     */
     async function guardarFactura() {
         // 1. Obtener IDs y valores básicos
         const id = document.getElementById('fac-id').value;
@@ -623,39 +655,52 @@
         const totalCalculado = document.getElementById('fac-total-final').value;
         
         // 🛡️ CORRECCIÓN PARA CLASIFICACIÓN
-        let selectClasif = document.getElementById('fac-clasificacion');
-        let clasificacion = (selectClasif.value && selectClasif.value.trim() !== "") 
+        const selectClasif = document.getElementById('fac-clasificacion');
+        let clasificacion = (selectClasif && selectClasif.value.trim() !== "") 
                             ? selectClasif.value 
                             : "Operativo"; 
 
         // 2. Validaciones básicas
         if (!proveedorId) return showToast("Seleccione un proveedor", "warning");
-        if (!totalCalculado || parseFloat(totalCalculado) <= 0) return showToast("El monto total no es válido", "warning");
+        if (!totalCalculado || parseFloat(totalCalculado) <= 0) {
+            return showToast("El monto total no es válido", "warning");
+        }
 
         // 3. UI: Bloquear botón para evitar duplicados
-        const btn = document.querySelector('#modal-factura button.btn-primary');
-        const txtOriginal = btn ? btn.innerText : "Guardar";
-        if(btn) { btn.innerText = "Guardando..."; btn.disabled = true; }
+        const btn = document.querySelector('#modal-factura button.btn-primary') || 
+                    document.querySelector('#modal-factura button[onclick="guardarFactura()"]');
+        const txtOriginal = btn ? btn.innerText : "Guardar Compra";
+        
+        if(btn) { 
+            btn.innerText = "Guardando..."; 
+            btn.disabled = true; 
+        }
 
-        // 4. Preparar datos para enviar (FormData para soportar archivos)
+        // 4. Preparar datos para enviar (FormData)
         const formData = new FormData();
         
-        // -- IDs y Clasificación Normalizada --
-        if (clasificacion === 'Implementacion') clasificacion = 'Implementación';
+        // --- 🚨 NORMALIZACIÓN DE CLASIFICACIÓN 🚨 ---
+        // Aseguramos que 'Implementacion' siempre lleve tilde para la base de datos
+        if (clasificacion.toLowerCase().includes('implement')) {
+            clasificacion = 'Implementación';
+        } else if (clasificacion.toLowerCase().includes('financier')) {
+            clasificacion = 'Financiero';
+        } else {
+            clasificacion = 'Operativo';
+        }
         
         formData.append('proveedorId', proveedorId); 
         formData.append('sede', document.getElementById('fac-sede').value);
         formData.append('clasificacion', clasificacion); 
-        
-        // -- Datos del Documento --
         formData.append('glosa', document.getElementById('fac-glosa').value);
         formData.append('categoria', document.getElementById('fac-linea').value); 
         
         const tipoDoc = document.getElementById('fac-tipo').value;
         formData.append('tipo', tipoDoc);
 
+        // Lógica de número de documento (Serie-Número o Único)
         let numeroDocumentoFinal = '';
-        if (tipoDoc === 'Factura' || tipoDoc === 'Boleta') {
+        if (tipoDoc === 'Factura' || tipoDoc === 'Boleta' || tipoDoc === 'RHE') {
             const serie = document.getElementById('fac-serie').value.trim().toUpperCase() || 'F001';
             const correlativo = document.getElementById('fac-numero').value.trim() || '000000';
             numeroDocumentoFinal = `${serie}-${correlativo}`;
@@ -665,59 +710,59 @@
         }
         formData.append('serie', numeroDocumentoFinal);
 
-        // -- Fechas --
+        // Fechas
         formData.append('emision', document.getElementById('fac-emision').value);
         formData.append('programacion', document.getElementById('fac-programacion').value); 
         formData.append('vencimiento', document.getElementById('fac-vencimiento').value);
         
-        // -- MONTOS E IMPUESTOS --
+        // --- MONTOS E IMPUESTOS ---
         formData.append('moneda', document.getElementById('fac-moneda').value);
         const montoBase = document.getElementById('fac-base').value || "0";
         formData.append('monto_base', montoBase); 
         
         const impuestoSelect = document.getElementById('fac-impuesto-porc').value;
         let impuestoFinal = 0;
+        let operacionImpuesto = 'suma';
+
         if (impuestoSelect === 'otros') {
             impuestoFinal = document.getElementById('fac-otros-porcentaje').value || "0";
+            operacionImpuesto = document.getElementById('fac-otros-operacion').value;
         } else {
             impuestoFinal = impuestoSelect;
+            if (parseFloat(impuestoSelect) === 8) operacionImpuesto = 'resta';
         }
+
         formData.append('impuesto_porcentaje', impuestoFinal); 
+        formData.append('operacion_impuesto', operacionImpuesto);
 
-        // 🚀 LÓGICA ACTUALIZADA PARA MÚLTIPLES ADICIONALES 🚀
+        // --- ADICIONALES DINÁMICOS ---
         const adicionales = [];
-        let sumaMontoAdicionales = 0;
-
         document.querySelectorAll('.fila-adicional').forEach(fila => {
-            const glosaAdj = fila.querySelector('.adicional-glosa').value.trim();
-            const montoAdj = parseFloat(fila.querySelector('.adicional-monto').value) || 0;
-
-            if (montoAdj !== 0) {
-                adicionales.push({ descripcion: glosaAdj, monto: montoAdj });
-                sumaMontoAdicionales += montoAdj;
+            const inputGlosa = fila.querySelector('.adicional-glosa');
+            const inputMonto = fila.querySelector('.adicional-monto');
+            
+            if (inputGlosa && inputMonto) {
+                const glosaAdj = inputGlosa.value.trim();
+                const montoAdj = parseFloat(inputMonto.value) || 0;
+                if (montoAdj !== 0) {
+                    adicionales.push({ glosa: glosaAdj, monto: montoAdj });
+                }
             }
         });
 
-        // Enviamos el total de adicionales como número para el backend antiguo 
-        // y enviamos el detalle como JSON para el nuevo soporte de múltiples filas
-        formData.append('monto_adicional', sumaMontoAdicionales);
-        formData.append('detalles_adicionales', JSON.stringify(adicionales)); 
-        formData.append('glosa_adicional', adicionales.length > 0 ? adicionales[0].descripcion : "");
-
-        // El total ya incluye la base + impuesto + adicionales
+        formData.append('adicionales', JSON.stringify(adicionales));
         formData.append('total', totalCalculado); 
 
-        // -- DATOS BANCARIOS --
+        // Datos Bancarios
         formData.append('banco', document.getElementById('fac-banco').value);
         formData.append('cuenta', document.getElementById('fac-cuenta').value);
         formData.append('cci', document.getElementById('fac-cci').value);
 
-        // -- Lógica de pago inmediato --
+        // Forma de pago
         const checkPago = document.getElementById('check-pagar-ahora');
-        const pagarAhora = checkPago ? checkPago.checked : false;
-        formData.append('formaPago', pagarAhora ? 'Contado' : 'Credito');
+        formData.append('formaPago', (checkPago && checkPago.checked) ? 'Contado' : 'Credito');
 
-        // -- Archivo Adjunto --
+        // Archivo Adjunto
         const fileInput = document.getElementById('fac-archivo');
         if (fileInput && fileInput.files[0]) {
             formData.append('evidencia', fileInput.files[0]);
@@ -732,53 +777,131 @@
             const res = await fetch(url, {
                 method: method,
                 headers: { 'x-auth-token': token },
-                body: formData
+                body: formData 
             });
 
-            const data = await res.json();
+            // 🛡️ Manejo del error asíncrono: validamos si la respuesta es JSON
+            const contentType = res.headers.get("content-type");
+            let data = {};
+            if (contentType && contentType.indexOf("application/json") !== -1) {
+                data = await res.json();
+            }
 
             if (res.ok) {
-                showToast(id ? "✅ Gasto actualizado" : "✅ Gasto registrado", "success");
-                cerrarModalFactura();
+                showToast(id ? "✅ Gasto actualizado con éxito" : "✅ Gasto registrado con éxito", "success");
                 
-                // Recargar datos
-                await cargarGastos();           
-                if(window.cargarCuentasPorPagar) await cargarCuentasPorPagar(); 
-                if(window.cargarTesoriaDiaria) await cargarTesoriaDiaria(); 
+                // Cerrar modal de forma segura
+                if (typeof cerrarModalFactura === 'function') {
+                    cerrarModalFactura();
+                } else {
+                    const modal = document.getElementById('modal-factura');
+                    if (modal) modal.classList.remove('active');
+                }
+                
+                // 🔄 Recargar datos (con protecciones try/catch individuales)
+                try { if (typeof cargarGastos === 'function') await cargarGastos(); } catch(e) {}
+                try { if (window.cargarCuentasPorPagar) await window.cargarCuentasPorPagar(); } catch(e) {}
+                try { if (window.cargarTesoriaDiaria) await window.cargarTesoriaDiaria(); } catch(e) {}
                 
             } else {
-                showToast(data.msg || "Error al guardar", "error");
-                console.error("Error servidor:", data);
+                showToast(data.msg || "Error al procesar la solicitud", "error");
             }
         } catch (e) {
-            console.error("Error JS/Red:", e);
+            console.error("Error en guardarFactura:", e);
             showToast("Error de conexión con el servidor", "error");
         } finally {
-            // 6. UI: Restaurar botón
-            if(btn) { btn.innerText = txtOriginal; btn.disabled = false; }
+            if(btn) { 
+                btn.innerText = txtOriginal; 
+                btn.disabled = false; 
+            }
         }
     }
 
-    function agregarFilaAdicional() {
+    /**
+     * ➕ AGREGAR FILA ADICIONAL
+     * Crea dinámicamente campos para montos no gravados (propinas, envíos, etc).
+     * @param {string} glosa - Texto para el concepto (se usa al cargar datos en edición).
+     * @param {number|string} monto - Valor numérico (se usa al cargar datos en edición).
+     */
+    window.agregarFilaAdicional = function(glosa = '', monto = '') {
         const contenedor = document.getElementById('contenedor-adicionales');
-        const nuevaFila = document.createElement('div');
-        nuevaFila.className = 'row-grid fila-adicional';
-        nuevaFila.style = 'grid-template-columns: 2fr 1fr auto; gap: 10px; margin-bottom: 8px;';
         
+        // 1. Verificación de seguridad
+        if (!contenedor) {
+            console.error("No se encontró el contenedor 'contenedor-adicionales'");
+            return;
+        }
+
+        // 2. Normalización de valores (Evita errores en los cálculos)
+        // Si el monto viene como string vacío o null, aseguramos que sea manejable
+        const montoLimpio = (monto !== '' && monto !== null) ? parseFloat(monto).toFixed(2) : '';
+
+        // 3. Crear el elemento fila
+        const nuevaFila = document.createElement('div');
+        nuevaFila.className = 'fila-adicional';
+        
+        // Estilos de diseño (Grid coincidente con los encabezados)
+        nuevaFila.style.display = 'grid';
+        nuevaFila.style.gridTemplateColumns = '2fr 1fr auto';
+        nuevaFila.style.gap = '10px';
+        nuevaFila.style.marginBottom = '8px';
+        nuevaFila.style.alignItems = 'center';
+
+        // 4. Estructura HTML
+        // Usamos 'static' en el label si existe valor para evitar que el label flote sobre el texto.
+        const labelClass = (glosa !== '' || montoLimpio !== '') ? 'static' : '';
+
         nuevaFila.innerHTML = `
             <div class="input-group" style="margin-bottom: 0;">
-                <input type="text" class="adicional-glosa" placeholder="Otro concepto...">
+                <input type="text" 
+                    class="adicional-glosa" 
+                    placeholder="Ej: Propina, Envío, Redondeo..." 
+                    value="${glosa}"
+                    style="width: 100%;">
+                <label class="${labelClass}">Descripción</label>
             </div>
+            
             <div class="input-group" style="margin-bottom: 0;">
-                <input type="number" class="adicional-monto" placeholder="0.00" step="0.01" oninput="calcularTotalImpuesto()">
+                <input type="number" 
+                    class="adicional-monto" 
+                    placeholder="0.00" 
+                    step="0.01" 
+                    value="${montoLimpio}"
+                    oninput="if(typeof calcularTotalImpuesto === 'function') calcularTotalImpuesto()" 
+                    style="width: 100%; text-align: right;">
+                <label class="${labelClass}">Monto</label>
             </div>
-            <button type="button" onclick="this.parentElement.remove(); calcularTotalImpuesto();" 
-                    style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:20px; align-self:center;">
+
+            <button type="button" 
+                    class="btn-eliminar-adicional"
+                    title="Eliminar concepto"
+                    onclick="this.parentElement.remove(); if(typeof calcularTotalImpuesto === 'function') calcularTotalImpuesto();" 
+                    style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:1.4rem; display: flex; align-items: center; justify-content: center; padding: 5px; transition: transform 0.2s;"
+                    onmouseover="this.style.transform='scale(1.1)'"
+                    onmouseout="this.style.transform='scale(1)'">
                 <i class='bx bx-trash'></i>
             </button>
         `;
+
+        // 5. Agregar al DOM
         contenedor.appendChild(nuevaFila);
-    }
+
+        // 6. Gestión de Focus
+        // Si la fila es nueva (manual), ponemos el cursor en la descripción
+        if (glosa === '') {
+            const inputGlosa = nuevaFila.querySelector('.adicional-glosa');
+            if (inputGlosa) {
+                // Un pequeño delay asegura que el navegador procese el render antes del focus
+                setTimeout(() => inputGlosa.focus(), 10);
+            }
+        }
+        
+        // 7. Sincronización Matemática
+        // Forzamos el recálculo para que el total final siempre sea coherente
+        if (typeof calcularTotalImpuesto === 'function') {
+            calcularTotalImpuesto();
+        }
+    };
 
     // --- GESTIÓN DE PAGOS (ACTUALIZADO: Sincronización de IDs y Descripciones) ---
     window.abrirModalPago = function(tipo, idRef, saldoPendiente, nombreEntidad = '', detalleCuota = '') {
@@ -1138,46 +1261,61 @@
         }
     }
 
-   // Edición: Cargar datos en el modal para editar (ACTUALIZADO: Clasificación y Tesorería)
+    /**
+     * Edición: Cargar datos en el modal para editar 
+     * (ACTUALIZADO: Clasificación, Tesorería, Adicionales e Impuestos Personalizados)
+     */
     async function editarFactura(id) {
         // Buscamos la factura en el set de datos actual
         const factura = facturasData.find(f => f.id === id);
-        if (!factura) return;
+        if (!factura) {
+            console.error("No se encontró la factura con ID:", id);
+            return;
+        }
 
         // Seteamos el ID oculto para el modo edición
-        document.getElementById('fac-id').value = factura.id;
+        const inputId = document.getElementById('fac-id');
+        if (inputId) inputId.value = factura.id;
         
         // Abrir modal visualmente
-        document.getElementById('modal-factura').classList.add('active');
+        const modal = document.getElementById('modal-factura');
+        if (modal) modal.classList.add('active');
 
-        // Usamos setTimeout para asegurar que los selects (proveedores/sedes) ya estén cargados en el DOM
+        // Usamos un delay ligeramente mayor para asegurar renderizado de componentes complejos
         setTimeout(() => {
             // 1. Datos de Identificación y Sede
-            document.getElementById('fac-proveedor').value = factura.proveedor_id;
-            document.getElementById('fac-sede').value = factura.sede_id;
-            document.getElementById('fac-glosa').value = factura.descripcion;
+            const setVal = (id, val) => {
+                const el = document.getElementById(id);
+                if (el) el.value = val || '';
+            };
+
+            setVal('fac-proveedor', factura.proveedor_id);
+            setVal('fac-sede', factura.sede_id);
+            setVal('fac-glosa', factura.descripcion);
             
-            // 🆕 NUEVO: Cargar Clasificación para Tesorería (Operativo, Implementación, Financiero)
+            // --- 🛡️ CARGA CRÍTICA: CLASIFICACIÓN ---
             const inputClasificacion = document.getElementById('fac-clasificacion');
             if (inputClasificacion) {
-                inputClasificacion.value = factura.clasificacion || 'Operativo';
+                // Normalizamos para asegurar que coincida con el value del <option>
+                let clasif = factura.clasificacion || 'Operativo';
+                // Si viene con tilde desde la BD ("Implementación"), normalizamos a "Implementacion" para el select
+                if (clasif === 'Implementación') clasif = 'Implementacion';
+                inputClasificacion.value = clasif;
             }
 
-            // Categoría Operativa (Gasto/Insumos/RRHH, etc)
             const comboLinea = document.getElementById('fac-linea');
-            if (comboLinea) comboLinea.value = factura.categoria_gasto;
+            if (comboLinea) comboLinea.value = factura.categoria_gasto || '';
 
             // 2. Lógica del Documento
-            const tipoDoc = factura.tipo_documento;
-            document.getElementById('fac-tipo').value = tipoDoc;
+            const tipoDoc = factura.tipo_documento || 'Factura';
+            setVal('fac-tipo', tipoDoc);
 
-            // 🔥 Ejecutamos la función visual para mostrar los inputs correctos (Serie-Número o Único)
+            // Ejecutamos la función visual para mostrar los inputs correctos (Serie/Correlativo o Único)
             if (typeof toggleInputsDocumento === 'function') toggleInputsDocumento();
 
             const docCompleto = factura.numero_documento || ''; 
 
             if (tipoDoc === 'Factura' || tipoDoc === 'Boleta' || tipoDoc === 'RHE') {
-                // Lógica de 2 inputs (Serie y Correlativo)
                 let serieVal = '';
                 let numeroVal = '';
                 
@@ -1189,67 +1327,94 @@
                     numeroVal = docCompleto;
                 }
                 
-                document.getElementById('fac-serie').value = serieVal;
-                document.getElementById('fac-numero').value = numeroVal;
+                setVal('fac-serie', serieVal);
+                setVal('fac-numero', numeroVal);
             } else {
-                // Lógica de 1 input (Invoice, Sin Documento)
                 const inputUnico = document.getElementById('fac-doc-unico');
                 if (inputUnico) inputUnico.value = docCompleto;
             }
 
-            // 3. Fechas (Carga limpia de strings de fecha)
-            document.getElementById('fac-emision').value = factura.fecha_emision ? factura.fecha_emision.slice(0, 10) : '';
-            document.getElementById('fac-vencimiento').value = factura.fecha_vencimiento ? factura.fecha_vencimiento.slice(0, 10) : '';
+            // 3. Fechas (Normalización YYYY-MM-DD)
+            setVal('fac-emision', factura.fecha_emision ? factura.fecha_emision.slice(0, 10) : '');
+            setVal('fac-vencimiento', factura.fecha_vencimiento ? factura.fecha_vencimiento.slice(0, 10) : '');
             
-            // 🆕 Fecha Programación (Si existe)
             const inputProg = document.getElementById('fac-programacion');
             if (inputProg) {
                 inputProg.value = factura.fecha_programacion ? factura.fecha_programacion.slice(0, 10) : '';
             }
 
-            // 4. Datos Financieros
-            document.getElementById('fac-moneda').value = factura.moneda;
+            // 4. Datos Financieros (Base e Impuestos)
+            setVal('fac-moneda', factura.moneda || 'PEN');
             
-            // Cargar Monto Base (Manejo de registros antiguos sin base_imponible)
             const base = factura.base_imponible !== null ? factura.base_imponible : (factura.monto_neto_pagar || 0); 
-            document.getElementById('fac-base').value = parseFloat(base).toFixed(2);
+            const inputBase = document.getElementById('fac-base');
+            if (inputBase) inputBase.value = parseFloat(base).toFixed(2);
 
-            // --- 🚨 SELECT DE IMPUESTO 🚨 ---
-            let impuestoVal = factura.porcentaje_detraccion;
-            if (impuestoVal === null || impuestoVal === undefined) impuestoVal = 0;
-
-            // Formateamos para que coincida con los values del select ("18", "8", etc)
-            const impuestoStr = parseFloat(impuestoVal).toString();
+            // --- 🚨 LÓGICA DE IMPUESTO (Soporte para estándar y 'Otros') 🚨 ---
             const selectImpuesto = document.getElementById('fac-impuesto-porc');
-            selectImpuesto.value = impuestoStr;
+            const containerOtros = document.getElementById('fac-otros-container'); 
+            
+            if (selectImpuesto) {
+                let impuestoVal = factura.porcentaje_detraccion !== null ? parseFloat(factura.porcentaje_detraccion).toString() : "0";
+                const valoresEstandar = ["0", "18", "10.5", "8"];
 
-            // Fallback al 0% si el valor no coincide
-            if (!selectImpuesto.value) selectImpuesto.value = "0";
-
-            // Total Final (Readonly)
-            document.getElementById('fac-total-final').value = parseFloat(factura.monto_total).toFixed(2);
-
-            // 5. Datos Bancarios
-            document.getElementById('fac-banco').value = factura.banco || '';
-            document.getElementById('fac-cuenta').value = factura.numero_cuenta || '';
-            document.getElementById('fac-cci').value = factura.cci || '';
-
-            // Forzar recálculo visual de impuestos para consistencia
-            if(window.calcularTotalImpuesto) window.calcularTotalImpuesto();
-
-            // 6. Lógica del Check de Pago
-            const checkPago = document.getElementById('check-pagar-ahora');
-            if (checkPago) {
-                // Si la factura ya está marcada como pagada o fue al contado, bloqueamos el check
-                if (factura.estado_pago === 'pagado' || factura.forma_pago === 'Contado') {
-                    checkPago.checked = true;
-                    checkPago.disabled = true;
+                if (valoresEstandar.includes(impuestoVal)) {
+                    selectImpuesto.value = impuestoVal;
+                    if (containerOtros) containerOtros.style.display = 'none';
                 } else {
-                    checkPago.checked = false;
-                    checkPago.disabled = false;
+                    selectImpuesto.value = 'otros';
+                    if (containerOtros) containerOtros.style.display = 'grid'; 
+                    
+                    const inputOtroPorcentaje = document.getElementById('fac-otros-porcentaje');
+                    const inputOtroOperacion = document.getElementById('fac-otros-operacion');
+                    
+                    if (inputOtroPorcentaje) inputOtroPorcentaje.value = impuestoVal;
+                    if (inputOtroOperacion) inputOtroOperacion.value = factura.operacion_impuesto || 'suma';
                 }
             }
-        }, 150); // Aumentamos ligeramente el delay para asegurar carga de componentes dinámicos
+
+            // --- 🚨 CARGAR ADICIONALES NO GRAVADOS (Dinamismo) 🚨 ---
+            const contenedorAdicionales = document.getElementById('contenedor-adicionales');
+            if (contenedorAdicionales) {
+                contenedorAdicionales.innerHTML = ''; // Limpiar filas previas
+
+                const itemsAdicionales = (typeof factura.adicionales === 'string') 
+                    ? JSON.parse(factura.adicionales) 
+                    : (factura.adicionales || []);
+
+                if (Array.isArray(itemsAdicionales) && itemsAdicionales.length > 0) {
+                    itemsAdicionales.forEach(item => {
+                        if (window.agregarFilaAdicional) {
+                            window.agregarFilaAdicional(item.glosa, item.monto);
+                        }
+                    });
+                } else {
+                    // Si no hay adicionales, cargamos una fila vacía por defecto
+                    if (window.agregarFilaAdicional) window.agregarFilaAdicional();
+                }
+            }
+
+            // 5. Datos Bancarios
+            setVal('fac-banco', factura.banco);
+            setVal('fac-cuenta', factura.numero_cuenta);
+            setVal('fac-cci', factura.cci);
+
+            // 6. Sincronizar Total Final
+            // Recalcular todo el presupuesto del modal (Base + Impuesto +/- Adicionales)
+            if (window.calcularTotalImpuesto) {
+                window.calcularTotalImpuesto();
+            }
+
+            // 7. Lógica del Check de Pago
+            const checkPago = document.getElementById('check-pagar-ahora');
+            if (checkPago) {
+                // Si ya está pagado o autorizado en tesorería, protegemos el estado
+                const yaPagado = factura.estado_pago === 'pagado' || factura.forma_pago === 'Contado';
+                checkPago.checked = yaPagado;
+                checkPago.disabled = yaPagado; 
+            }
+
+        }, 200); // Tiempo ajustado para asegurar estabilidad del DOM
     }
     
     async function subirArchivoFaltante(id) {
@@ -1668,9 +1833,9 @@
     // FASE 4: LÓGICA DEL SÚPER MODAL "VER", DOCUMENTOS Y FLUJO DE APROBACIÓN
     // =====================================================================
 
-   // 1. ABRIR EL SÚPER MODAL Y LLENAR DATOS (ACTUALIZADO: Glosa, Sede, Categoría y Estado)
+    // 1. ABRIR EL SÚPER MODAL Y LLENAR DATOS (ACTUALIZADO: Desglose Económico y Adicionales)
     window.abrirModalDetallesVer = async function(id) {
-        // 1. Buscar la factura en nuestros datos cargados (Historial, Cuentas o Tesorería)
+        // 1. Buscar la factura en nuestros datos cargados
         const factura = (typeof facturasData !== 'undefined' ? facturasData.find(f => f.id === id) : null) 
                     || (typeof cuentasData !== 'undefined' ? cuentasData.find(f => f.id === id) : null)
                     || (typeof tesoreriaData !== 'undefined' ? tesoreriaData.find(f => f.id === id) : null);
@@ -1680,29 +1845,21 @@
         }
 
         // --- A. Llenar Encabezado y Pestaña "Información" ---
-        // Título del modal
         document.getElementById('ver-modal-doc').innerText = `${factura.tipo_documento || 'Doc'} ${factura.numero_documento || ''}`;
-        
-        // Proveedor y Clasificación (Badge azul)
         document.getElementById('ver-info-proveedor').innerText = factura.proveedor || 'Sin Proveedor';
         document.getElementById('ver-info-clasificacion').innerText = (factura.clasificacion || 'Operativo').toUpperCase();
-        
-        // Sede y Categoría
         document.getElementById('ver-info-sede').innerText = factura.sede || 'No especificada';
         document.getElementById('ver-info-categoria').innerText = factura.categoria_gasto || 'General';
-
-        // Glosa / Descripción (Campo nuevo)
         document.getElementById('ver-info-glosa').innerText = factura.descripcion || 'Sin descripción detallada registrada.';
 
         // Datos del Documento y Estado
         document.getElementById('ver-info-tipo-doc').innerText = factura.tipo_documento || '-';
         document.getElementById('ver-info-num-doc').innerText = factura.numero_documento || '-';
         
-        // Lógica de color para el Estado de Pago
         const estado = factura.estado_pago || 'pendiente';
-        let colorEstado = '#ef4444'; // Rojo Pendiente
-        if (estado === 'pagado') colorEstado = '#10b981'; // Verde Pagado
-        if (estado === 'parcial') colorEstado = '#f59e0b'; // Naranja Parcial
+        let colorEstado = '#ef4444'; 
+        if (estado === 'pagado') colorEstado = '#10b981';
+        if (estado === 'parcial') colorEstado = '#f59e0b';
         
         const badgeEstado = `<span class="badge" style="background:${colorEstado}15; color:${colorEstado}; border: 1px solid ${colorEstado}30;">${estado.toUpperCase()}</span>`;
         document.getElementById('ver-info-estado-pago').innerHTML = badgeEstado;
@@ -1712,34 +1869,71 @@
         document.getElementById('ver-info-vencimiento').innerText = factura.fecha_vencimiento ? factura.fecha_vencimiento.slice(0, 10) : '-';
         document.getElementById('ver-info-programacion').innerText = factura.fecha_programacion ? factura.fecha_programacion.slice(0, 10) : 'No programada';
 
-        // --- C. Cálculos Monetarios ---
+        // --- C. DESGLOSE FINANCIERO DINÁMICO ---
         const monedaSym = factura.moneda === 'USD' ? '$' : 'S/';
+        const fmt = (m) => `${monedaSym} ${parseFloat(m || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+        // 1. Base e Impuesto
+        const baseVal = factura.base_imponible || factura.monto_neto_pagar || 0;
+        const impuestoPorc = factura.porcentaje_detraccion || 0;
+        const operacion = factura.operacion_impuesto || 'suma';
+        
+        document.getElementById('ver-info-base').innerText = fmt(baseVal);
+        document.getElementById('ver-info-impuesto-p').innerText = impuestoPorc;
+        document.getElementById('ver-info-operacion').innerText = operacion.toUpperCase();
+        document.getElementById('ver-info-operacion').style.background = operacion === 'suma' ? '#dcfce7' : '#fee2e2';
+        document.getElementById('ver-info-operacion').style.color = operacion === 'suma' ? '#166534' : '#991b1b';
+
+        // Cálculo del monto del impuesto para la vista
+        const montoImpuesto = (parseFloat(baseVal) * parseFloat(impuestoPorc)) / 100;
+        document.getElementById('ver-info-impuesto-monto').innerText = (operacion === 'suma' ? '+ ' : '- ') + fmt(montoImpuesto);
+
+        // 2. Renderizar Adicionales (JSONB)
+        const tablaCuerpo = document.getElementById('ver-info-desglose-cuerpo');
+        // Limpiamos pero mantenemos las dos primeras filas (Base e Impuesto)
+        const filasBaseHtml = tablaCuerpo.querySelectorAll('tr');
+        const baseRow = filasBaseHtml[0].outerHTML;
+        const taxRow = filasBaseHtml[1].outerHTML;
+        tablaCuerpo.innerHTML = baseRow + taxRow;
+
+        // Parsear adicionales si vienen como string
+        let adicionales = [];
+        try {
+            adicionales = typeof factura.adicionales === 'string' ? JSON.parse(factura.adicionales) : (factura.adicionales || []);
+        } catch (e) { adicionales = []; }
+
+        if (Array.isArray(adicionales)) {
+            adicionales.forEach(adj => {
+                const tr = document.createElement('tr');
+                tr.style.borderBottom = "1px solid #f1f5f9";
+                tr.innerHTML = `
+                    <td style="padding: 10px 15px; color: #64748b;">${adj.glosa || 'Adicional'}</td>
+                    <td style="padding: 10px 15px; text-align: right; font-weight: 600;">+ ${fmt(adj.monto)}</td>
+                `;
+                tablaCuerpo.appendChild(tr);
+            });
+        }
+
+        // --- D. Totales y Saldos ---
         const total = parseFloat(factura.monto_total || 0);
         const pagado = parseFloat(factura.monto_pagado || 0);
         const deuda = total - pagado;
 
-        const fmt = (m) => `${monedaSym} ${m.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-        
         document.getElementById('ver-info-total').innerText = fmt(total);
         document.getElementById('ver-info-pagado').innerText = fmt(pagado);
         document.getElementById('ver-info-deuda').innerText = fmt(deuda);
 
-        // --- D. Datos Bancarios ---
+        // --- E. Datos Bancarios ---
         document.getElementById('ver-info-banco').innerText = factura.banco || 'No registrado';
         document.getElementById('ver-info-cuenta').innerText = factura.numero_cuenta || 'No registrado';
         document.getElementById('ver-info-cci').innerText = factura.cci || 'No registrado';
 
-        // --- E. Finalizar y Cargar Datos Extras ---
-        // Guardar el ID de la factura activa en el campo oculto
+        // --- F. Finalizar ---
         document.getElementById('ver-modal-factura-id').value = id;
-
-        // Reiniciar las pestañas a la primera (Información)
         cambiarTabModalVer('info');
-
-        // Mostrar el modal
         document.getElementById('modal-detalles-ver').classList.add('active');
 
-        // Cargar asíncronamente los documentos y pagos desde el Backend
+        // Cargas asíncronas
         if (typeof cargarDocumentosExtra === 'function') cargarDocumentosExtra(id);
         if (typeof cargarHistorialPagos === 'function') cargarHistorialPagos(id);
     };
@@ -1768,93 +1962,240 @@
         if(tabName === 'pagos') document.getElementById('btn-tab-ver-pagos').classList.add('active');
     };
 
-    // 4. CARGAR HISTORIAL DE PAGOS
+    /**
+     * 💰 CARGAR HISTORIAL DE PAGOS
+     * Obtiene desde el servidor todos los abonos o pagos totales realizados a esta factura.
+     */
     window.cargarHistorialPagos = async function(id) {
         const tbody = document.getElementById('ver-tabla-pagos-body');
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Cargando pagos...</td></tr>';
+        
+        // 1. Estado de carga inicial
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" style="text-align:center; padding: 20px;">
+                    <i class='bx bx-loader-alt bx-spin' style='font-size: 2rem; color: #3b82f6;'></i>
+                    <p style="margin-top: 10px; color: #64748b;">Consultando historial de pagos...</p>
+                </td>
+            </tr>`;
 
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`/api/facturas/${id}/pagos`, { headers: { 'x-auth-token': token } });
+            const res = await fetch(`/api/facturas/${id}/pagos`, { 
+                headers: { 'x-auth-token': token } 
+            });
+
+            if (!res.ok) throw new Error("Error en la respuesta del servidor");
+
             const pagos = await res.json();
 
             tbody.innerHTML = '';
-            if (pagos.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No hay pagos registrados aún.</td></tr>';
+            
+            // 2. Si no hay pagos
+            if (!pagos || pagos.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" style="text-align:center; padding: 30px; color: #94a3b8;">
+                            <i class='bx bx-info-circle' style='font-size: 1.5rem;'></i><br>
+                            No hay pagos registrados aún para este documento.
+                        </td>
+                    </tr>`;
                 return;
             }
 
+            // 3. Renderizar cada pago
             pagos.forEach(p => {
                 const tr = document.createElement('tr');
+                
+                // Detectar moneda (si el backend no la envía, asumimos soles por defecto)
+                const monedaSimbolo = p.moneda === 'USD' ? '$' : 'S/';
+                const montoFormateado = parseFloat(p.monto).toLocaleString('es-PE', { 
+                    minimumFractionDigits: 2, 
+                    maximumFractionDigits: 2 
+                });
+
+                // Formatear Fecha
+                const fechaPago = p.fecha_pago ? p.fecha_pago.slice(0, 10) : 
+                                (p.fecha_creacion ? p.fecha_creacion.slice(0, 10) : '-');
+
                 tr.innerHTML = `
-                    <td>${p.fecha_creacion ? p.fecha_creacion.slice(0, 10) : '-'}</td>
-                    <td style="font-weight:bold; color:#10b981;">S/ ${parseFloat(p.monto).toFixed(2)}</td>
-                    <td><span class="badge bg-blue">${p.metodo_pago || 'Caja'}</span></td>
-                    <td>${p.descripcion || '-'}</td>
+                    <td style="font-weight: 500;">${fechaPago}</td>
+                    <td style="font-weight: 800; color: #10b981;">
+                        ${monedaSimbolo} ${montoFormateado}
+                    </td>
+                    <td>
+                        <span class="badge" style="background: #eff6ff; color: #3b82f6; border: 1px solid #dbeafe;">
+                            <i class='bx bx-credit-card-front' style='vertical-align: middle; margin-right: 4px;'></i>
+                            ${p.metodo_pago || 'Transferencia'}
+                        </span>
+                    </td>
+                    <td style="font-size: 0.85rem; color: #475569;">
+                        ${p.descripcion || p.referencia || '-'}
+                    </td>
                 `;
                 tbody.appendChild(tr);
             });
+
         } catch (e) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:red;">Error al cargar pagos.</td></tr>';
+            console.error("Error al cargar historial de pagos:", e);
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="4" style="text-align:center; padding: 20px; color: #ef4444;">
+                        <i class='bx bx-error-circle' style='font-size: 1.5rem;'></i><br>
+                        No se pudo conectar con el servidor para obtener los pagos.
+                    </td>
+                </tr>`;
         }
     };
 
-   // 5. CARGAR DOCUMENTOS EXTRA (ACTUALIZADO: Ícono de descarga y ajuste de texto)
+    /**
+     * 📂 CARGAR DOCUMENTOS EXTRA
+     * Obtiene los archivos adjuntos (vouchers, facturas, PDFs) relacionados al gasto.
+     */
     window.cargarDocumentosExtra = async function(id) {
         const tbody = document.getElementById('ver-tabla-docs-body');
-        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">Cargando documentos...</td></tr>';
+        
+        // 1. Estado de carga con Spinner
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="3" style="text-align:center; padding: 20px;">
+                    <i class='bx bx-loader-alt bx-spin' style='font-size: 1.8rem; color: #3b82f6;'></i>
+                    <p style="margin-top: 8px; color: #64748b; font-size: 0.9rem;">Buscando archivos...</p>
+                </td>
+            </tr>`;
 
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`/api/facturas/${id}/documentos`, { headers: { 'x-auth-token': token } });
+            const res = await fetch(`/api/facturas/${id}/documentos`, { 
+                headers: { 'x-auth-token': token } 
+            });
+
+            if (!res.ok) throw new Error("Error al obtener documentos");
+
             const docs = await res.json();
 
             tbody.innerHTML = '';
-            if (docs.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">No hay documentos adicionales adjuntos.</td></tr>';
+
+            // 2. Si no hay documentos
+            if (!docs || docs.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="3" style="text-align:center; padding: 30px; color: #94a3b8;">
+                            <i class='bx bx-folder-open' style='font-size: 2rem; display: block; margin-bottom: 10px;'></i>
+                            No hay documentos adicionales adjuntos.
+                        </td>
+                    </tr>`;
                 return;
             }
 
+            // 3. Renderizar cada documento
             docs.forEach(d => {
+                // Limpieza de ruta para asegurar compatibilidad con navegadores
                 const url = d.ruta_archivo.replace(/\\/g, '/');
                 const urlLimpia = url.startsWith('/') ? url : `/${url}`;
                 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td style="max-width: 250px; white-space: normal; word-wrap: break-word; overflow-wrap: anywhere;">
-                        <strong style="color: #1e293b;">${d.nombre_archivo}</strong><br>
-                        <small style="color:#64748b; text-transform: uppercase; font-size: 0.75rem;">${d.tipo_documento}</small>
+                    <td style="max-width: 280px; padding: 12px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <i class='bx ${getIconByFileType(d.nombre_archivo)}' style='font-size: 1.5rem; color: #3b82f6;'></i>
+                            <div style="overflow: hidden;">
+                                <strong style="color: #1e293b; display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;" title="${d.nombre_archivo}">
+                                    ${d.nombre_archivo}
+                                </strong>
+                                <small style="color:#64748b; text-transform: uppercase; font-size: 0.7rem; font-weight: 600;">
+                                    ${d.tipo_documento || 'ADJUNTO'}
+                                </small>
+                            </div>
+                        </div>
                     </td>
-                    <td style="color: #475569;">${d.fecha_subida ? new Date(d.fecha_subida).toLocaleDateString() : '-'}</td>
-                    <td style="text-align:center; white-space: nowrap;">
-                        <a href="${urlLimpia}" target="_blank" class="btn-icon" style="color:#3b82f6; background:#eff6ff;" title="Descargar Documento">
-                            <i class='bx bx-download'></i>
-                        </a>
-                        <button class="btn-icon" style="color:#ef4444; background:#fef2f2;" onclick="eliminarDocumentoExtra(${d.id}, ${id})" title="Eliminar">
-                            <i class='bx bx-trash'></i>
-                        </button>
+                    <td style="color: #475569; font-size: 0.9rem;">
+                        ${d.fecha_subida ? new Date(d.fecha_subida).toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}
+                    </td>
+                    <td style="text-align:center; white-space: nowrap; padding: 12px;">
+                        <div style="display: flex; gap: 8px; justify-content: center;">
+                            <a href="${urlLimpia}" target="_blank" class="btn-icon" 
+                            style="color:#3b82f6; background:#eff6ff; width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center; text-decoration: none; transition: all 0.2s;" 
+                            title="Ver / Descargar"
+                            onmouseover="this.style.background='#dbeafe'"
+                            onmouseout="this.style.background='#eff6ff'">
+                                <i class='bx bx-download' style='font-size: 1.2rem;'></i>
+                            </a>
+                            <button class="btn-icon" 
+                                    style="color:#ef4444; background:#fef2f2; width: 32px; height: 32px; border-radius: 6px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" 
+                                    onclick="eliminarDocumentoExtra(${d.id}, ${id})" 
+                                    title="Eliminar Archivo"
+                                    onmouseover="this.style.background='#fee2e2'"
+                                    onmouseout="this.style.background='#fef2f2'">
+                                <i class='bx bx-trash' style='font-size: 1.2rem;'></i>
+                            </button>
+                        </div>
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
         } catch (e) {
-            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:red;">Error al cargar documentos.</td></tr>';
+            console.error("Error en cargarDocumentosExtra:", e);
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="3" style="text-align:center; padding: 20px; color: #ef4444;">
+                        <i class='bx bx-error-circle' style='font-size: 1.5rem;'></i><br>
+                        Error al cargar documentos.
+                    </td>
+                </tr>`;
         }
     };
 
-    // 6. SUBIR NUEVO DOCUMENTO EXTRA
+    /**
+     * Función auxiliar para poner el ícono correcto según la extensión
+     */
+    function getIconByFileType(filename) {
+        const ext = filename.split('.').pop().toLowerCase();
+        switch(ext) {
+            case 'pdf': return 'bxs-file-pdf';
+            case 'jpg':
+            case 'jpeg':
+            case 'png': return 'bxs-file-image';
+            case 'doc':
+            case 'docx': return 'bxs-file-doc';
+            default: return 'bxs-file';
+        }
+    }
+
+    /**
+     * ☁️ SUBIR NUEVO DOCUMENTO EXTRA
+     * Captura el archivo del input, lo envía al servidor y actualiza la lista visual.
+     */
     window.ejecutarSubidaDocumentoExtra = async function(event) {
         const file = event.target.files[0];
         if (!file) return;
 
+        // 1. Validaciones previas de seguridad (Opcional pero recomendado)
+        const MAX_SIZE_MB = 10;
+        if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+            showToast(`El archivo es muy pesado. Máximo ${MAX_SIZE_MB}MB`, "error");
+            event.target.value = '';
+            return;
+        }
+
         const facturaId = document.getElementById('ver-modal-factura-id').value;
         const token = localStorage.getItem('token');
         
+        // 2. Referencia al botón para feedback visual
+        const btnSubir = document.querySelector('[onclick*="input-subir-doc-extra"]');
+        const originalHTML = btnSubir ? btnSubir.innerHTML : '';
+
         const formData = new FormData();
         formData.append('archivo', file);
+        // Podemos dinamizar el tipo de documento si fuera necesario
         formData.append('tipo_documento', 'Comprobante Adicional');
 
         try {
+            // Bloqueo visual del botón
+            if (btnSubir) {
+                btnSubir.disabled = true;
+                btnSubir.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Subiendo...`;
+            }
+
             const res = await fetch(`/api/facturas/${facturaId}/documentos`, {
                 method: 'POST',
                 headers: { 'x-auth-token': token },
@@ -1862,60 +2203,122 @@
             });
 
             const data = await res.json();
+
             if (res.ok) {
-                showToast("Documento subido con éxito", "success");
-                cargarDocumentosExtra(facturaId); // Recargar la tabla de documentos
+                showToast("Documento subido correctamente", "success");
+                // Recargar la tabla de documentos para mostrar el nuevo archivo
+                if (typeof cargarDocumentosExtra === 'function') {
+                    await cargarDocumentosExtra(facturaId);
+                }
             } else {
                 showToast(data.msg || "Error al subir documento", "error");
             }
         } catch (e) {
-            console.error(e);
-            showToast("Error de conexión al subir", "error");
+            console.error("Error en ejecutarSubidaDocumentoExtra:", e);
+            showToast("Error de conexión al servidor", "error");
         } finally {
-            // Limpiar el input para permitir subir el mismo archivo si es necesario
+            // 3. Restaurar estado del botón y limpiar input
+            if (btnSubir) {
+                btnSubir.disabled = false;
+                btnSubir.innerHTML = originalHTML;
+            }
             document.getElementById('input-subir-doc-extra').value = ''; 
         }
     };
 
-    // 7. ELIMINAR DOCUMENTO EXTRA
+    /**
+     * 7. ELIMINAR DOCUMENTO EXTRA (Paso 1: Preparar IDs y Abrir Modal)
+     */
     window.eliminarDocumentoExtra = function(docId, facturaId) {
-        // 1. Guardar los IDs en el modal
-        document.getElementById('delete-doc-id').value = docId;
-        document.getElementById('delete-doc-factura-id').value = facturaId;
+        // 1. Validar que los campos donde guardaremos los IDs existan
+        const inputDocId = document.getElementById('delete-doc-id');
+        const inputFacId = document.getElementById('delete-doc-factura-id');
+
+        if (!inputDocId || !inputFacId) {
+            console.error("Error: Campos ocultos de eliminación no encontrados en el DOM.");
+            return;
+        }
+
+        // 2. Guardar los IDs en los inputs del modal de confirmación
+        inputDocId.value = docId;
+        inputFacId.value = facturaId;
         
-        // 2. Mostrar el modal de confirmación
-        document.getElementById('modal-confirmar-eliminar-doc').classList.add('active');
+        // 3. Mostrar el modal de confirmación
+        const modal = document.getElementById('modal-confirmar-eliminar-doc');
+        if (modal) {
+            modal.classList.add('active');
+        } else {
+            // Fallback en caso de que el modal no esté en el HTML
+            if (confirm("¿Estás seguro de que deseas eliminar este documento permanentemente?")) {
+                ejecutarEliminacionDoc();
+            }
+        }
     };
 
+    /**
+     * CERRAR MODAL DE CONFIRMACIÓN
+     */
     window.cerrarModalEliminarDoc = function() {
-        document.getElementById('modal-confirmar-eliminar-doc').classList.remove('active');
+        const modal = document.getElementById('modal-confirmar-eliminar-doc');
+        if (modal) {
+            modal.classList.remove('active');
+        }
     };
 
+    /**
+     * EJECUTAR ELIMINACIÓN REAL (Paso 2: Comunicación con el Backend)
+     */
     window.ejecutarEliminacionDoc = async function() {
-        // Leer los IDs guardados
+        // 1. Leer los IDs guardados
         const docId = document.getElementById('delete-doc-id').value;
         const facturaId = document.getElementById('delete-doc-factura-id').value;
+        const token = localStorage.getItem('token');
+
+        // 2. Referencia al botón para feedback visual
+        // Intentamos buscar el botón de "Confirmar" dentro del modal
+        const btnConfirmar = document.querySelector('#modal-confirmar-eliminar-doc .btn-danger') || 
+                            document.querySelector('#modal-confirmar-eliminar-doc button[onclick*="ejecutarEliminacionDoc"]');
+        
+        const originalHTML = btnConfirmar ? btnConfirmar.innerHTML : '';
 
         try {
-            const token = localStorage.getItem('token');
+            // Bloqueo visual del botón para evitar múltiples clics
+            if (btnConfirmar) {
+                btnConfirmar.disabled = true;
+                btnConfirmar.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Eliminando...`;
+            }
+
             const res = await fetch(`/api/facturas/documentos/${docId}`, {
                 method: 'DELETE',
-                headers: { 'x-auth-token': token }
+                headers: { 
+                    'x-auth-token': token,
+                    'Content-Type': 'application/json'
+                }
             });
 
             if (res.ok) {
                 showToast("Documento eliminado correctamente", "success");
                 cerrarModalEliminarDoc(); // Ocultar el modal de confirmación
-                cargarDocumentosExtra(facturaId); // Recargar la tablita de archivos
+                
+                // Recargar la tablita de archivos en el modal de "Ver Detalles"
+                if (typeof cargarDocumentosExtra === 'function') {
+                    await cargarDocumentosExtra(facturaId);
+                }
             } else {
                 const data = await res.json();
                 showToast(data.msg || "Error al eliminar el documento", "error");
                 cerrarModalEliminarDoc();
             }
         } catch (e) {
-            console.error(e);
+            console.error("Error en ejecutarEliminacionDoc:", e);
             showToast("Error de conexión con el servidor", "error");
             cerrarModalEliminarDoc();
+        } finally {
+            // 3. Restaurar el estado del botón
+            if (btnConfirmar) {
+                btnConfirmar.disabled = false;
+                btnConfirmar.innerHTML = originalHTML;
+            }
         }
     };
 
@@ -2029,7 +2432,8 @@
         // Buscamos si la factura está en el listado de tesorería y tiene monto_aprobado
         if (typeof tesoreriaData !== 'undefined') {
             const facturaTesoreria = tesoreriaData.find(f => f.id === id);
-            if (facturaTesoreria && facturaTrobado && facturaTesoreria.aprobado_tesoreria) {
+            // Se debe eliminar "facturaTrobado" que no existe en el contexto
+            if (facturaTesoreria && facturaTesoreria.aprobado_tesoreria) {
                 // Si Gerencia aprobó un monto específico (ej: 500 de 1000), sugerimos ese monto
                 montoASugerir = parseFloat(facturaTesoreria.monto_aprobado);
             }
@@ -2171,19 +2575,36 @@
 
     /**
      * 10.3 RENDERIZAR TABLA DE TESORERÍA (PERSISTENTE Y SEGURA)
-     * Muestra el estado de aprobación, bloquea montos autorizados y deshabilita retrocesos.
+     * Muestra el estado de aprobación, bloquea montos autorizados y actualiza KPIs.
      */
     function renderizarTablaTesoreria(datos) {
         const tbody = document.getElementById('tabla-tesoreria-body');
         if (!tbody) return;
         tbody.innerHTML = '';
 
+        // Si no hay datos, limpiamos la tabla y reseteamos los bloques KPI a cero
         if (!datos || datos.length === 0) {
             tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:40px; color:#64748b;">
                 <i class='bx bx-info-circle' style="font-size: 2rem; display: block; margin-bottom: 10px; color: #cbd5e1;"></i>
                 No hay pagos programados para hoy.</td></tr>`;
+            
+            // Resetear bloques KPI a cero si no hay datos
+            if (typeof cargarBloquesResumen === 'function') {
+                cargarBloquesResumen({
+                    Operativo: { pen: 0, usd: 0 },
+                    Implementacion: { pen: 0, usd: 0 },
+                    Financiero: { pen: 0, usd: 0 }
+                });
+            }
             return;
         }
+
+        // Inicializar acumuladores para los bloques KPI
+        const totales = {
+            Operativo: { pen: 0, usd: 0 },
+            Implementacion: { pen: 0, usd: 0 },
+            Financiero: { pen: 0, usd: 0 }
+        };
 
         // Asegura que los botones de Aprobar Todo / Desaprobar Todo estén visibles
         renderizarControlesMasivosTesoreria();
@@ -2192,12 +2613,30 @@
             const tr = document.createElement('tr');
             tr.id = `fila-tesoreria-${f.id}`; 
             
-            const clasif = f.clasificacion || 'Operativo';
-            let colorClasif = '#3b82f6';
-            if (clasif.includes('Implement')) colorClasif = '#8b5cf6';
-            if (clasif === 'Financiero') colorClasif = '#f59e0b';
+            // --- LÓGICA DE CLASIFICACIÓN Y ACUMULACIÓN ---
+            const clasifOriginal = f.clasificacion || 'Operativo';
+            const clasifNormalizada = clasifOriginal.toUpperCase().trim();
+            
+            let colorClasif = '#3b82f6'; // Azul - Operativo
+            let categoriaClave = 'Operativo';
 
-            // 🛡️ ESTADO DE APROBACIÓN
+            if (clasifNormalizada.includes('IMPLEMENT')) {
+                colorClasif = '#8b5cf6'; // Morado - Implementación
+                categoriaClave = 'Implementacion';
+            } else if (clasifNormalizada.includes('FINANCIER')) {
+                colorClasif = '#f59e0b'; // Naranja - Financiero
+                categoriaClave = 'Financiero';
+            }
+
+            // Acumular montos para los bloques KPI (usando el saldo pendiente)
+            const montoNumerico = parseFloat(f.saldo_pendiente) || 0;
+            if (f.moneda === 'USD') {
+                totales[categoriaClave].usd += montoNumerico;
+            } else {
+                totales[categoriaClave].pen += montoNumerico;
+            }
+
+            // --- ESTADO DE APROBACIÓN ---
             const isAprobado = f.aprobado_tesoreria === true;
             
             // Priorizamos el monto_aprobado (local o de DB) sobre el saldo original
@@ -2208,7 +2647,7 @@
                 ? `<span class="badge" style="background:#dcfce7; color:#16a34a; border:1px solid #bbf7d0; font-weight:700;">AUTORIZADO</span>`
                 : `<span class="badge" style="background:#f1f5f9; color:#64748b; border:1px solid #e2e8f0;">PENDIENTE</span>`;
 
-            // 💰 INPUT DE MONTO (BLOQUEO DINÁMICO)
+            // --- COMPONENTES UI ---
             const inputMontoAprobado = `
                 <div style="display:flex; align-items:center; gap:5px; justify-content:flex-end;">
                     <span style="font-size:0.8rem; font-weight:700;">${f.moneda === 'USD' ? '$' : 'S/'}</span>
@@ -2230,7 +2669,6 @@
                 <span style="color:#64748b;">CCI: ${f.cci || f.numero_cuenta || '-'}</span>
             </div>`;
 
-            // 🛡️ BOTÓN REGRESAR (BLOQUEO SI ESTÁ AUTORIZADO)
             const btnRegresar = `
                 <button class="btn-icon" 
                     style="color:#64748b; background:${isAprobado ? '#f8fafc' : '#f1f5f9'}; cursor:${isAprobado ? 'not-allowed' : 'pointer'}; opacity:${isAprobado ? '0.5' : '1'};" 
@@ -2240,7 +2678,7 @@
                 </button>`;
 
             tr.innerHTML = `
-                <td><span class="badge" style="background:${colorClasif}15; color:${colorClasif}; border:1px solid ${colorClasif}30;">${clasif.toUpperCase()}</span></td>
+                <td><span class="badge" style="background:${colorClasif}15; color:${colorClasif}; border:1px solid ${colorClasif}30;">${clasifOriginal.toUpperCase()}</span></td>
                 <td style="font-weight:600; color:#1e293b;">${f.proveedor}</td>
                 <td><small>${f.tipo_documento}</small><br><strong>${f.numero_documento}</strong></td>
                 <td>${datosBancos}</td>
@@ -2271,6 +2709,11 @@
             `;
             tbody.appendChild(tr);
         });
+
+        // Actualizar los bloques KPI superiores con los totales calculados
+        if (typeof cargarBloquesResumen === 'function') {
+            cargarBloquesResumen(totales);
+        }
     }
 
     /**
@@ -2295,7 +2738,7 @@
         // 3. Referenciar elementos según los IDs reales de tu HTML
         const modal = document.getElementById('modal-pago'); 
         const inputMonto = document.getElementById('pago-monto');
-        const inputIdRef = document.getElementById('pago-ref-id'); // Campo oculto en tu HTML
+        const inputIdRef = document.getElementById('pago-factura-id') || document.getElementById('pago-ref-id');
         const inputTipoOrigen = document.getElementById('pago-tipo-origen');
         
         // Elementos informativos del modal
@@ -2423,7 +2866,8 @@
                             montoFinal = f.monto_aprobado !== undefined ? f.monto_aprobado : f.saldo_pendiente;
                         }
 
-                        const montoValidado = isNaN(montoFinal) ? 0 : montoFinal;
+                        const valorInput = document.getElementById(`input-aprob-amount-${f.id}`)?.value;
+                        const montoValidado = parseFloat(valorInput) || 0;
 
                         // Sincronización inmediata en memoria para persistencia
                         f.monto_aprobado = montoValidado;
@@ -2671,23 +3115,49 @@
 
     /**
      * 10.4 CARGAR BLOQUES DE RESUMEN (KPIs Superiores)
+     * Actualizado con validación de existencia de datos y manejo de errores.
      */
     function cargarBloquesResumen(data) {
-        const fmt = (m, mon) => (mon === 'pen' ? 'S/ ' : '$ ') + parseFloat(m || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        // Definición interna del formateador de moneda local
+        const fmt = (m, mon) => {
+            const monto = parseFloat(m) || 0;
+            const simbolo = mon === 'pen' ? 'S/ ' : '$ ';
+            return simbolo + monto.toLocaleString('es-PE', { 
+                minimumFractionDigits: 2, 
+                maximumFractionDigits: 2 
+            });
+        };
 
-        // Bloque Operativo
-        document.getElementById('block-op-pen').innerText = fmt(data.Operativo.pen, 'pen');
-        document.getElementById('block-op-usd').innerText = fmt(data.Operativo.usd, 'usd');
+        // Validación: Si no hay data, inicializamos un objeto vacío para evitar errores
+        const safeData = data || {
+            Operativo: { pen: 0, usd: 0 },
+            Implementacion: { pen: 0, usd: 0 },
+            Financiero: { pen: 0, usd: 0 }
+        };
 
-        // Bloque Implementación
-        document.getElementById('block-imp-pen').innerText = fmt(data.Implementacion.pen, 'pen');
-        document.getElementById('block-imp-usd').innerText = fmt(data.Implementacion.usd, 'usd');
+        try {
+            // --- Bloque Operativo ---
+            const opPen = document.getElementById('block-op-pen');
+            const opUsd = document.getElementById('block-op-usd');
+            if (opPen) opPen.innerText = fmt(safeData.Operativo?.pen || 0, 'pen');
+            if (opUsd) opUsd.innerText = fmt(safeData.Operativo?.usd || 0, 'usd');
 
-        // Bloque Financiero
-        document.getElementById('block-fin-pen').innerText = fmt(data.Financiero.pen, 'pen');
-        document.getElementById('block-fin-usd').innerText = fmt(data.Financiero.usd, 'usd');
+            // --- Bloque Implementación ---
+            const impPen = document.getElementById('block-imp-pen');
+            const impUsd = document.getElementById('block-imp-usd');
+            if (impPen) impPen.innerText = fmt(safeData.Implementacion?.pen || 0, 'pen');
+            if (impUsd) impUsd.innerText = fmt(safeData.Implementacion?.usd || 0, 'usd');
+
+            // --- Bloque Financiero ---
+            const finPen = document.getElementById('block-fin-pen');
+            const finUsd = document.getElementById('block-fin-usd');
+            if (finPen) finPen.innerText = fmt(safeData.Financiero?.pen || 0, 'pen');
+            if (finUsd) finUsd.innerText = fmt(safeData.Financiero?.usd || 0, 'usd');
+
+        } catch (error) {
+            console.error("❌ Error al cargar los bloques de resumen:", error);
+        }
     }
-
     // Variables para controlar el estado del orden (fuera de la función)
     let ordenColumnaGasto = '';
     let ordenAscendenteGasto = true;
@@ -2745,36 +3215,35 @@
     };
 
     /**
-     * 10.5 FILTRAR POR COLUMNA (Para Registro de Compras y Cuentas por Pagar)
-     * Filtra de manera instantánea sobre las filas renderizadas en el DOM.
+     * 10.5 FILTRAR POR COLUMNA (Actualizado para respetar paginación)
      */
     window.filtrarColumna = function(input, colIndex, tbodyId) {
-        // 1. Convertimos el texto de búsqueda a minúsculas y quitamos espacios extra
         const filter = input.value.toLowerCase().trim();
-        const tbody = document.getElementById(tbodyId);
         
-        if (!tbody) return; // Seguridad por si el ID no existe
-        
-        const rows = tbody.getElementsByTagName('tr');
-
-        // 2. Recorremos todas las filas del body indicado
-        for (let i = 0; i < rows.length; i++) {
-            // Ignorar filas que digan "No se encontraron registros"
-            if (rows[i].cells.length < 2) continue; 
-
-            const td = rows[i].getElementsByTagName('td')[colIndex];
+        if (tbodyId === 'tabla-cuentas-body') {
+            // Filtrar sobre los datos reales para no romper la paginación
+            paginaCuentas = 1;
             
-            if (td) {
-                // Capturamos el texto de la celda (Priorizando el nombre del proveedor o número)
-                const textValue = td.textContent || td.innerText;
-                
-                // 3. Decidimos si mostrar u ocultar la fila
-                if (textValue.toLowerCase().indexOf(filter) > -1) {
-                    rows[i].style.display = ""; // Se muestra
-                } else {
-                    rows[i].style.display = "none"; // Se oculta
-                }
+            // Volvemos a llenar la variable desde la base
+            const baseCuentas = facturasData.filter(f => 
+                f.estado_pago !== 'pagado' && f.estado_pago !== 'anulado' && f.programado_hoy === false
+            );
+
+            if (filter === '') {
+                cuentasData = [...baseCuentas];
+            } else {
+                cuentasData = baseCuentas.filter(c => {
+                    // colIndex 3 = Proveedor, colIndex 4 = Documento
+                    if (colIndex === 3) return (c.proveedor || '').toLowerCase().includes(filter);
+                    if (colIndex === 4) return (c.numero_documento || '').toLowerCase().includes(filter);
+                    return true;
+                });
             }
+            renderizarTablaCuentas();
+        } else if (tbodyId === 'tabla-facturas-body') {
+            // Ya tienes la lógica correcta en renderizarTablaGastos()
+            paginaGastos = 1;
+            renderizarTablaGastos();
         }
     };
 
@@ -2782,15 +3251,48 @@
      * 10.6 EXPORTAR EXCEL ESPECÍFICO DE TESORERÍA
      */
     window.exportarExcelTesoreria = function() {
-        // Reutilizamos la lógica de exportarExcel pero filtrando solo lo que está en la tabla de tesorería
-        const tabla = document.getElementById('tabla-tesoreria-body');
-        if (tabla.rows.length === 0 || tabla.innerText.includes("No hay pagos")) {
-            return showToast("No hay datos para exportar en el plan de hoy", "warning");
+        const dataLocal = window.tesoreriaData || [];
+        if (dataLocal.length === 0) {
+            return showToast("No hay datos autorizados o programados para exportar hoy.", "warning");
         }
         
-        // Aquí puedes llamar a tu función exportarExcel() pasándole un flag o filtrar facturasData 
-        // donde programado_hoy === true. Por simplicidad, ejecutaremos la exportación general.
-        exportarExcel(); 
+        const separador = ";"; 
+        let csvContent = "\uFEFF"; // BOM para Excel LATAM
+        
+        const headers = ["Clasificación", "Proveedor", "N° Documento", "Banco", "Cuenta", "CCI", "Moneda", "Deuda Original", "Monto a Pagar Hoy", "Estado Tesorería"];
+        csvContent += headers.join(separador) + "\n";
+
+        dataLocal.forEach(f => {
+            const clasif = f.clasificacion || 'Operativo';
+            const prov = f.proveedor ? `"${f.proveedor}"` : '""';
+            const doc = f.numero_documento ? `"${f.numero_documento}\t"` : '""'; // \t evita formato científico
+            const banco = f.banco ? `"${f.banco}"` : '""';
+            const cta = f.numero_cuenta ? `"${f.numero_cuenta}\t"` : '""';
+            const cci = f.cci ? `"${f.cci}\t"` : '""';
+            
+            // Si está autorizado usa el monto_aprobado, si no, muestra lo que debe (saldo)
+            const montoPagar = f.aprobado_tesoreria ? (f.monto_aprobado || f.saldo_pendiente) : 0;
+            const estadoStr = f.aprobado_tesoreria ? "AUTORIZADO" : "PENDIENTE";
+
+            const row = [
+                clasif, prov, doc, banco, cta, cci, f.moneda || 'PEN',
+                parseFloat(f.saldo_pendiente).toFixed(2).replace('.', ','),
+                parseFloat(montoPagar).toFixed(2).replace('.', ','),
+                estadoStr
+            ];
+            
+            csvContent += row.join(separador) + "\n";
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.setAttribute("href", URL.createObjectURL(blob));
+        link.setAttribute("download", `Plan_Tesoreria_${new Date().toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showToast("Plan de Tesorería descargado correctamente", "success");
     };
 
     // INICIAR

@@ -351,7 +351,27 @@ window.verDetallesVenta = async function(ventaId, codigoVisual) {
         
         if (res.ok) {
             const data = await res.json();
-            let html = `
+            
+            // 🔥 NUEVO: Construimos la caja de información del Evento si existe
+            let infoEventoHtml = '';
+            if (data.length > 0 && data[0].metadata_evento) {
+                const meta = data[0].metadata_evento;
+                infoEventoHtml = `
+                    <div style="margin-bottom:15px; text-align:left; font-size:12px; color:#64748b; background:#f8fafc; padding:12px; border-radius:8px; border:1px dashed #cbd5e1;">
+                        <div style="font-weight:bold; color:#475569; font-size: 14px; margin-bottom: 6px;">
+                            🎂 Cumpleañero/a: <span style="color:#0f172a;">${meta.cumpleanero}</span>
+                        </div>
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                            <div><i class='bx bx-calendar'></i> Fecha: <strong>${meta.fecha}</strong></div>
+                            <div><i class='bx bx-time-five'></i> Horario: <strong>${meta.horario}</strong></div>
+                            <div style="grid-column: span 2;"><i class='bx bx-map'></i> Ubicación: <strong>${meta.ubicacion}</strong></div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Agregamos la tabla debajo de la info del evento
+            let html = infoEventoHtml + `
                 <table style="width:100%; border-collapse:collapse; font-size:13px;">
                     <thead style="background:#f8fafc; color:#64748b;">
                         <tr>

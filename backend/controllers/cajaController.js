@@ -82,6 +82,9 @@ exports.registrarMovimiento = async (req, res) => {
     try {
         if (!monto || monto <= 0) return res.status(400).json({ msg: "Monto inválido" });
 
+        // 🛡️ BLINDAJE: Limitar los tipos de movimiento permitidos
+        const tipoSeguro = (tipo === 'INGRESO') ? 'INGRESO' : 'SALIDA';
+
         const query = `
             INSERT INTO movimientos_caja (
                 sede_id, usuario_id, tipo_movimiento, categoria, 
@@ -91,7 +94,7 @@ exports.registrarMovimiento = async (req, res) => {
         `;
 
         const nuevoMov = await pool.query(query, [
-            sedeId, usuarioId, tipo, origen || 'MANUAL', descripcion, monto, metodo
+            sedeId, usuarioId, tipoSeguro, origen || 'MANUAL', descripcion, monto, metodo
         ]);
 
         res.json({ msg: 'Registrado', movimiento: nuevoMov.rows[0] });
@@ -214,20 +217,33 @@ exports.obtenerResumenCaja = async (req, res) => {
             FROM MovimientosNormalizados
         `;
 
-        const queryMerma = `SELECT 
+        const queryMerma = `
+            SELECT 
             COALESCE(SUM(CASE WHEN fecha::date = CURRENT_DATE THEN (ABS(cantidad) * costo_unitario_movimiento) ELSE 0 END), 0) AS merma_hoy,
             COALESCE(SUM(CASE WHEN EXTRACT(WEEK FROM fecha) = EXTRACT(WEEK FROM CURRENT_DATE) THEN (ABS(cantidad) * costo_unitario_movimiento) ELSE 0 END), 0) AS merma_semana,
             COALESCE(SUM(CASE WHEN EXTRACT(MONTH FROM fecha) = EXTRACT(MONTH FROM CURRENT_DATE) THEN (ABS(cantidad) * costo_unitario_movimiento) ELSE 0 END), 0) AS merma_mes,
             COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM fecha) = EXTRACT(YEAR FROM CURRENT_DATE) THEN (ABS(cantidad) * costo_unitario_movimiento) ELSE 0 END), 0) AS merma_anio
             FROM movimientos_inventario WHERE cantidad < 0 AND tipo_movimiento NOT ILIKE '%venta%' AND ($1::int IS NULL OR sede_id = $1::int)`;
 
-        const [resCaja, resMerma] = await Promise.all([
-            pool.query(query, [sedeConsulta]),
-            pool.query(queryMerma, [sedeConsulta])
-        ]);
+        // 🔥 CORRECCIÓN: Usamos un cliente dedicado para poder cambiarle la Zona Horaria de forma segura
+        const client = await pool.connect();
+        
+        let c, m;
+        try {
+            // Le decimos a esta conexión específica que use la hora de Perú
+            await client.query("SET TIME ZONE 'America/Lima'");
 
-        const c = resCaja.rows[0];
-        const m = resMerma.rows[0];
+            const [resCaja, resMerma] = await Promise.all([
+                client.query(query, [sedeConsulta]),
+                client.query(queryMerma, [sedeConsulta])
+            ]);
+
+            c = resCaja.rows[0];
+            m = resMerma.rows[0];
+        } finally {
+            // Siempre soltamos el cliente para que no se sature el servidor
+            client.release();
+        }
 
         res.json({ 
             topeAutorizado: topeAutorizado,

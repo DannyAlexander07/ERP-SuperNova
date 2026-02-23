@@ -38,7 +38,7 @@
                         Emisión <i class='bx bx-sort-alt-2'></i>
                     </th>
                     <th onclick="ordenarGastos('fecha_programacion')" style="cursor:pointer;">
-                        Programación <i class='bx bx-sort-alt-2'></i>
+                        Programado <i class='bx bx-sort-alt-2'></i>
                     </th>
                     <th onclick="ordenarGastos('fecha_vencimiento')" style="cursor:pointer;">
                         Vencimiento <i class='bx bx-sort-alt-2'></i>
@@ -53,7 +53,7 @@
                         Días Venc. <i class='bx bx-sort-alt-2'></i>
                     </th>
                     <th>Clasificación</th>
-                    <th style="text-align:center;">Evidencia</th>
+                    <th style="text-align:center;">Archivo</th>
                     <th style="text-align:center;">Acciones</th>
                 </tr>
                 <tr id="row-filtros-gastos" class="filter-row-header">
@@ -66,7 +66,7 @@
                         <input type="text" class="column-filter" placeholder="🔍 N°..." 
                             onkeyup="filtrarColumna(this, 4, 'tabla-facturas-body')">
                     </td>
-                    <td></td> <td></td> <td></td> <td></td> <td></td> <td></td>
+                    <td></td> <td></td> <td></td> <td></td> <td></td>
                 </tr>
             </thead>
             <tbody id="tabla-facturas-body"></tbody>
@@ -147,7 +147,7 @@
                         <th onclick="ordenarCuentas('monto_total')" style="cursor:pointer;">
                             Deuda Total <i class='bx bx-sort-alt-2'></i>
                         </th>
-                        <th>Amortizacion</th>
+                        <th>Amortizar</th>
                         <th onclick="ordenarCuentas('saldo_pendiente')" style="cursor:pointer;">
                             Saldo Pendiente <i class='bx bx-sort-alt-2'></i>
                         </th>
@@ -341,9 +341,26 @@
                             <p style="font-size: 0.75rem; font-weight: bold; color: #64748b; text-transform: uppercase; margin: 0;">
                                 Adicionales No Gravados (No suman impuesto)
                             </p>
-                            <button type="button" onclick="agregarFilaAdicional()" style="padding: 2px 8px; background: #64748b; color: white; border-radius: 4px; border: none; cursor: pointer; font-size: 12px;">
-                                <i class='bx bx-plus'></i> Añadir
-                            </button>
+                            <button type="button" 
+                                onclick="agregarFilaAdicional()" 
+                                style="
+                                    display: inline-flex;
+                                    align-items: center;
+                                    gap: 4px;
+                                    padding: 4px 10px; 
+                                    background: #64748b; 
+                                    color: white; 
+                                    border-radius: 4px; 
+                                    border: none; 
+                                    cursor: pointer; 
+                                    font-size: 12px;
+                                    transition: background 0.2s ease;
+                                "
+                                onmouseover="this.style.background='#475569'"
+                                onmouseout="this.style.background='#64748b'">
+                            <i class='bx bx-plus' style="font-size: 14px;"></i> 
+                            <span>Añadir concepto</span>
+                        </button>
                         </div>
 
                         <div id="contenedor-adicionales">
@@ -362,7 +379,9 @@
                     </div>
 
                     <div class="input-group">
-                        <input type="number" id="fac-total-final" readonly style="background-color: #f1f5f9; font-weight: 900; color: #0f172a; font-size: 1.2rem; border: 2px solid #cbd5e1;">
+                        <input type="number" id="fac-total-final" readonly 
+                        style="background-color: #e2e8f0; font-weight: 900; color: #0f172a; font-size: 1.2rem; border: 2px solid #cbd5e1;" 
+                        value="0.00">
                         <label class="static">Monto Total a Pagar</label>
                     </div>
 
@@ -438,7 +457,7 @@
 
             <div class="modal-footer">
                 <button class="btn-cancel" onclick="cerrarModalFactura()">Cancelar</button>
-                <button class="btn-primary" onclick="guardarFactura()">Guardar Compra</button>
+                <button class="btn-primary" id="btn-guardar-factura" onclick="guardarFactura()">Guardar Compra</button>
             </div>
         </div>
     </div>
@@ -467,7 +486,7 @@
                     </div>
                 </div>
 
-                <input type="hidden" id="pago-ref-id"> 
+                <input type="hidden" id="pago-factura-id">
                 <input type="hidden" id="pago-tipo-origen">
                 
                 <div class="input-group">
@@ -485,6 +504,11 @@
                         <option value="Tarjeta">Tarjeta Corporativa</option>
                     </select>
                     <label class="static">Origen del Dinero (Método)</label>
+                </div>
+
+                <div class="input-group">
+                    <input type="text" id="pago-nota" placeholder="Ej: Pago parcial autorizado por gerencia">
+                    <label>Nota / Comentario de Pago</label>
                 </div>
 
                 <div class="row-grid">
@@ -530,6 +554,7 @@
                 <div style="padding: 20px;">
                     
                     <div id="tab-ver-info" style="display: block;">
+                        
                         <div class="row-grid" style="margin-bottom: 20px; grid-template-columns: 1.5fr 1fr;">
                             <div>
                                 <h4 class="form-subtitle">Proveedor y Clasificación</h4>
@@ -553,7 +578,7 @@
                                 <h4 class="form-subtitle">Documento</h4>
                                 <p><strong>Tipo:</strong> <span id="ver-info-tipo-doc">-</span></p>
                                 <p><strong>N° Documento:</strong> <span id="ver-info-num-doc" style="font-family: monospace; font-weight: bold;">-</span></p>
-                                <p><strong>Estado:</strong> <span id="ver-info-estado-pago">-</span></p>
+                                <p><strong>Estado Pago:</strong> <span id="ver-info-estado-pago">-</span></p>
                             </div>
                             <div>
                                 <h4 class="form-subtitle">Fechas</h4>
@@ -563,24 +588,41 @@
                             </div>
                         </div>
 
-                        <h4 class="form-subtitle">Resumen Financiero</h4>
-                        <div class="row-grid" style="background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px; grid-template-columns: repeat(3, 1fr);">
-                            <div>
-                                <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 5px;">Monto Total</p>
-                                <p style="font-weight: 800; font-size: 1.25rem; color: #0f172a;" id="ver-info-total">-</p>
+                        <h4 class="form-subtitle">Desglose Económico</h4>
+                        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-bottom: 20px;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                                <tbody id="ver-info-desglose-cuerpo">
+                                    <tr style="border-bottom: 1px solid #f1f5f9;">
+                                        <td style="padding: 10px 15px; color: #64748b;">Monto Base</td>
+                                        <td style="padding: 10px 15px; text-align: right; font-weight: 600;" id="ver-info-base">0.00</td>
+                                    </tr>
+                                    <tr style="border-bottom: 1px solid #f1f5f9;">
+                                        <td style="padding: 10px 15px; color: #64748b;">Impuesto (<span id="ver-info-impuesto-p">0</span>%) <small id="ver-info-operacion" class="badge" style="font-size: 0.6rem;"></small></td>
+                                        <td style="padding: 10px 15px; text-align: right; font-weight: 600;" id="ver-info-impuesto-monto">0.00</td>
+                                    </tr>
+                                    </tbody>
+                                <tfoot>
+                                    <tr style="background: #f8fafc;">
+                                        <td style="padding: 12px 15px; font-weight: 700; color: #0f172a;">TOTAL FINAL</td>
+                                        <td style="padding: 12px 15px; text-align: right; font-weight: 800; font-size: 1.1rem; color: #0f172a;" id="ver-info-total">-</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+
+                        <div class="row-grid" style="grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 20px;">
+                            <div style="background: #f0fdf4; padding: 15px; border-radius: 12px; border: 1px solid #bbf7d0; text-align: center;">
+                                <p style="color: #166534; font-size: 0.8rem; margin-bottom: 5px; font-weight: 600;">AMORTIZADO (PAGADO)</p>
+                                <p style="font-weight: 800; font-size: 1.3rem; color: #10b981;" id="ver-info-pagado">0.00</p>
                             </div>
-                            <div>
-                                <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 5px;">A Cuenta (Pagado)</p>
-                                <p style="font-weight: 800; font-size: 1.25rem; color: #10b981;" id="ver-info-pagado">-</p>
-                            </div>
-                            <div>
-                                <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 5px;">Saldo Pendiente</p>
-                                <p style="font-weight: 800; font-size: 1.25rem; color: #ef4444;" id="ver-info-deuda">-</p>
+                            <div style="background: #fef2f2; padding: 15px; border-radius: 12px; border: 1px solid #fecaca; text-align: center;">
+                                <p style="color: #991b1b; font-size: 0.8rem; margin-bottom: 5px; font-weight: 600;">SALDO PENDIENTE</p>
+                                <p style="font-weight: 800; font-size: 1.3rem; color: #ef4444;" id="ver-info-deuda">0.00</p>
                             </div>
                         </div>
 
                         <h4 class="form-subtitle">Datos Bancarios para Pago</h4>
-                        <div class="row-grid" style="background: #f0fdf4; padding: 15px; border-radius: 8px; border: 1px solid #bbf7d0; grid-template-columns: 1fr 1fr 1fr;">
+                        <div class="row-grid" style="background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; grid-template-columns: 1fr 1fr 1fr;">
                             <p><strong>Banco:</strong> <br><span id="ver-info-banco">-</span></p>
                             <p><strong>Cuenta:</strong> <br><span id="ver-info-cuenta">-</span></p>
                             <p><strong>CCI:</strong> <br><span id="ver-info-cci">-</span></p>
@@ -676,4 +718,13 @@
             </div>
         </div>
     </div>
+
+    <div id="loading-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.7); z-index: 9999; justify-content: center; align-items: center; flex-direction: column;">
+        <div class="spinner" style="width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #3b82f6; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <p style="margin-top: 15px; font-weight: bold; color: #1e293b;">Procesando...</p>
+    </div>
+
+    <style>
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
 </div>

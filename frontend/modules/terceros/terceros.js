@@ -24,7 +24,7 @@
     let paginaActual = 1;
     const itemsPorPagina = 5;
 
-    async function initTerceros() {
+    window.initTerceros = async function() {
         await cargarCanales();
         await cargarProductos();
         await cargarAcuerdos(); 
@@ -522,6 +522,8 @@
             // 🛡️ BLINDAJE 2: Verificamos el éxito basado en la propiedad success del JSON
             if(data.success === true) {
                 // ✅ CASO ÉXITO (VERDE)
+                // Beep de sistema (100ms, frecuencia alta)
+                try { const actx = new (window.AudioContext || window.webkitAudioContext)(); const osc = actx.createOscillator(); osc.type = 'sine'; osc.frequency.value = 800; osc.connect(actx.destination); osc.start(); setTimeout(() => osc.stop(), 150); } catch(e){}
                 resultadoBox.className = 'result-box success';
                 resultadoBox.innerHTML = `
                     <span class="result-title"><i class='bx bx-check-circle'></i> ACCESO PERMITIDO</span>
@@ -538,6 +540,7 @@
             } else {
                 // ❌ CASO ERROR / YA USADO (ROJO)
                 // El backend devuelve success: false con el motivo (msg)
+                try { const actx = new (window.AudioContext || window.webkitAudioContext)(); const osc = actx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = 150; osc.connect(actx.destination); osc.start(); setTimeout(() => osc.stop(), 300); } catch(e){}
                 resultadoBox.className = 'result-box error';
                 resultadoBox.innerHTML = `
                     <span class="result-title"><i class='bx bx-error'></i> DENEGADO</span>
@@ -1214,11 +1217,17 @@
                 await cargarCanales(); // Recargar la lista del select
                 toggleInputCanal();   // Volver a mostrar el select y ocultar el input
                 
-                // Seleccionar automáticamente el último canal creado en el dropdown
-                const select = document.getElementById('new-canal');
-                if(select) {
-                    select.selectedIndex = select.options.length - 1;
-                }
+                // Damos un microsegundo para que cargarCanales() termine de inyectar el HTML
+                setTimeout(() => {
+                    const select = document.getElementById('new-canal');
+                    if (select) {
+                        // Buscar el option que coincida con el nombre que acabamos de crear
+                        const optionASeleccionar = Array.from(select.options).find(opt => opt.text === nombre);
+                        if (optionASeleccionar) {
+                            select.value = optionASeleccionar.value;
+                        }
+                    }
+                }, 50);
 
                 showToast(`Canal "${nombre}" registrado correctamente.`, "success");
             } else {
@@ -1313,5 +1322,5 @@
         }
     };
 
-    initTerceros();
+    window.initTerceros();
 })();

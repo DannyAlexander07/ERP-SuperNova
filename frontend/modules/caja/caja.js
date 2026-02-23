@@ -14,7 +14,7 @@
     // Variable para guardar el filtro actual (vacío = todas o la del usuario)
     let filtroSedeActual = "";
 
-    async function initCaja() {
+    window.initCaja = async function() {
         // 1. Primero configuramos el filtro (si es admin)
         await configurarFiltroAdmin(); 
         // 2. Luego cargamos los datos
@@ -310,7 +310,7 @@
                 <td><span class="badge ${esIngreso ? 'badge-soft-success' : 'badge-soft-danger'}">${m.tipo_movimiento}</span></td>
                 <td>${detalleHtml}</td>
                 <td>${metodoHtml}</td>
-                <td style="font-weight:bold; font-size:15px; color:${colorMonto}">${signo} S/ ${parseFloat(m.monto).toFixed(2)}</td>
+                <td style="font-weight:bold; font-size:15px; color:${colorMonto}">${signo} S/ ${Math.abs(parseFloat(m.monto)).toFixed(2)}</td>
                 <td style="font-size:12px">${m.usuario}</td>
             `;
             tbody.appendChild(tr);
@@ -386,7 +386,8 @@
             let desc = (mov.descripcion || "").replace(/(\r\n|\n|\r)/gm, " ").replace(/;/g, ",").replace(/"/g, '""');
             let origen = (mov.origen || "General").replace(/;/g, ",");
             let monto = parseFloat(mov.monto).toFixed(2);
-            if(mov.tipo_movimiento === 'EGRESO') monto = `-${monto}`;
+            // Alineado con la base de datos (INGRESO / SALIDA)
+            if(mov.tipo_movimiento === 'SALIDA') monto = `-${monto}`;
 
             let nombreUsuario = mov.usuario || mov.usuario_nombre || "-";
             let nombreSede = mov.nombre_sede || mov.sede_id || "-";
@@ -416,6 +417,6 @@
     }
 
     // INICIO
-    initCaja();
+    window.initCaja();
 
 })();
