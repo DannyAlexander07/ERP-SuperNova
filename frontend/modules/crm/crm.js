@@ -29,12 +29,12 @@
         } catch(e) { console.error("Error cargando CRM:", e); }
     }
 
-function renderTable(lista) {
+    function renderTable(lista) {
         const tbody = document.getElementById('crm-table-body');
         const emptyState = document.getElementById('crm-empty');
         tbody.innerHTML = '';
 
-        if(lista.length === 0) {
+        if (lista.length === 0) {
             emptyState.style.display = 'block';
             document.getElementById('page-info').innerText = '0 de 0';
             document.getElementById('btn-prev').disabled = true;
@@ -46,7 +46,7 @@ function renderTable(lista) {
 
         const totalPages = Math.ceil(lista.length / itemsPerPage);
         
-        // Ajuste de seguridad
+        // Ajuste de seguridad para la paginación
         if (currentPage > totalPages) currentPage = totalPages;
         if (currentPage < 1) currentPage = 1;
 
@@ -67,34 +67,73 @@ function renderTable(lista) {
         paginatedItems.forEach(lead => {
             const tr = document.createElement('tr');
             
+            // 1. Formateo de Fecha y Hora
             let fechaTexto = '-';
-            if(lead.fecha_tentativa) {
+            if (lead.fecha_tentativa) {
                 const f = new Date(lead.fecha_tentativa);
-                // Validación extra para que no salga "Invalid Date"
                 if (!isNaN(f.getTime())) {
-                    // Cortamos la hora para que solo muestre HH:mm
                     const horaCorta = lead.hora_inicio ? lead.hora_inicio.substring(0, 5) : '';
                     fechaTexto = f.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit' }) + ' ' + horaCorta;
                 }
             }
 
+            // 2. Iconos y Clases de Estado del Lead
             let estadoClass = 'badge-nuevo';
             let estadoIcon = 'bx-sun';
-            switch(lead.estado) {
+            const estadoActual = (lead.estado || 'nuevo').toLowerCase();
+
+            switch (estadoActual) {
                 case 'contactado': estadoClass = 'badge-contactado'; estadoIcon = 'bx-message-dots'; break;
-                case 'cotizado': estadoClass = 'badge-cotizado'; estadoIcon = 'bx-file'; break;
+                case 'cotizado':   estadoClass = 'badge-cotizado';   estadoIcon = 'bx-file'; break;
                 case 'seguimiento': estadoClass = 'badge-seguimiento'; estadoIcon = 'bx-show'; break;
-                case 'ganado': estadoClass = 'badge-ganado'; estadoIcon = 'bx-check'; break;
-                case 'perdido': estadoClass = 'badge-perdido'; estadoIcon = 'bx-x'; break;
+                case 'ganado':     estadoClass = 'badge-ganado';      estadoIcon = 'bx-check-double'; break; 
+                case 'perdido':    estadoClass = 'badge-perdido';     estadoIcon = 'bx-x'; break;
             }
 
+            // 3. Iconos de Origen
             let origenIcon = 'bx-globe';
-            if(lead.canal_origen === 'WhatsApp') origenIcon = 'bxl-whatsapp';
-            if(lead.canal_origen === 'Facebook') origenIcon = 'bxl-facebook';
-            if(lead.canal_origen === 'Instagram') origenIcon = 'bxl-instagram';
+            if (lead.canal_origen === 'WhatsApp') origenIcon = 'bxl-whatsapp';
+            if (lead.canal_origen === 'Facebook') origenIcon = 'bxl-facebook';
+            if (lead.canal_origen === 'Instagram') origenIcon = 'bxl-instagram';
 
             const nombreSede = sedesCache[lead.sede_interes] || '-';
 
+            // 4. LÓGICA DE ESTADO DE PAGO Y BLOQUEO DE BOTONES
+            const adelantoReal = parseFloat(lead.pago_inicial) || 0;
+            const totalEvento = parseFloat(lead.valor_estimado) || 0;
+            const saldoRestante = totalEvento - adelantoReal;
+
+            // Definición de variable para control de bloqueos
+            const esPagadoTotal = (estadoActual === 'ganado' || saldoRestante <= 0.01) && totalEvento > 0;
+
+            let estadoPagoHTML = '';
+            let btnPagoHTML = '';
+
+            if (esPagadoTotal) {
+                // DISEÑO PARA PAGADO TOTAL
+                estadoPagoHTML = `<span class="badge" style="background: #10b981; color: white; border-radius: 20px;"><i class='bx bxs-check-shield'></i> Pagado Total</span>`;
+                
+                btnPagoHTML = `
+                    <button class="btn-icon" style="color: #10b981; background: #dcfce7; border: 1px solid #10b981; cursor: default;" title="Venta Finalizada">
+                        <i class='bx bx-check-double'></i>
+                    </button>`;
+            } else {
+                // DISEÑO PARA PAGO PARCIAL O SIN RESERVA
+                if (adelantoReal > 0) {
+                    // Muestra cuánto falta pagar si el saldo es mayor a 0
+                    estadoPagoHTML = `<span class="badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa;"><i class='bx bx-time-five'></i> Debe: S/ ${saldoRestante.toFixed(2)}</span>`;
+                } else {
+                    estadoPagoHTML = `<span class="badge badge-gray" style="background: #f1f5f9; color: #64748b;"><i class='bx bx-wallet'></i> Sin Reserva</span>`;
+                }
+
+                // El botón permite abrir el modal de abonos mientras haya deuda
+                btnPagoHTML = `
+                    <button class="btn-icon" style="color: #10b981; background: #ecfdf5; border: 1px solid #a7f3d0;" onclick="abrirModalPagos(${lead.id})" title="Registrar Adelanto o Saldo">
+                        <i class='bx bx-money'></i>
+                    </button>`;
+            }
+
+            // 5. Armado de la fila
             tr.innerHTML = `
                 <td>
                     <div class="cell-client">
@@ -110,23 +149,32 @@ function renderTable(lista) {
                     <span class="badge-origen"><i class='bx ${origenIcon}'></i> ${lead.canal_origen || 'Web'}</span>
                 </td>
                 <td class="cell-date">
-                    ${fechaTexto}
+                    <div style="font-weight: 500; color: #374151;">${fechaTexto}</div>
+                    <div style="font-size:11px; color:#64748b; font-weight:600; margin-top:3px;"><i class='bx bx-building'></i> ${nombreSede}</div>
+                </td>
+                <td>
+                    ${estadoPagoHTML}
                 </td>
                 <td>
                     <span class="badge ${estadoClass}"><i class='bx ${estadoIcon}'></i> ${lead.estado || 'nuevo'}</span>
                 </td>
                 <td>
-                    <span style="font-weight:600; color:#4b5563; font-size:13px;">${nombreSede}</span>
-                </td>
-                <td>
                     <div class="action-buttons">
-                        <a href="https://wa.me/51${lead.telefono.replace(/\D/g,'')}" target="_blank" class="btn-icon wsp" title="WhatsApp">
+                        <a href="https://wa.me/51${lead.telefono.replace(/\D/g,'')}" target="_blank" class="btn-icon wsp" title="Enviar WhatsApp">
                             <i class='bx bxl-whatsapp'></i>
                         </a>
-                        <button class="btn-icon" onclick="editarLead(${lead.id})" title="Editar">
+                        
+                        <button class="btn-icon" style="color: #6366f1; background: #e0e7ff; border: 1px solid #c7d2fe;" onclick="verHistorialPagosLead(${lead.id})" title="Ver Historial de Abonos">
+                            <i class='bx bx-list-ul'></i>
+                        </button>
+
+                        ${btnPagoHTML}
+
+                        <button class="btn-icon" onclick="editarLead(${lead.id})" title="Editar Lead" ${esPagadoTotal ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>
                             <i class='bx bx-edit-alt'></i>
                         </button>
-                        <button class="btn-icon delete" onclick="eliminarLead(${lead.id})" title="Eliminar">
+                        
+                        <button class="btn-icon delete" onclick="eliminarLead(${lead.id})" title="Eliminar Lead">
                             <i class='bx bx-trash'></i>
                         </button>
                     </div>
@@ -135,7 +183,6 @@ function renderTable(lista) {
             tbody.appendChild(tr);
         });
     }
-
 
     // --- 4. BUSCADOR EN TIEMPO REAL ---
     window.filtrarCRM = function() {
@@ -164,213 +211,236 @@ function renderTable(lista) {
         renderTable(filtrados);
     }
 
-    // --- 5. LOGICA DEL MODAL ---
+    // --- 5. LOGICA DEL MODAL (LIMPIA) ---
     window.abrirModalLead = async function() {
-        document.getElementById('form-lead').reset();
+        const form = document.getElementById('form-lead');
+        const modal = document.getElementById('modal-lead');
+        
+        if (form) form.reset();
+        
+        // Reset de campos ocultos y estados
         document.getElementById('lead-id').value = '';
         document.getElementById('lead-estado').value = 'nuevo'; 
-        document.getElementById('modal-lead').classList.add('active');
-        document.getElementById('btn-cobrar-saldo').style.display = 'none';
         
-        // Reset manual de selects
-        document.getElementById('lead-sede').value = "";
-        document.getElementById('lead-sala').innerHTML = '<option value="">← Elige sede primero</option>';
-        document.getElementById('lead-sala').disabled = true;
+        // Mostrar modal
+        if (modal) modal.classList.add('active');
+        
+        // Reset manual de selects de sede/sala
+        const selectSede = document.getElementById('lead-sede');
+        const selectSala = document.getElementById('lead-sala');
+        
+        if (selectSede) selectSede.value = "";
+        if (selectSala) {
+            selectSala.innerHTML = '<option value="">← Elige sede primero</option>';
+            selectSala.disabled = true;
+        }
+
+        // Cargamos los catálogos necesarios
         await cargarProductosEnSelect();
-        await cargarVendedores()
-    }
+        await cargarVendedores();
+
+        // 🔥 IMPORTANTE: Aquí borramos la línea que causaba el error del 'style'
+        // Ya no buscamos 'btn-cobrar-saldo' porque fue eliminado del HTML.
+    };
 
     window.cerrarModalLead = function() {
         document.getElementById('modal-lead').classList.remove('active');
     }
 
-// --- 6. EDITAR LEAD (CON BLOQUEO DE ESTADO GANADO) ---
-window.editarLead = async function(id) {
-    const lead = leadsGlobales.find(l => l.id == id);
-    if(!lead) return;
+    // --- 6. EDITAR LEAD (CON BLOQUEO DE ESTADO GANADO) ---
+    window.editarLead = async function(id) {
+        const lead = leadsGlobales.find(l => l.id == id);
+        if(!lead) return;
 
-    await window.abrirModalLead(); // Carga vendedores y resetea form
-    document.querySelector('.modal-header h3').innerText = "Editar Cliente";
-    
-    // --- DATOS BÁSICOS ---
-    document.getElementById('lead-id').value = lead.id;
-    document.getElementById('lead-nombre').value = lead.nombre_apoderado;
-    document.getElementById('lead-telefono').value = lead.telefono;
-    document.getElementById('lead-email').value = lead.email;
-    document.getElementById('lead-canal').value = lead.canal_origen || 'WhatsApp';
-    document.getElementById('lead-hijo').value = lead.nombre_hijo;
-    
-    // Vendedor
-    if (lead.vendedor_id) {
-        document.getElementById('lead-vendedor').value = lead.vendedor_id;
-    }
-
-    // Método de Pago
-    if (lead.metodo_pago) {
-        document.getElementById('lead-metodo-pago').value = lead.metodo_pago.toLowerCase();
-    }
-
-    // Nro Operación
-    if (lead.nro_operacion) {
-        document.getElementById('lead-nro-operacion').value = lead.nro_operacion;
-    }
-
-    if (lead.paquete_interes) {
-        document.getElementById('lead-paquete').value = lead.paquete_interes;
-    }
-
-    // LÓGICA DE EXTRACCIÓN (Niños y Notas)
-    let cantidadNiños = 15; 
-    let notasLimpias = lead.notas || '';
-
-    if (lead.notas) {
-        const regex = /Niños:\s*(\d+)\.?\s*/i;
-        const match = lead.notas.match(regex);
+        await window.abrirModalLead(); // Carga vendedores y resetea form
+        document.querySelector('.modal-header h3').innerText = "Editar Cliente";
         
-        if (match) {
-            cantidadNiños = match[1]; 
-            notasLimpias = lead.notas.replace(regex, '');
+        // --- DATOS BÁSICOS ---
+        document.getElementById('lead-id').value = lead.id;
+        document.getElementById('lead-nombre').value = lead.nombre_apoderado;
+        document.getElementById('lead-telefono').value = lead.telefono;
+        document.getElementById('lead-email').value = lead.email;
+        document.getElementById('lead-canal').value = lead.canal_origen || 'WhatsApp';
+        document.getElementById('lead-hijo').value = lead.nombre_hijo;
+        
+        // Vendedor
+        if (lead.vendedor_id) {
+            document.getElementById('lead-vendedor').value = lead.vendedor_id;
         }
-    }
 
-    document.getElementById('lead-cantidad-ninos').value = cantidadNiños;
-    document.getElementById('lead-obs').value = notasLimpias.trim(); 
-    document.getElementById('lead-valor').value = lead.valor_estimado;
-
-    // --- MANEJO DEL ESTADO Y FECHAS ---
-    const estadoSelect = document.getElementById('lead-estado');
-    estadoSelect.value = lead.estado || 'nuevo'; 
-
-    if(lead.fecha_tentativa) {
-        const fechaLimpia = new Date(lead.fecha_tentativa).toISOString().split('T')[0];
-        document.getElementById('lead-fecha').value = fechaLimpia;
-    }
-    document.getElementById('lead-hora-inicio').value = lead.hora_inicio || '16:00';
-    document.getElementById('lead-hora-fin').value = lead.hora_fin || '19:00';
-
-    if(lead.sede_interes) {
-        document.getElementById('lead-sede').value = lead.sede_interes;
-        await cargarSalasPorSede(); 
-        if(lead.salon_id) {
-            document.getElementById('lead-sala').value = lead.salon_id;
+        if (lead.paquete_interes) {
+            document.getElementById('lead-paquete').value = lead.paquete_interes;
         }
-    }
 
-    // 🔥 BLOQUEO DE SEGURIDAD: SI YA ESTÁ GANADO, NO SE PUEDE CAMBIAR EL ESTADO 🔥
-    if (lead.estado === 'ganado') {
-        estadoSelect.disabled = true; // Bloquea el selector
-        estadoSelect.style.backgroundColor = '#dcfce7'; // Fondo verde suave
-        estadoSelect.style.color = '#166534'; // Texto verde oscuro
-        estadoSelect.style.fontWeight = 'bold';
-    } else {
-        // Restaurar estado normal si abrimos otro lead después
-        estadoSelect.disabled = false; 
-        estadoSelect.style.backgroundColor = ''; 
-        estadoSelect.style.color = '';
-        estadoSelect.style.fontWeight = 'normal';
-    }
+        // LÓGICA DE EXTRACCIÓN (Niños y Notas)
+        let cantidadNiños = parseInt(lead.cantidad_ninos) || 0;
+        let notasLimpias = lead.notas || '';
 
-    // --- BOTÓN DE COBRAR SALDO ---
-    const btnCobrar = document.getElementById('btn-cobrar-saldo');
-    // Solo mostramos cobrar si NO está ganado ni perdido, y si ya hubo pago inicial
-    if(lead.estado !== 'ganado' && lead.estado !== 'perdido' && parseFloat(lead.pago_inicial) > 0) { 
-         btnCobrar.style.display = 'inline-block';
-         btnCobrar.onclick = () => abrirModalCobroFinal(lead); // Usar lead directamente es más seguro
-    } else {
-         btnCobrar.style.display = 'none';
-    }
-};
-
-// --- 7. GUARDAR LEAD (SOPORTA MÉTODO DE PAGO Y NIÑOS) ---
-window.guardarLead = async function() {
-    const id = document.getElementById('lead-id').value;
-    const nombre = document.getElementById('lead-nombre').value;
-    const telefono = document.getElementById('lead-telefono').value;
-    const estado = document.getElementById('lead-estado').value; 
-
-    if(!nombre || !telefono) return showAlert("Nombre y Teléfono son obligatorios", "error");
-
-    // Capturamos inputs básicos
-    const fechaInput = document.getElementById('lead-fecha').value; 
-    const horaInicio = document.getElementById('lead-hora-inicio').value;
-    const valorEstimado = document.getElementById('lead-valor').value;
-    const cantidadNinosInput = document.getElementById('lead-cantidad-ninos').value;
-
-    // 🔥 NUEVO: CAPTURAMOS LOS DATOS DE PAGO (Si existen en el formulario)
-    const metodoPagoInput = document.getElementById('lead-metodo-pago').value;
-    const nroOperacionInput = document.getElementById('lead-nro-operacion').value;
-
-    const vendedorInput = document.getElementById('lead-vendedor').value;
-
-    const dataLead = {
-        nombre_apoderado: nombre,
-        telefono: telefono,
-        email: document.getElementById('lead-email').value,
-        canal_origen: document.getElementById('lead-canal').value,
-        nombre_hijo: document.getElementById('lead-hijo').value,
-        fecha_tentativa: fechaInput || null,
-        hora_inicio: horaInicio,
-        hora_fin: document.getElementById('lead-hora-fin').value,
-        sede_interes: document.getElementById('lead-sede').value ? parseInt(document.getElementById('lead-sede').value) : null,
-        salon_id: document.getElementById('lead-sala').value ? parseInt(document.getElementById('lead-sala').value) : null,
+        if (notasLimpias) {
+            const regex = /Niños:\s*(\d+)\.?\s*/i;
+            const match = notasLimpias.match(regex);
+            if (match) {
+                if (cantidadNiños === 0) { // Solo usar si el campo no está seteado
+                    cantidadNiños = parseInt(match[1]);
+                }
+                // Limpiar siempre la nota para no mostrarla en el textarea
+                notasLimpias = notasLimpias.replace(regex, '').trim();
+            }
+        }
         
-        // Datos Clave
-        paquete_interes: document.getElementById('lead-paquete').value, 
-        cantidad_ninos: cantidadNinosInput, 
-        valor_estimado: valorEstimado,
-        
-        // 🔥 ENVIAMOS LA FORMA DE PAGO AL BACKEND
-        metodo_pago: metodoPagoInput,
-        nro_operacion: nroOperacionInput,
-        vendedor_id: vendedorInput ? parseInt(vendedorInput) : null,
+        if (cantidadNiños === 0) {
+            cantidadNiños = 15; // Default final si todo lo demás falla
+        }
 
-        notas: document.getElementById('lead-obs').value,
-        estado: estado || 'nuevo' 
+        document.getElementById('lead-cantidad-ninos').value = cantidadNiños;
+        document.getElementById('lead-obs').value = notasLimpias.trim(); 
+
+        // --- MANEJO DEL ESTADO Y FECHAS ---
+        const estadoSelect = document.getElementById('lead-estado');
+        estadoSelect.value = lead.estado || 'nuevo'; 
+
+        if(lead.fecha_tentativa) {
+            const fechaLimpia = new Date(lead.fecha_tentativa).toISOString().split('T')[0];
+            document.getElementById('lead-fecha').value = fechaLimpia;
+        }
+        document.getElementById('lead-hora-inicio').value = lead.hora_inicio || '16:00';
+        document.getElementById('lead-hora-fin').value = lead.hora_fin || '19:00';
+
+        if(lead.sede_interes) {
+            document.getElementById('lead-sede').value = lead.sede_interes;
+            await cargarSalasPorSede(); 
+            if(lead.salon_id) {
+                document.getElementById('lead-sala').value = lead.salon_id;
+            }
+        }
+
+        // 🔥 BLOQUEO DE SEGURIDAD: SI YA ESTÁ GANADO, NO SE PUEDE CAMBIAR EL ESTADO 🔥
+        if (lead.estado === 'ganado') {
+            estadoSelect.disabled = true; // Bloquea el selector
+            estadoSelect.style.backgroundColor = '#dcfce7'; // Fondo verde suave
+            estadoSelect.style.color = '#166534'; // Texto verde oscuro
+            estadoSelect.style.fontWeight = 'bold';
+        } else {
+            // Restaurar estado normal si abrimos otro lead después
+            estadoSelect.disabled = false; 
+            estadoSelect.style.backgroundColor = ''; 
+            estadoSelect.style.color = '';
+            estadoSelect.style.fontWeight = 'normal';
+        }
+
+        // ✅ ACTUALIZACIÓN: Disparar el cálculo del total inmediatamente después de cargar los datos
+        if (typeof window.calcularTotalLead === "function") {
+            window.calcularTotalLead();
+        }
     };
 
-    try {
-        const token = localStorage.getItem('token');
-        let url = '/api/crm';
-        let method = 'POST';
+    // --- 7. GUARDAR LEAD (SOLO INFORMACIÓN Y TOTAL ESTIMADO, SIN PAGOS) ---
+    window.guardarLead = async function() {
+        const id = document.getElementById('lead-id').value;
+        const nombre = document.getElementById('lead-nombre').value;
+        const telefono = document.getElementById('lead-telefono').value;
+        const estado = document.getElementById('lead-estado').value; 
+
+        if(!nombre || !telefono) return showAlert("Nombre y Teléfono son obligatorios", "error");
+
+        // Capturamos inputs básicos
+        const fechaInput = document.getElementById('lead-fecha').value; 
+        const horaInicio = document.getElementById('lead-hora-inicio').value;
+        const horaFin = document.getElementById('lead-hora-fin').value;
+        const vendedorInput = document.getElementById('lead-vendedor').value;
         
-        // Si hay ID, es una EDICIÓN (PUT)
-        if(id) { 
-            url = `/api/crm/${id}`; 
-            method = 'PUT'; 
-        }
+        // Capturamos la cantidad de niños parseada a entero (mínimo 1)
+        const inputNinos = document.getElementById('lead-cantidad-ninos');
+        const cantidadNinos = inputNinos ? parseInt(inputNinos.value) || 15 : 15;
 
-        const res = await fetch(url, {
-            method: method,
-            headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-            body: JSON.stringify(dataLead)
-        });
+        // Capturamos el Total Estimado (readonly en el modal)
+        const valorEstimado = document.getElementById('lead-valor').value;
 
-        if(res.ok) {
-            // Actualizar estado si es edición y cambió el select de estado
-            if(id && estado) {
-                 await fetch(`/api/crm/${id}/estado`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-                    body: JSON.stringify({ nuevoEstado: estado })
-                });
+        // 🔥 ACTUALIZACIÓN: Limpiamos la nota antes de enviarla
+        // Solo enviamos el texto que el usuario escribió en el textarea.
+        // El Backend se encargará de ponerle el "Niños: XX" al principio.
+        let notasLimpias = document.getElementById('lead-obs').value;
+        // Si la nota ya traía el prefijo por una edición anterior, se lo quitamos para no duplicar
+        notasLimpias = notasLimpias.replace(/Niños:\s*\d+\.?\s*/i, '').trim();
+
+        // Armamos el objeto sincronizado con la base de datos
+        const dataLead = {
+            nombre_apoderado: nombre,
+            telefono: telefono,
+            email: document.getElementById('lead-email').value,
+            canal_origen: document.getElementById('lead-canal').value,
+            nombre_hijo: document.getElementById('lead-hijo').value,
+            fecha_tentativa: fechaInput || null,
+            hora_inicio: horaInicio,
+            hora_fin: horaFin,
+            sede_interes: document.getElementById('lead-sede').value ? parseInt(document.getElementById('lead-sede').value) : null,
+            salon_id: document.getElementById('lead-sala').value ? parseInt(document.getElementById('lead-sala').value) : null,
+            
+            // Datos Clave
+            paquete_interes: document.getElementById('lead-paquete').value, 
+            cantidad_ninos: cantidadNinos, // 🔥 Se envía como número puro
+            valor_estimado: valorEstimado, 
+            vendedor_id: vendedorInput ? parseInt(vendedorInput) : null,
+            notas: notasLimpias, // 🔥 Enviamos solo el texto limpio
+            estado: estado || 'nuevo' 
+        };
+
+        const btnGuardar = document.getElementById('btn-guardar-lead');
+        const txtOriginal = btnGuardar ? btnGuardar.innerText : "Guardar Información";
+
+        try {
+            if(btnGuardar) {
+                btnGuardar.disabled = true;
+                btnGuardar.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Guardando...";
             }
 
-            showToast("Guardado correctamente.", "success");
-            cerrarModalLead();
+            const token = localStorage.getItem('token');
+            let url = '/api/crm';
+            let method = 'POST';
             
-            // Recargar tabla para ver cambios
-            initCRM(); 
+            if(id) { 
+                url = `/api/crm/${id}`; 
+                method = 'PUT'; 
+            }
 
-        } else {
-            const errorData = await res.json();
-            showAlert("Error al guardar: " + (errorData.msg || "Error desconocido"), "error");
+            const res = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
+                body: JSON.stringify(dataLead)
+            });
+
+            if(res.ok) {
+                // Actualizar estado de forma independiente si es edición para gatillar lógica de eventos
+                if(id && estado) {
+                    await fetch(`/api/crm/${id}/estado`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
+                        body: JSON.stringify({ nuevoEstado: estado })
+                    });
+                }
+
+                showToast("Guardado correctamente.", "success");
+                cerrarModalLead();
+                
+                // Recargar tabla para ver cambios
+                if (typeof cargarLeads === 'function') {
+                    cargarLeads(); 
+                }
+
+            } else {
+                const errorData = await res.json();
+                showAlert("Error al guardar: " + (errorData.msg || "Error desconocido"), "error");
+            }
+        } catch(e) { 
+            console.error("Error en guardarLead:", e); 
+            showAlert("Error de conexión al guardar.", "error"); 
+        } finally {
+            if(btnGuardar) {
+                btnGuardar.disabled = false;
+                btnGuardar.innerText = txtOriginal;
+            }
         }
-    } catch(e) { 
-        console.error(e); 
-        showAlert("Error de conexión al guardar.", "error"); 
-    }
-}
-
+    };
     
     // --- 8. ELIMINAR LEAD ---
     window.eliminarLead = async function(id) {
@@ -395,41 +465,41 @@ window.guardarLead = async function() {
         }
     }
 
-async function cargarVendedores() {
-    try {
-        const token = localStorage.getItem('token');
-        if (!token) return;
+    async function cargarVendedores() {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) return;
 
-        const res = await fetch('/api/usuarios', {
-            headers: { 'x-auth-token': token }
-        });
-
-        if (!res.ok) return console.error("Error cargando vendedores");
-
-        const data = await res.json();
-        const listaUsuarios = data.usuarios ? data.usuarios : data;
-
-        const select = document.getElementById('lead-vendedor');
-        select.innerHTML = '<option value="">-- Selecciona Vendedor --</option>';
-
-        if (Array.isArray(listaUsuarios)) {
-            listaUsuarios.forEach(user => {
-                const option = document.createElement('option');
-                option.value = user.id;
-
-                // ✅ CORRECCIÓN: Unimos Nombres + Apellidos según tu base de datos
-                // Usamos `${}` para juntarlos con un espacio en medio
-                const nombreCompleto = `${user.nombres} ${user.apellidos}`;
-                
-                option.textContent = nombreCompleto;
-                select.appendChild(option);
+            const res = await fetch('/api/usuarios', {
+                headers: { 'x-auth-token': token }
             });
-        }
 
-    } catch (e) {
-        console.error("Error al cargar lista de vendedores:", e);
+            if (!res.ok) return console.error("Error cargando vendedores");
+
+            const data = await res.json();
+            const listaUsuarios = data.usuarios ? data.usuarios : data;
+
+            const select = document.getElementById('lead-vendedor');
+            select.innerHTML = '<option value="">-- Selecciona Vendedor --</option>';
+
+            if (Array.isArray(listaUsuarios)) {
+                listaUsuarios.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.id;
+
+                    // ✅ CORRECCIÓN: Unimos Nombres + Apellidos según tu base de datos
+                    // Usamos `${}` para juntarlos con un espacio en medio
+                    const nombreCompleto = `${user.nombres} ${user.apellidos}`;
+                    
+                    option.textContent = nombreCompleto;
+                    select.appendChild(option);
+                });
+            }
+
+        } catch (e) {
+            console.error("Error al cargar lista de vendedores:", e);
+        }
     }
-}
 
 
     // --- 9. COBRAR SALDO (CON AJUSTE) ---
@@ -505,7 +575,7 @@ async function cargarVendedores() {
             const res = await fetch(`/api/crm/salones?sede=${sedeId}`, { headers: { 'x-auth-token': token } });
             if(res.ok) {
                 const salas = await res.json();
-                selectSala.innerHTML = '<option value="">Seleccionar Sala</option>';
+                selectSala.innerHTML = '<option value="" selected disabled>Seleccionar Sala</option>'; // 🔥 FIX AQUÍ
                 salas.forEach(s => {
                     const opt = document.createElement('option');
                     opt.value = s.id;
@@ -522,40 +592,87 @@ async function cargarVendedores() {
             const res = await fetch('/api/inventario', { headers: { 'x-auth-token': localStorage.getItem('token') } });
             if(res.ok) {
                 const data = await res.json();
-                // Filtramos solo lo que sea "combo" o lo que quieras vender
-                // Si no tienes categoría 'combo', usa todos.
                 productosCache = data.productos || []; 
                 
-                const select = document.getElementById('lead-paquete');
-                select.innerHTML = '<option value="">-- Seleccione Combo --</option>';
+                // 🔥 FILTRO MÁGICO: Filtramos solo los que son de la línea o categoría de eventos
+                const paquetesDeEventos = productosCache.filter(p => 
+                    p.linea_negocio === 'EVENTOS' || 
+                    (p.categoria && p.categoria.toLowerCase() === 'eventos')
+                );
                 
-                productosCache.forEach(p => {
-                    const opt = document.createElement('option');
-                    opt.value = p.id;
-                    opt.innerText = `${p.nombre} (S/ ${p.precio_venta})`;
-                    select.appendChild(opt);
-                });
+                const select = document.getElementById('lead-paquete');
+                if (select) {
+                    select.innerHTML = '<option value="">-- Seleccione Combo --</option>';
+                    
+                    // 🔥 Llenamos el cuadrito SOLO con el arreglo filtrado
+                    paquetesDeEventos.forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p.id;
+                        opt.innerText = `${p.nombre} (S/ ${parseFloat(p.precio_venta).toFixed(2)})`;
+                        select.appendChild(opt);
+                    });
+                }
+                return productosCache; // IMPORTANTE: Retornar para que el await funcione
             }
-        } catch(e) { console.error(e); }
+        } catch(e) { 
+            console.error("Error cargando productos:", e); 
+            return [];
+        }
     }
 
+    // =========================================================================
+    // 1. CÁLCULO DEL TOTAL ESTIMADO (En tiempo real al Crear/Editar Lead)
+    // =========================================================================
     window.calcularTotalLead = function() {
-        const prodId = document.getElementById('lead-paquete').value;
-        const cantidad = document.getElementById('lead-cantidad-ninos').value || 0;
+        console.log("Calculando total..."); 
+
+        const prodSelect = document.getElementById('lead-paquete');
+        const cantidadInput = document.getElementById('lead-cantidad-ninos');
         const inputTotal = document.getElementById('lead-valor');
 
-        if(!prodId) {
+        // 1. Validaciones de seguridad de existencia de elementos
+        if (!prodSelect || !cantidadInput || !inputTotal) return;
+
+        const prodId = prodSelect.value;
+        
+        // 2. Limpieza de cantidad (asegurar que sea número válido)
+        let cantidad = parseInt(cantidadInput.value);
+        if (isNaN(cantidad) || cantidad < 0) cantidad = 0;
+
+        // 3. Si no hay producto seleccionado, el total es 0
+        if (!prodId || prodId === "") {
             inputTotal.value = "0.00";
             return;
         }
 
-        const producto = productosCache.find(p => p.id == prodId);
-        if(producto) {
-            const precio = parseFloat(producto.precio_venta);
-            const total = precio * parseInt(cantidad);
-            inputTotal.value = total.toFixed(2);
+        let precio = 0;
+
+        // 4. Intento A: Buscar en el Cache de productos (Más preciso)
+        if (typeof productosCache !== 'undefined' && productosCache.length > 0) {
+            const producto = productosCache.find(p => p.id == prodId);
+            if (producto) {
+                precio = parseFloat(producto.precio_venta) || 0;
+            }
         }
-    }
+
+        // 5. Intento B: Si el cache falló o aún no carga, extraemos del texto del Select
+        // Formato esperado en el HTML: "Nombre Producto (S/ 100.00)"
+        if (precio === 0 && prodSelect.selectedIndex >= 0) {
+            const optionText = prodSelect.options[prodSelect.selectedIndex].text;
+            // Buscamos cualquier número que siga a "S/"
+            const match = optionText.match(/S\/\s*([\d,.]+)/);
+            if (match && match[1]) {
+                // Limpiamos comas por si el formato tiene separador de miles
+                precio = parseFloat(match[1].replace(/,/g, '')) || 0;
+            }
+        }
+
+        // 6. Cálculo Final y formateo a 2 decimales
+        const total = precio * cantidad;
+        inputTotal.value = total.toFixed(2);
+        
+        console.log(`[Cálculo] Precio: ${precio} x Cantidad: ${cantidad} = Total: ${total}`);
+    };
 
     // --- 9. MODAL COBRO FINAL (CORREGIDO: ASYNC) ---
     let leadActualParaCobro = null; 
@@ -647,8 +764,11 @@ async function cargarVendedores() {
     };
 
     window.procesarCobroFinal = async function() {
-        const btn = document.querySelector('#modal-cobrar-saldo .btn-cobrar');
+        // Buscamos el botón dentro del modal de cobro de saldo
+        const modal = document.getElementById('modal-cobrar-saldo');
+        const btn = modal.querySelector('button[onclick*="procesarCobroFinal"]');
         const originalText = btn.innerHTML;
+        
         btn.disabled = true;
         btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Procesando...`;
 
@@ -659,6 +779,8 @@ async function cargarVendedores() {
             const metodo = document.getElementById('cobro-metodo').value;
 
             const token = localStorage.getItem('token');
+            
+            // ⚠️ RUTA CORREGIDA: Debe coincidir con crmRoutes.js
             const res = await fetch(`/api/crm/leads/${leadId}/cobrar-saldo`, {
                 method: 'POST',
                 headers: { 
@@ -678,13 +800,13 @@ async function cargarVendedores() {
                 await showAlert(data.msg, "success");
                 cerrarModalCobroFinal();
                 cerrarModalLead(); 
-                cargarLeads(); // Recargar tabla principal
+                cargarLeads(); // Recarga la tabla para ver el estado "Ganado"
             } else {
                 await showAlert(data.msg, "error");
             }
 
         } catch (error) {
-            console.error(error);
+            console.error("Error en cobro final:", error);
             await showAlert("Error de conexión al procesar el cobro.", "error");
         } finally {
             btn.disabled = false;
@@ -719,7 +841,494 @@ async function cargarVendedores() {
         }
     }
 
-    // ARRANQUE
-    initCRM();
+    // =========================================================================
+    // 🚀 GESTOR DE HISTORIAL DE PAGOS (FRONTEND)
+    // =========================================================================
+
+    window.verHistorialPagosLead = async function(id) {
+        const lead = leadsGlobales.find(l => l.id == id);
+        if (!lead) return;
+
+        // 1. Referencias al DOM del modal de historial
+        const tbody = document.getElementById('historial-pagos-body');
+        const emptyState = document.getElementById('historial-empty');
+        const txtTotal = document.getElementById('historial-total-monto');
+        const txtCliente = document.getElementById('historial-nombre-cliente');
+        const txtEvento = document.getElementById('historial-evento-info');
+
+        // Estado inicial de carga
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;"><i class="bx bx-loader-alt bx-spin"></i> Cargando historial detallado...</td></tr>';
+        txtCliente.innerText = lead.nombre_apoderado;
+        txtEvento.innerText = `Evento: ${lead.nombre_hijo || 'Sin nombre'} | Tel: ${lead.telefono}`;
+        txtTotal.innerText = "S/ 0.00";
+        emptyState.style.display = 'none';
+
+        // Abrir modal
+        document.getElementById('modal-historial-pagos').classList.add('active');
+
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`/api/crm/${id}/pagos`, {
+                headers: { 'x-auth-token': token }
+            });
+
+            if (!res.ok) throw new Error("Error en la respuesta del servidor");
+
+            const pagos = await res.json();
+            tbody.innerHTML = '';
+
+            if (pagos.length === 0) {
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            let sumaTotal = 0;
+
+            pagos.forEach(p => {
+                const monto = parseFloat(p.monto) || 0;
+                sumaTotal += monto;
+
+                // Formateo de fecha local
+                const fecha = new Date(p.fecha_pago).toLocaleString('es-PE', {
+                    day: '2-digit', month: '2-digit', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                });
+
+                // Estilos dinámicos según el tipo de abono
+                const tipoColor = p.tipo_pago === 'RESERVA' ? '#3b82f6' : '#10b981';
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="color: #64748b;">${fecha}</td>
+                    <td>
+                        <div style="display:flex; flex-direction:column;">
+                            <strong style="color: #1e293b;">S/ ${monto.toFixed(2)}</strong>
+                            <small style="color: #94a3b8; font-size:10px; font-weight:600; text-transform: uppercase;">
+                                ${p.comprobante_tipo || 'TICKET'}: ${p.documento_usado || '---'}
+                            </small>
+                        </div>
+                    </td>
+                    <td>
+                        <div style="display:flex; flex-direction:column;">
+                            <span style="text-transform: uppercase; font-weight:600; font-size:11px; color: #475569;">${p.metodo_pago}</span>
+                            <small style="color: #94a3b8;">Op: ${p.nro_operacion || 'N/A'}</small>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge" style="background: ${tipoColor}15; color: ${tipoColor}; border: 1px solid ${tipoColor}30; font-size:10px; padding: 2px 6px;">
+                            ${p.tipo_pago}
+                        </span>
+                    </td>
+                    <td style="color: #64748b; font-size:12px;">${p.usuario_recibio}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Actualizar el total recaudado en el pie del modal
+            txtTotal.innerText = `S/ ${sumaTotal.toFixed(2)}`;
+
+        } catch (error) {
+            console.error("Error cargando historial:", error);
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#ef4444; padding:20px;">Hubo un problema al obtener los pagos.</td></tr>';
+        }
+    };
+
+    window.cerrarModalHistorial = function() {
+        document.getElementById('modal-historial-pagos').classList.remove('active');
+    };
+
+    // =========================================================================
+    // 🔥 2. NUEVO GESTOR DE PAGOS PRO (ESTILO POS) 🔥
+    // =========================================================================
+    
+    let leadActualParaPagos = null;
+
+    window.cambiarTipoDocumentoPago = function() {
+        const tipo = document.getElementById('pago-tipo-comprobante').value;
+        const labelDoc = document.getElementById('label-doc-pago');
+        const labelNom = document.getElementById('label-nom-pago');
+        const inputDoc = document.getElementById('pago-documento');
+        const inputNom = document.getElementById('pago-nombre-cliente');
+
+        // Reset de estados visuales
+        inputDoc.value = '';
+        inputNom.readOnly = false;
+        inputNom.style.backgroundColor = "#fff";
+        inputNom.placeholder = "Nombre para el comprobante";
+
+        if (tipo === 'FACTURA') {
+            labelDoc.innerHTML = 'RUC <span class="req">*</span>';
+            labelNom.innerHTML = 'Razón Social <span class="req">*</span>';
+            inputDoc.placeholder = "Ingrese RUC (11 dígitos)";
+            inputDoc.maxLength = 11; // 🔥 Limita la entrada
+            inputNom.value = ''; 
+        } else if (tipo === 'BOLETA') {
+            labelDoc.innerHTML = 'DNI <span class="req">*</span>';
+            labelNom.innerHTML = 'Nombre Completo <span class="req">*</span>';
+            inputDoc.placeholder = "Ingrese DNI (8 dígitos)";
+            inputDoc.maxLength = 8; // 🔥 Limita la entrada
+            inputNom.value = leadActualParaPagos ? leadActualParaPagos.nombre_apoderado : '';
+        }
+    };
+
+    window.abrirModalPagos = async function(id) {
+        // 1. Buscamos el Lead en memoria
+        const lead = leadsGlobales.find(l => l.id == id);
+        if (!lead) return showAlert("Error: Lead no encontrado.", "error");
+
+        leadActualParaPagos = lead;
+
+        // 2. Limpiar formulario anterior
+        document.getElementById('form-registrar-pago').reset();
+        document.getElementById('pago-lead-id').value = lead.id;
+        
+        // 3. Traer catálogos de productos si no están cargados
+        if (productosCache.length === 0) {
+            await cargarProductosEnSelect();
+        }
+
+        // Cargar por defecto Boleta/Nota y el nombre del cliente
+        document.getElementById('pago-tipo-comprobante').value = 'BOLETA';
+        if (typeof cambiarTipoDocumentoPago === 'function') cambiarTipoDocumentoPago(); 
+
+        // 🔥 CORRECCIÓN: Prioridad al dato real de cantidad_ninos
+        let ninosReales = parseInt(lead.cantidad_ninos);
+        
+        // Si el dato es inválido (0, nulo o NaN), intentamos extraerlo de las notas o usamos 15 como fallback
+        if (!ninosReales || isNaN(ninosReales)) {
+            if (lead.notas && lead.notas.includes("Niños:")) {
+                const match = lead.notas.match(/Niños:\s*(\d+)/);
+                ninosReales = match ? parseInt(match[1]) : 15;
+            } else {
+                ninosReales = 15; 
+            }
+        }
+
+        // 4. Calcular los montos reales
+        let precioUnitario = 0;
+        let nombrePaquete = "Sin paquete seleccionado";
+        
+        if (lead.paquete_interes) {
+            const prod = productosCache.find(p => p.id == lead.paquete_interes);
+            if (prod) {
+                precioUnitario = parseFloat(prod.precio_venta);
+                nombrePaquete = prod.nombre;
+            }
+        }
+
+        // Determinar el costo total
+        let costoTotalEstimado = parseFloat(lead.valor_estimado || 0);
+        if (costoTotalEstimado === 0) {
+            costoTotalEstimado = precioUnitario * ninosReales;
+        }
+
+        // 5. Lo que ya pagó y lo que debe
+        // 🔥 CORRECCIÓN: Validamos múltiples posibles nombres del campo (pago_inicial o acuenta)
+        const yaPagado = parseFloat(lead.pago_inicial || lead.acuenta || 0);
+        
+        let costoTotalNum = parseFloat(costoTotalEstimado) || 0;
+        let saldoActual = costoTotalNum - yaPagado;
+        
+        if (saldoActual < 0) saldoActual = 0;
+
+        // 6. Pintar en el Resumen Visual (Modal)
+        document.getElementById('pago-nombre-paquete').textContent = nombrePaquete;
+        document.getElementById('pago-cantidad-ninos').textContent = ninosReales;
+        document.getElementById('pago-total-estimado').textContent = `S/ ${costoTotalNum.toFixed(2)}`;
+        document.getElementById('pago-ya-pagado').textContent = `S/ ${yaPagado.toFixed(2)}`;
+        
+        // 🔥 IMPORTANTE: Aquí mostramos el saldo real antes de restar el abono de hoy
+        document.getElementById('pago-saldo-pendiente').textContent = `S/ ${saldoActual.toFixed(2)}`;
+        document.getElementById('pago-saldo-pendiente').style.color = "#dc3545"; // Rojo inicial
+
+        // 7. Sugerir el monto a abonar hoy
+        const inputMonto = document.getElementById('abono-monto');
+        if (yaPagado === 0 && costoTotalEstimado > 0) {
+            inputMonto.value = (costoTotalEstimado / 2).toFixed(2); // Sugiere 50%
+        } else {
+            // Si ya hay pagos, sugerimos 0 o el saldo, pero sin disparar la resta visual inmediata
+            inputMonto.value = ""; 
+            inputMonto.placeholder = saldoActual.toFixed(2);
+        }
+
+        // 8. Mostrar el Modal
+        document.getElementById('modal-pagos-lead').classList.add('active');
+
+        // Solo actualizamos en vivo si el usuario empieza a escribir, 
+        // para que no vea "Saldo 0" al abrir el modal.
+        inputMonto.focus();
+    };
+
+    window.actualizarResumenPagoEnVivo = function() {
+        // 1. Verificación de seguridad
+        if (!leadActualParaPagos) {
+            console.warn("⚠️ No hay un lead cargado para calcular el abono.");
+            return;
+        }
+
+        // 2. Obtener elementos
+        const modal = document.getElementById('modal-pagos-lead');
+        if (!modal) return;
+
+        const inputMonto = modal.querySelector('#abono-monto');
+        const txtSaldoPendiente = modal.querySelector('#pago-saldo-pendiente');
+        
+        // 3. Obtener los valores base (Priorizando datos de la BD o cálculos de paquete)
+        let precioUnitario = 0;
+        if (leadActualParaPagos.paquete_interes && productosCache) {
+            const prod = productosCache.find(p => p.id == leadActualParaPagos.paquete_interes);
+            if (prod) precioUnitario = parseFloat(prod.precio_venta);
+        }
+
+        let ninos = parseInt(leadActualParaPagos.cantidad_ninos) || 15;
+        if (leadActualParaPagos.notas && leadActualParaPagos.notas.includes("Niños:")) {
+            const match = leadActualParaPagos.notas.match(/Niños:\s*(\d+)/);
+            if (match) ninos = parseInt(match[1]);
+        }
+
+        // Calculamos el Costo Total
+        let totalEstimado = precioUnitario * ninos;
+        if (totalEstimado === 0) {
+            totalEstimado = parseFloat(leadActualParaPagos.valor_estimado) || 0;
+        }
+
+        // 🔥 IMPORTANTE: Validamos ambos nombres posibles del campo de pago previo
+        const yaPagado = parseFloat(leadActualParaPagos.pago_inicial || leadActualParaPagos.acuenta || 0);
+        const abonoHoy = parseFloat(inputMonto.value) || 0;
+
+        // 4. Calcular el Saldo que quedará DESPUÉS de pagar lo que está en el input
+        const deudaAntesDeHoy = totalEstimado - yaPagado;
+        let saldoResultante = deudaAntesDeHoy - abonoHoy;
+        
+        // Evitamos saldos negativos si el usuario escribe de más
+        if (saldoResultante < 0) saldoResultante = 0;
+
+        // 5. Pintar el resultado en el modal con lógica de colores
+        if (txtSaldoPendiente) {
+            txtSaldoPendiente.innerText = `S/ ${saldoResultante.toFixed(2)}`;
+            
+            // 🔥 VALIDACIÓN DE EXCESO VISUAL
+            const btnPagar = modal.querySelector('#btn-procesar-abono');
+            const deudaReal = totalEstimado - yaPagado;
+
+            if (abonoHoy > (deudaReal + 0.01)) {
+                // Si se excede, ponemos el saldo en rojo brillante y bloqueamos el botón
+                txtSaldoPendiente.style.color = "#ff0000";
+                txtSaldoPendiente.innerHTML = `<i class='bx bx-error-circle'></i> Excede el saldo (Máx: S/ ${deudaReal.toFixed(2)})`;
+                if (btnPagar) btnPagar.disabled = true;
+            } else {
+                // Si el monto es correcto, habilitamos el botón y aplicamos tus colores originales
+                if (btnPagar) btnPagar.disabled = false;
+
+                if (saldoResultante === 0 && totalEstimado > 0) {
+                    txtSaldoPendiente.style.color = "#28a745"; // Verde
+                    txtSaldoPendiente.style.fontWeight = "bold";
+                } else if (abonoHoy > 0) {
+                    txtSaldoPendiente.style.color = "#007bff"; // Azul
+                    txtSaldoPendiente.style.fontWeight = "bold";
+                } else {
+                    txtSaldoPendiente.style.color = "#dc3545"; // Rojo estándar
+                    txtSaldoPendiente.style.fontWeight = "normal";
+                }
+            }
+        }
+        
+        console.log(`[DEBUG] Total:${totalEstimado} | Previo:${yaPagado} | Input:${abonoHoy} | Final:${saldoResultante}`);
+    };
+
+    window.cerrarModalPagos = function() {
+        document.getElementById('modal-pagos-lead').classList.remove('active');
+    };
+
+    window.buscarDocumentoPagoLead = async function(event) {
+        // Prevenir que el botón haga submit del formulario
+        if(event) event.preventDefault(); 
+        
+        // 🔥 CORRECCIÓN: Manejo seguro del botón (currentTarget o fallback al selector)
+        const btn = event ? event.currentTarget : document.querySelector('#modal-pagos-lead .btn-primary[onclick*="buscarDocumentoPagoLead"]');
+        
+        const tipoComprobante = document.getElementById('pago-tipo-comprobante').value;
+        const inputDocumento = document.getElementById('pago-documento');
+        const inputNombre = document.getElementById('pago-nombre-cliente');
+        
+        const numero = inputDocumento.value.trim();
+        const token = localStorage.getItem('token');
+
+        // --- Validaciones de Longitud según Comprobante ---
+        if (!numero) return showAlert("⚠️ Ingrese un número para buscar.", "warning");
+
+        if (tipoComprobante === 'FACTURA' && numero.length !== 11) {
+            return showAlert("⚠️ Para Factura, el RUC debe tener 11 dígitos.", "error");
+        }
+        
+        if (tipoComprobante === 'BOLETA' && numero.length !== 8) {
+            return showAlert("⚠️ Para Boleta, el DNI debe tener 8 dígitos.", "error");
+        }
+
+        // Efecto Loading específico en el botón lupa
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i>";
+        btn.disabled = true;
+
+        inputNombre.placeholder = "Consultando base de datos...";
+        inputNombre.value = "";
+
+        try {
+            const res = await fetch(`/api/consultas/${numero}`, {
+                headers: { 'x-auth-token': token }
+            });
+            const data = await res.json();
+
+            if (res.ok && data.success) {
+                showToast(`✅ Datos obtenidos correctamente`, "success");
+                inputNombre.value = data.nombre;
+                inputNombre.readOnly = true; 
+                inputNombre.style.backgroundColor = "#dcfce7"; 
+            } else {
+                showAlert("ℹ️ No se encontraron datos oficiales. Ingrese manualmente.", "info");
+                inputNombre.readOnly = false;
+                inputNombre.style.backgroundColor = "#fff";
+                inputNombre.focus(); 
+            }
+        } catch (error) {
+            console.error("Error API Identidad:", error);
+            showAlert("❌ El servicio de consultas no está disponible.", "error");
+            inputNombre.readOnly = false;
+        } finally {
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        }
+    };
+
+    // Procesar el Pago al Backend
+    window.procesarPagoLead = async function() {
+        const leadId = document.getElementById('pago-lead-id').value;
+        const montoAbono = document.getElementById('abono-monto').value;
+        const metodo = document.getElementById('abono-metodo').value;
+        const referencia = document.getElementById('abono-referencia').value;
+
+        // Datos del Comprobante
+        const tipoComprobante = document.getElementById('pago-tipo-comprobante').value;
+        const documentoCliente = document.getElementById('pago-documento').value;
+        const nombreCliente = document.getElementById('pago-nombre-cliente').value;
+
+        const montoFloat = parseFloat(montoAbono);
+
+        // 1. Validación de monto mayor a 0
+        if (!montoAbono || parseFloat(montoAbono) <= 0) {
+            // Agregado await para que la ejecución se detenga y muestre el modal
+            await showAlert("⚠️ Ingresa un monto a pagar mayor a 0", "error");
+            return; 
+        }
+
+        // 🔥 2. VALIDACIÓN CRÍTICA SUNAT (Monto >= 700)
+        // Nubefact rechazará boletas/facturas de 700 a más sin DNI/RUC
+        if ((tipoComprobante === 'BOLETA' || tipoComprobante === 'FACTURA') && montoFloat >= 700) {
+            if (!documentoCliente || documentoCliente.length < 8) {
+                await showAlert(
+                    `⛔ Validación SUNAT: Para montos de S/ 700.00 o más, es obligatorio registrar un DNI o RUC. Por favor, realice la búsqueda del documento.`, 
+                    "error"
+                );
+                document.getElementById('pago-documento').focus();
+                return;
+            }
+        }
+
+        // 2. Validación de Saldo Pendiente
+        const totalEstimado = parseFloat(leadActualParaPagos.valor_estimado) || 0;
+        const yaPagado = parseFloat(leadActualParaPagos.pago_inicial || leadActualParaPagos.acuenta || 0);
+        const saldoPendienteReal = totalEstimado - yaPagado;
+        const montoAbonarFloat = parseFloat(montoAbono);
+
+        if (montoAbonarFloat > (saldoPendienteReal + 0.01)) { 
+            // Agregado await para que el modal de error sea visible y detenga el proceso
+            await showAlert(`❌ No se puede cobrar S/ ${montoAbonarFloat.toFixed(2)} porque supera el saldo pendiente de S/ ${saldoPendienteReal.toFixed(2)}`, "error");
+            return;
+        }
+        
+        // --- Si pasa las validaciones, procedemos con el estado de carga ---
+        const btn = document.getElementById('btn-procesar-abono');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Generando Comprobante...`;
+
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`/api/crm/leads/${leadId}/pagar`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-auth-token': token 
+                },
+                body: JSON.stringify({
+                    monto: montoAbono,
+                    metodoPago: metodo,
+                    nroOperacion: referencia,
+                    comprobante: {
+                        tipo: tipoComprobante,
+                        documento: documentoCliente,
+                        nombre: nombreCliente
+                    }
+                })
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                showToast(data.msg || "Cobro registrado y comprobante generado.", "success");
+                cerrarModalPagos();
+                initCRM(); 
+            } else {
+                // Usar await aquí también para asegurar que el error se lea
+                await showAlert(data.msg || "Error al procesar el pago.", "error");
+            }
+
+        } catch (error) {
+            console.error(error);
+            await showAlert("Error de conexión al generar el comprobante.", "error");
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    };
+
+    // --- FUNCIONES GLOBALES DE MODAL (SEGURAS) ---
+    window.mostrarExito = function(mensaje) {
+        const msgEl = document.getElementById('success-msg');
+        const modalEl = document.getElementById('modal-success');
+        
+        if (msgEl && modalEl) {
+            msgEl.innerText = mensaje;
+            modalEl.classList.add('active');
+        } else {
+            alert("✅ " + mensaje);
+        }
+    }
+
+    window.mostrarError = function(mensaje) {
+        const msgEl = document.getElementById('error-msg');
+        const modalEl = document.getElementById('modal-error');
+        
+        if (msgEl && modalEl) {
+            msgEl.innerText = mensaje;
+            modalEl.classList.add('active');
+        } else {
+            alert("❌ " + mensaje);
+        }
+    }
+
+    // Exponemos ambas variaciones de mayúsculas por si el router es estricto
+    window.initCrm = function() {
+        console.log("▶️ Iniciando módulo CRM...");
+        initCRM();
+    };
+    
+    // Alias por si el router busca todo en mayúsculas
+    window.initCRM = window.initCrm;
+
+    // Fallback: Si la página se recarga manualmente (F5) estando en esta vista
+    if (document.getElementById('crm-table-body')) {
+        window.initCrm();
+    }
 
 })();

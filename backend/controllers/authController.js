@@ -62,13 +62,14 @@ exports.login = async (req, res) => {
             { expiresIn: '12h' }, 
             async (err, token) => {
                 if (err) throw err;
+                const ip_origen = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'IP Desconocida';
                 
                 // 🛡️ REGISTRO EN AUDITORÍA: Guardamos quién y cuándo entró
                 try {
                     await pool.query(
-                        `INSERT INTO auditoria (usuario_id, modulo, accion, detalle) 
-                         VALUES ($1, 'AUTH', 'LOGIN', $2)`,
-                        [usuario.id, `Inicio de sesión exitoso desde el controlador de auth.`]
+                        `INSERT INTO auditoria (usuario_id, modulo, accion, detalle, ip_origen) 
+                        VALUES ($1, 'AUTH', 'LOGIN', $2, $3)`,
+                        [usuario.id, `Inicio de sesión exitoso.`, ip_origen]
                     );
                 } catch (auditErr) {
                     console.error("⚠️ Error grabando auditoría de login:", auditErr.message);

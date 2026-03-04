@@ -67,7 +67,7 @@
             <p>Gestiona tu información personal y de puesto.</p>
         </div>
 
-        <form id="form-update-profile">
+        <form id="form-update-profile" onsubmit="event.preventDefault(); actualizarMiPerfil();">
             
             <div class="form-section-label"><i class='bx bx-user'></i> Identidad</div>
             <div class="form-grid-row">
@@ -88,7 +88,7 @@
                     <label>Cargo / Puesto Laboral</label>
                 </div>
                 <div class="input-group">
-                    <select id="me-sede">
+                    <select id="me-sede" disabled style="background-color: #f3f4f6; cursor: not-allowed; color: #6b7280;">
                         <option value="" disabled selected>Cargando...</option>
                     </select>
                     <label class="static">Sede Asignada</label>
@@ -115,7 +115,7 @@
 
             <div class="form-grid-row">
                 <div class="input-group full-width">
-                    <input type="password" id="me-password" placeholder=" ">
+                    <input type="password" id="me-password" placeholder=" " autocomplete="new-password">
                     <label>Nueva Contraseña (Opcional)</label>
                 </div>
             </div>

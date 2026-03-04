@@ -139,8 +139,14 @@
     }
 
     window.cambiarPaginaCliente = function(delta) {
-        paginaActual += delta;
-        renderizarTablaClientes();
+        const totalPaginas = Math.ceil(clientesFiltrados.length / filasPorPagina);
+        const nuevaPagina = paginaActual + delta;
+        
+        // Solo cambiamos si está dentro de los límites válidos
+        if (nuevaPagina >= 1 && nuevaPagina <= totalPaginas) {
+            paginaActual = nuevaPagina;
+            renderizarTablaClientes();
+        }
     };
 
     // --- 3. VALIDACIÓN AVANZADA Y GUARDADO ---
@@ -153,12 +159,12 @@
         const email = document.getElementById('cli-email').value.trim();
         const nacimiento = document.getElementById('cli-nacimiento').value;
 
-        // 🛡️ VALIDACIONES OBLIGATORIAS Y FORMATOS
-        if(!nombre) return showToast("El nombre del titular es obligatorio", "error");
+        // 🛡️ VALIDACIONES OBLIGATORIAS Y FORMATOS (Alineado con Backend)
+        if(!nombre) return showToast("El nombre del titular o empresa es obligatorio", "error");
         
-        if(!dni || dni.length < 8) return showToast("DNI inválido (Mínimo 8 dígitos)", "error");
-        
-        if(ruc && ruc.length !== 11) return showToast("El RUC debe tener exactamente 11 dígitos", "error");
+        if (!dni && !ruc) return showToast("Debe ingresar un DNI o un RUC", "warning");
+        if (dni && dni.length < 8) return showToast("DNI inválido (Mínimo 8 dígitos)", "error");
+        if (ruc && ruc.length !== 11) return showToast("El RUC debe tener exactamente 11 dígitos", "error");
         
         if(!telefono || telefono.length < 9) return showToast("Teléfono inválido", "error");
 
@@ -180,7 +186,16 @@
             categoria: document.getElementById('cli-categoria').value,
         };
 
+        const btnGuardar = document.getElementById('btn-guardar-cliente');
+        const txtOriginal = btnGuardar ? btnGuardar.innerText : "Guardar Ficha";
+
         try {
+            // Bloqueo visual y lógico
+            if(btnGuardar) {
+                btnGuardar.disabled = true;
+                btnGuardar.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Guardando...";
+            }
+
             const token = localStorage.getItem('token');
             const url = id ? `/api/clientes/${id}` : '/api/clientes';
             const method = id ? 'PUT' : 'POST';
@@ -202,6 +217,12 @@
             }
         } catch (error) {
             showToast("Error de conexión", "error");
+        } finally {
+            // Restaurar botón siempre (falle o tenga éxito)
+            if(btnGuardar) {
+                btnGuardar.disabled = false;
+                btnGuardar.innerText = txtOriginal;
+            }
         }
     };
 
@@ -433,6 +454,16 @@
         }
     };
 
-    initClientes();
+    // --- ARRANQUE: Exponemos la función para el Router SPA ---
+    window.initClientes = function() {
+        console.log("▶️ Iniciando módulo Clientes...");
+        // Ejecutamos tu función asíncrona local
+        initClientes(); 
+    };
 
-})();
+    // Fallback: Si la página se recarga manualmente (F5) estando en esta vista
+    if (document.getElementById('tabla-clientes-body')) {
+        window.initClientes();
+    }
+
+})(); // <--- Fin del archivo

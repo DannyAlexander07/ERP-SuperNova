@@ -320,7 +320,7 @@
     margin-bottom: 20px; 
     border: 1px solid #e2e8f0;
 }
-.summary-item { display: flex; flex-direction: column; gap: 5px; }
+.summary-item { display: flex; flex-direction: column; gap: 5px; padding: 0 0.6rem;}
 .summary-item strong { font-size: 1.1rem; color: #0f172a; }
 
 /* Scrollbar personalizado fino */
@@ -414,3 +414,121 @@
 .btn-icon .bx-pencil { color: #f59e0b; } /* Naranja */
 .btn-icon .bxs-file-pdf { color: #ef4444; } /* Rojo */
 .btn-icon .bx-trash { color: #dc2626; } /* Rojo Oscuro */
+
+/* =========================================
+   NUEVOS ESTILOS: SÚPER MODAL DE DETALLES (Dashboard)
+   ========================================= */
+
+/* --- 1. Barra de Progreso --- */
+.header-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+#det-progreso-bar {
+    background: linear-gradient(90deg, #10b981 0%, #34d399 100%);
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+    position: relative;
+}
+
+#det-progreso-bar::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(
+        45deg,
+        rgba(255,255,255,0.15) 25%,
+        transparent 25%,
+        transparent 50%,
+        rgba(255,255,255,0.15) 50%,
+        rgba(255,255,255,0.15) 75%,
+        transparent 75%,
+        transparent
+    );
+    background-size: 1rem 1rem;
+    animation: moveStripes 1s linear infinite;
+}
+
+@keyframes moveStripes {
+    0% { background-position: 0 0; }
+    100% { background-position: 1rem 0; }
+}
+
+/* --- 2. Pestañas Internas (Sub-Tabs) --- */
+.tabs-wrapper {
+    display: flex;
+    gap: 15px;
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none; /* Firefox */
+}
+.tabs-wrapper::-webkit-scrollbar {
+    display: none; /* Chrome/Safari/Edge */
+}
+
+.tabs-wrapper .tab-btn {
+    border-radius: 0;
+    border-bottom: 2px solid transparent;
+    padding: 15px 10px;
+    margin-bottom: -1px;
+}
+
+.tabs-wrapper .tab-btn.active {
+    background: transparent;
+    color: #3b82f6;
+    border-bottom: 2px solid #3b82f6;
+}
+
+/* --- 3. Tarjetas de Resumen Financiero --- */
+#tab-det-resumen > div:first-child {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+/* --- 4. Responsive Design (Mobile & Tablet) --- */
+
+/* Tablets (hasta 992px) */
+@media (max-width: 992px) {
+    #tab-det-resumen > div:first-child {
+        grid-template-columns: repeat(2, 1fr); /* 2 columnas en tablet */
+    }
+}
+
+/* Móviles (hasta 768px) */
+@media (max-width: 768px) {
+    /* Ajustar las tarjetas de resumen superior a 1 columna */
+    #tab-det-resumen > div:first-child {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    /* Ajustar la franja de fechas y tasas (Flexbox a Column) */
+    #tab-det-resumen > div:nth-child(2) {
+        flex-direction: column;
+        gap: 10px !important;
+        align-items: flex-start !important;
+    }
+    
+    #tab-det-resumen > div:nth-child(2) span {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+    }
+
+    /* El interés recaudado ya no necesita margin-left auto en móvil */
+    #det-interes-recaudado {
+        margin-left: 0 !important;
+    }
+    
+    /* Hacer que las pestañas sean más amigables al toque en móvil */
+    .tabs-wrapper {
+        padding: 0 10px;
+    }
+    .tabs-wrapper .tab-btn {
+        padding: 12px 8px;
+        font-size: 0.85rem;
+    }
+}

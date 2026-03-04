@@ -1,25 +1,31 @@
+// UBICACIÓN: SuperNova/backend/routes/crmRoutes.js
+
 const express = require('express');
 const router = express.Router();
 const crmController = require('../controllers/crmController');
-const { checkAuth } = require('../middleware/auth'); // ✅ Usamos tu middleware como lo tienes
+const { checkAuth } = require('../middleware/auth'); 
 
-// Rutas de Leads (CRM Clásico)
+// --- RUTAS DE CONSULTA Y CATÁLOGOS ---
 router.get('/', checkAuth, crmController.obtenerLeads);
+router.get('/eventos/todos', checkAuth, crmController.obtenerEventos);
+router.get('/salones', checkAuth, crmController.obtenerSalonesPorSede);
+
+// 🔥 NUEVA RUTA: HISTORIAL DE PAGOS
+// Esta es fundamental para alimentar el botón de "Ver Pagos" que quieres poner
+router.get('/:id/pagos', checkAuth, crmController.obtenerPagosLead);
+
+// --- RUTAS DE OPERACIÓN (POST/PUT/DELETE) ---
 router.post('/', checkAuth, crmController.crearLead);
 router.put('/:id', checkAuth, crmController.actualizarLead);
 router.delete('/:id', checkAuth, crmController.eliminarLead);
 router.put('/:id/estado', checkAuth, crmController.actualizarEstado);
 
-// Rutas de Calendario / Eventos
-router.get('/eventos/todos', checkAuth, crmController.obtenerEventos);
+// --- RUTAS DE TRANSACCIÓN FINANCIERA ---
 
-// Rutas de Inventario para CRM
-router.get('/salones', checkAuth, crmController.obtenerSalonesPorSede);
+// ADELANTO / RESERVA (Modal Verde)
+router.post('/leads/:id/pagar', checkAuth, crmController.registrarPagoLead);
 
-// 🔥 RUTA DE COBRO FINAL (Correcta)
-// Esta es la que llama tu Frontend (/api/crm/leads/:id/cobrar-saldo)
+// COBRO FINAL (Modal Finalizar)
 router.post('/leads/:id/cobrar-saldo', checkAuth, crmController.cobrarSaldoLead);
-
-// ❌ HE BORRADO la ruta vieja router.post('/:id/cobrar'...) porque causaba el crash.
 
 module.exports = router;

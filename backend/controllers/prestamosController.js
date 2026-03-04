@@ -123,7 +123,7 @@ exports.crearPrestamo = async (req, res) => {
 };
 
 // =======================================================
-// 2. OBTENER LISTA DE PRÉSTAMOS
+// 2. OBTENER LISTA DE PRÉSTAMOS (ACTUALIZADO: Saldos y Vencimientos Dinámicos)
 // =======================================================
 exports.obtenerPrestamos = async (req, res) => {
     try {
@@ -131,13 +131,23 @@ exports.obtenerPrestamos = async (req, res) => {
             SELECT 
                 p.id, p.codigo_prestamo, p.tipo_flujo, p.monto_capital, p.moneda,
                 p.estado, p.tasa_interes, prov.razon_social AS contraparte,
-                (SELECT COUNT(*) FROM prestamos_cronograma WHERE prestamo_id = p.id AND estado = 'PENDIENTE') as cuotas_pendientes
+                
+                -- Cuántas cuotas faltan pagar
+                (SELECT COUNT(*) FROM prestamos_cronograma WHERE prestamo_id = p.id AND estado = 'PENDIENTE') as cuotas_pendientes,
+                
+                -- 🚀 NUEVO: Saldo real pendiente (Suma de las cuotas que faltan)
+                COALESCE((SELECT SUM(cuota_total) FROM prestamos_cronograma WHERE prestamo_id = p.id AND estado = 'PENDIENTE'), 0) as saldo_pendiente,
+                
+                -- 🚀 NUEVO: Fecha de la próxima cuota a vencer
+                (SELECT MIN(fecha_vencimiento) FROM prestamos_cronograma WHERE prestamo_id = p.id AND estado = 'PENDIENTE') as proximo_vencimiento
+
             FROM prestamos p
             LEFT JOIN proveedores prov ON p.tercero_id = prov.id
             ORDER BY p.created_at DESC
         `);
         res.json(result.rows);
     } catch (err) {
+        console.error("Error al listar préstamos:", err);
         res.status(500).json({ msg: 'Error al listar préstamos' });
     }
 };

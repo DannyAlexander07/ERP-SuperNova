@@ -15,11 +15,20 @@
         </div>
     </div>
 
-    <div class="tabs-container">
+    <div class="tabs-container" id="inventario-tabs" style="overflow-x: auto; white-space: nowrap; padding-bottom: 5px;">
         <button class="tab-btn active" onclick="filtrarTab('todos', this)">Todos</button>
-        <button class="tab-btn" onclick="filtrarTab('fisico', this)">Mercadería (Stock)</button>
-        <button class="tab-btn" onclick="filtrarTab('servicio', this)">Servicios</button>
-        <button class="tab-btn" onclick="filtrarTab('combo', this)">Combos</button>
+        <button class="tab-btn" onclick="filtrarTab('fisico', this)">📦 Mercadería (Stock)</button>
+        <button class="tab-btn" onclick="filtrarTab('agotado', this)" style="color: #dc2626;">🚨 Sin Stock</button>
+        <button class="tab-btn" onclick="filtrarTab('servicio', this)">🛠️ Servicios</button>
+        <button class="tab-btn" onclick="filtrarTab('combo', this)">🍔 Combos</button>
+        
+        <span style="display: inline-block; width: 1px; height: 20px; background-color: #cbd5e1; margin: 0 5px; vertical-align: middle;"></span>
+        
+        <button class="tab-btn" onclick="filtrarTab('cat-Cafeteria', this)">☕ Cafetería</button>
+        <button class="tab-btn" onclick="filtrarTab('cat-Taquilla', this)">🎟️ Taquilla</button>
+        <button class="tab-btn" onclick="filtrarTab('cat-Merch', this)">👕 Merchandising</button>
+        <button class="tab-btn" onclick="filtrarTab('cat-Arcade', this)">🕹️ Arcade</button>
+        <button class="tab-btn" onclick="filtrarTab('cat-Eventos', this)">🎉 Eventos</button>
     </div>
 
     <div class="table-toolbar">
@@ -35,6 +44,8 @@
                 <option value="Merch">Merchandising</option>
                 <option value="Arcade">Arcade</option>
                 <option value="Eventos">Eventos</option>
+                <option value="Servicio">Servicios</option>
+                <option value="Combos">Combos</option>
             </select>
             <button class="btn-icon" onclick="exportarInventario()" title="Exportar Excel">
                 <i class='bx bxs-file-export' style="color: #1D6F42;"></i>
@@ -100,6 +111,7 @@
                                 <option value="Merch">Merch / Juguetes</option>
                                 <option value="Arcade">Juegos / Arcade</option>
                                 <option value="Eventos">Eventos</option>
+                                <option value="Servicio">Servicios</option>
                             </select>
                             <label class="static">Categoría</label>
                         </div>

@@ -3295,7 +3295,15 @@
         showToast("Plan de Tesorería descargado correctamente", "success");
     };
 
-    // INICIAR
-    initModulo();
+// --- ARRANQUE FACTURAS (Con Timeout protector) ---
+    window.initFacturas = function() {
+        console.log("▶️ Iniciando módulo Finanzas y Tesorería...");
+        setTimeout(() => {
+            if (typeof initModulo === 'function') initModulo(); 
+        }, 150);
+    };
 
+    if (document.getElementById('tabla-facturas-body') || document.querySelector('.facturas-container')) {
+        window.initFacturas();
+    }
 })();

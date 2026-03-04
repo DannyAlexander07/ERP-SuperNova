@@ -530,3 +530,367 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     width: auto;
     z-index: 5; /* Hace que al dar click en todo el input se abra el calendario */
 }
+
+/* =========================================
+   NUEVO MODAL PRO: GESTOR DE PAGOS (POS)
+   ========================================= */
+
+/* Fondo desenfocado */
+#modal-pagos-lead {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(15, 23, 42, 0.6); /* Azul oscuro transparente */
+    backdrop-filter: blur(4px);
+    z-index: 9999;
+    display: none; 
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+#modal-pagos-lead.active {
+    display: flex;
+    opacity: 1;
+}
+
+/* Tarjeta del Modal */
+#modal-pagos-lead .modal-content {
+    background: #ffffff;
+    width: 95%;
+    max-width: 550px;
+    border-radius: 16px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    animation: zoomIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh; 
+}
+
+@keyframes zoomIn {
+    from { transform: scale(0.95); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+/* Cabecera */
+#modal-pagos-lead .modal-header {
+    background: #ffffff;
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#modal-pagos-lead .modal-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: #0f172a;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#modal-pagos-lead .btn-close {
+    background: #f1f5f9;
+    border: none;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+#modal-pagos-lead .btn-close:hover {
+    background: #fee2e2;
+    color: #ef4444;
+}
+
+/* Cuerpo del Modal */
+#modal-pagos-lead .modal-body {
+    padding: 24px;
+    overflow-y: auto;
+    background: #ffffff;
+}
+
+/* Títulos internos de sección */
+#modal-pagos-lead .form-subtitle {
+    display: block;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #f1f5f9;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    font-weight: 700;
+}
+
+/* Botón de Pagar */
+#btn-procesar-abono {
+    transition: all 0.2s;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+}
+
+#btn-procesar-abono:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+    background-color: #059669 !important;
+}
+
+#btn-procesar-abono:active {
+    transform: translateY(0);
+}
+
+/* =========================================
+   RESPONSIVE (MÓVIL Y TABLET)
+   ========================================= */
+@media (max-width: 600px) {
+    #modal-pagos-lead {
+        align-items: flex-end; /* En móvil sale desde abajo */
+    }
+
+    #modal-pagos-lead .modal-content {
+        width: 100%;
+        max-width: none;
+        height: auto; 
+        max-height: 95vh;
+        border-radius: 24px 24px 0 0; 
+        animation: slideUp 0.3s ease-out;
+    }
+
+    @keyframes slideUp {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+    }
+
+    #modal-pagos-lead .modal-body {
+        padding: 20px 15px 30px 15px; /* Más espacio abajo para el notch del iPhone */
+    }
+
+    /* Los campos en línea pasan a bloque en móvil */
+    #modal-pagos-lead .row-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+}
+
+/* =========================================
+   FIX: BOTÓN LUPA (BUSCADOR SUNAT/RENIEC)
+   ========================================= */
+
+/* Hacemos que el botón de la lupa tome la misma altura que el input */
+.input-wrapper button.btn-primary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px; /* Mismo alto que los inputs */
+    padding: 0 16px !important;
+    margin: 0;
+    box-shadow: none; /* Quitamos la sombra para que se acople mejor al input */
+}
+
+/* Forzamos al icono de la lupa a comportarse normal (anulando el absolute del wrapper) */
+.input-wrapper button.btn-primary i {
+    position: static !important;
+    transform: none !important;
+    color: #ffffff !important; /* Color blanco para contrastar */
+    font-size: 1.3rem !important;
+    pointer-events: auto !important;
+}
+
+/* Efecto hover elegante para la lupa */
+.input-wrapper button.btn-primary:hover {
+    background: #5b4ff0;
+    box-shadow: 0 4px 10px rgba(105, 92, 254, 0.2);
+}
+
+/* =========================================
+   NUEVO MODAL: HISTORIAL DE ABONOS (PRO)
+   ========================================= */
+
+/* Fondo desenfocado y centrado */
+#modal-historial-pagos {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(15, 23, 42, 0.7); /* Azul profundo transparente */
+    backdrop-filter: blur(6px);
+    z-index: 11000; /* Por encima de todo */
+    display: none;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+#modal-historial-pagos.active {
+    display: flex;
+    opacity: 1;
+}
+
+/* Tarjeta del Modal */
+#modal-historial-pagos .modal-content {
+    background: #ffffff;
+    width: 95%;
+    max-width: 650px;
+    border-radius: 16px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
+    animation: modalPopIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    display: flex;
+    flex-direction: column;
+    max-height: 85vh;
+}
+
+@keyframes modalPopIn {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+/* Cabecera con color de énfasis Indigo */
+#modal-historial-pagos .modal-header {
+    background: #ffffff;
+    padding: 18px 24px;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#modal-historial-pagos .modal-header h3 {
+    margin: 0;
+    font-size: 1.15rem;
+    color: #1e293b;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Caja de Info Cliente */
+#info-cliente-pago {
+    background: #f8fafc;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    border-left: 4px solid #6366f1;
+}
+
+#info-cliente-pago strong {
+    font-size: 1.1rem;
+    color: #0f172a;
+}
+
+/* Ajustes para la tabla interna de historial */
+#modal-historial-pagos .table-responsive {
+    border: 1px solid #f1f5f9;
+    border-radius: 10px;
+    background: #fff;
+    margin-top: 10px;
+    max-height: 400px;
+}
+
+#modal-historial-pagos .crm-table {
+    min-width: 550px; /* Un poco más compacta para el modal */
+}
+
+#modal-historial-pagos .crm-table th {
+    padding: 12px;
+    font-size: 11px;
+    background: #f8fafc;
+}
+
+#modal-historial-pagos .crm-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+/* Badges específicos para tipos de pago */
+#modal-historial-pagos .badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 0.3px;
+}
+
+/* Footer con el Total Recaudado destacado */
+#modal-historial-pagos .modal-footer {
+    background: #f9fafb;
+    padding: 15px 24px;
+    border-top: 1px solid #f1f5f9;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+}
+
+#historial-total-monto {
+    color: #10b981;
+    font-size: 1.2rem;
+    background: #ecfdf5;
+    padding: 4px 12px;
+    border-radius: 8px;
+    border: 1px solid #a7f3d0;
+}
+
+/* =========================================
+   ADAPTACIÓN MÓVIL (RESPONSIVE)
+   ========================================= */
+
+@media (max-width: 650px) {
+    #modal-historial-pagos {
+        align-items: flex-end; /* En móvil sale desde abajo */
+    }
+
+    #modal-historial-pagos .modal-content {
+        width: 100%;
+        max-width: none;
+        height: auto;
+        max-height: 92vh;
+        border-radius: 20px 20px 0 0; /* Solo esquinas superiores */
+        animation: slideFromBottom 0.3s ease-out;
+    }
+
+    @keyframes slideFromBottom {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+    }
+
+    #modal-historial-pagos .modal-body {
+        padding: 15px;
+    }
+
+    /* Reducimos el tamaño de fuente en móvil para que quepa la tabla */
+    #modal-historial-pagos .crm-table td {
+        font-size: 12px;
+    }
+
+    #modal-historial-pagos .modal-footer {
+        flex-direction: row; /* Mantenemos el total y el botón en la misma línea */
+        padding: 15px;
+    }
+
+    #modal-historial-pagos .btn-primary {
+        padding: 8px 15px;
+        font-size: 14px;
+    }
+}
+
+/* Tablet (iPad etc) */
+@media (min-width: 651px) and (max-width: 1024px) {
+    #modal-historial-pagos .modal-content {
+        width: 80%;
+    }
+}

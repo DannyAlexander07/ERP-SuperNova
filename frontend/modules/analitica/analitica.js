@@ -15,6 +15,14 @@
     let chartUtilidad = null;
     let chartGlobal = null;
 
+    // --- VARIABLES GLOBALES PARA LOS GRÁFICOS (Pegar esto antes de la función) ---
+    let chartEvo=null;
+    let chartTop=null; 
+    let chartPagos=null;
+    let chartHoras=null
+    let chartVendedores=null;
+
+
     // --- 0. FUNCIÓN DE SEGURIDAD: CARGAR LIBRERÍA ---
     function cargarLibreriaGraficos() {       
         return new Promise((resolve, reject) => {
@@ -29,7 +37,6 @@
     }
 
     // --- 1. FUNCIONES DE RENDERIZADO (DEFINIR PRIMERO) ---
-    
     function renderizarTabla() {
         const tbody = document.getElementById('pyl-detalle-body');
         if(!tbody) return;
@@ -44,20 +51,31 @@
         const fin = inicio + FILAS_POR_PAGINA;
         const datosPagina = datosGlobalesPyL.slice(inicio, fin);
         
-        datosPagina.forEach(row => {
+       datosPagina.forEach(row => {
             const tr = document.createElement('tr');
             
-            // Valores numéricos
-            const ingresoNeto = parseFloat(row.ingresos);
-            const egresos = parseFloat(row.egresos);
-            const pnl = parseFloat(row.pnl);
-            
-            // Colores
-            let color = pnl >= 0 ? '#166534' : '#dc2626'; // Verde o Rojo para utilidad
-            
-            // Iconos
-            let icon = '';
+            // --- 1. PROCESAMIENTO DE VALORES NUMÉRICOS ---
+            const totalBruto = parseFloat(row.ingresos) || 0;
+            const egresos = parseFloat(row.egresos) || 0;
+            const pnl = parseFloat(row.pnl) || 0;
             const cat = row.categoria || '';
+
+            // --- 2. LÓGICA CONTABLE: DESGLOSE DE IGV (Saca la base real) ---
+            let baseImponible = totalBruto;
+            let igvMonto = 0;
+
+            // Solo desglosamos si hay ingreso y no es una entrada manual de 'Caja'
+            if (totalBruto > 0 && !cat.includes('Caja')) {
+                baseImponible = totalBruto / 1.18; // El valor sin el 18%
+                igvMonto = totalBruto - baseImponible; // La diferencia es el impuesto
+            }
+            
+            // --- 3. ESTILOS Y ESTADOS ---
+            let colorUtilidad = pnl >= 0 ? '#166534' : '#dc2626'; 
+            let bgUtilidad = pnl >= 0 ? '#f0fdf4' : '#fef2f2';
+            
+            // Asignación de iconos por categoría
+            let icon = '';
             if(cat.includes('Mermas')) icon = '🗑️';
             else if(cat.includes('Gastos')) icon = '📉';
             else if(cat.includes('Eventos')) icon = '🎉';
@@ -65,29 +83,27 @@
             else if(cat.includes('Cafetería')) icon = '☕';
             else if(cat.includes('Caja')) icon = '💰';
 
-            // 🔥 CÁLCULO DEL IGV (Separado)
-            let igvMonto = 0;
-            // Solo calculamos IGV a las categorías de venta, no a la caja manual
-            if (ingresoNeto > 0 && !cat.includes('Caja')) {
-                igvMonto = ingresoNeto * 0.18;
-            }
-
+            // --- 4. RENDERIZADO DEL HTML ---
             tr.innerHTML = `
                 <td style="font-weight:600; font-size: 13px;">${row.nombre_sede}</td>
-                <td style="font-size: 13px;">${icon} ${row.categoria}</td>
+                <td style="font-size: 13px;">${icon} ${cat}</td>
                 
-                <td style="color: #2ecc71; font-weight:700; font-size: 14px;">
-                    S/ ${ingresoNeto.toFixed(2)}
+                <td style="color: #16a34a; font-weight:700; font-size: 14px; text-align: right;">
+                    S/ ${baseImponible.toLocaleString('es-PE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </td>
 
-                <td style="color: #64748b; font-size: 13px;">
-                    S/ ${igvMonto.toFixed(2)}
+                <td style="color: #64748b; font-size: 13px; text-align: right;">
+                    S/ ${igvMonto.toLocaleString('es-PE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </td>
                 
-                <td style="color: #e74c3c;">S/ ${egresos.toFixed(2)}</td>
+                <td style="color: #dc2626; text-align: right;">
+                    S/ ${egresos.toLocaleString('es-PE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                </td>
                 
-                <td style="color: ${color}; font-weight: 700; font-size: 14px; background: ${pnl >= 0 ? '#f0fdf4' : '#fef2f2'}; border-radius: 8px;">
-                    S/ ${pnl.toFixed(2)}
+                <td style="text-align: right;">
+                    <div style="color: ${colorUtilidad}; font-weight: 700; font-size: 14px; background: ${bgUtilidad}; padding: 6px 10px; border-radius: 8px; display: inline-block; min-width: 90px;">
+                        S/ ${pnl.toLocaleString('es-PE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    </div>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -135,15 +151,61 @@
 
         const sedes = [...new Set(datos.map(d => d.nombre_sede))];
         
+        // --- NUEVA FUNCIÓN GETSUM (Para Gastos, Mermas y Utilidad) ---
         const getSum = (sede, catInclude) => {
+            const strSearch = catInclude.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            
             return datos
-                .filter(d => d.nombre_sede === sede && d.categoria.includes(catInclude))
-                .reduce((sum, item) => sum + (catInclude.includes('Merma') || catInclude.includes('Gasto') ? parseFloat(item.egresos) : parseFloat(item.ingresos)), 0);
+                .filter(d => {
+                    if (d.nombre_sede !== sede) return false;
+                    const catRow = (d.categoria || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    
+                    if (strSearch === 'gastos') {
+                        return catRow.includes('gasto') || catRow.includes('factura');
+                    }
+                    if (strSearch === 'mermas') return catRow.includes('mermas') || catRow.includes('canjes');
+                    
+                    return false; 
+                })
+                .reduce((sum, item) => {
+                    return sum + parseFloat(item.egresos || 0);
+                }, 0);
         };
 
-        const dataTaquilla = sedes.map(s => getSum(s, 'Taquilla'));
-        const dataCafeteria = sedes.map(s => getSum(s, 'Cafetería'));
-        const dataEventos = sedes.map(s => getSum(s, 'Eventos'));
+        // --- 🚀 CREACIÓN DINÁMICA DEL MIX DE INGRESOS ---
+        // 1. Obtenemos todas las categorías reales que generaron dinero (Ingresos > 0)
+        // Usamos Set para que no se repitan los nombres
+        const categoriasDeIngreso = [...new Set(
+            datos.filter(d => parseFloat(d.ingresos) > 0).map(d => d.categoria)
+        )];
+
+        // 2. Paleta de colores profesionales para las barras
+        const paletaColores = [
+            '#10b981', // Verde
+            '#3b82f6', // Azul
+            '#f59e0b', // Naranja/Amarillo
+            '#8b5cf6', // Morado
+            '#ec4899', // Rosa
+            '#06b6d4', // Cian
+            '#14b8a6', // Turquesa
+            '#64748b'  // Gris Azulado
+        ];
+
+        // 3. Armamos los datasets automáticamente (Una capa por cada categoría encontrada)
+        const datasetsDinamicosIngresos = categoriasDeIngreso.map((catName, index) => {
+            return {
+                label: catName, // Nombre que aparecerá en la leyenda (Ej: Merchandising)
+                data: sedes.map(sede => {
+                    // Buscamos si esta sede vendió algo de esta categoría
+                    const fila = datos.find(d => d.nombre_sede === sede && d.categoria === catName);
+                    return fila ? parseFloat(fila.ingresos) : 0;
+                }),
+                backgroundColor: paletaColores[index % paletaColores.length], // Asignamos color de la paleta
+                stack: 'Stack 0' // Para que se apilen una sobre otra
+            };
+        });
+
+        // --- PREPARAR RESTO DE DATOS ---
         const dataGastos = sedes.map(s => getSum(s, 'Gastos'));
         const dataMermas = sedes.map(s => getSum(s, 'Mermas'));
 
@@ -156,19 +218,23 @@
         let totalIng = 0, totalEgr = 0;
         datos.forEach(d => { totalIng += parseFloat(d.ingresos); totalEgr += parseFloat(d.egresos); });
 
-        // --- GRÁFICO 1: MIX VENTAS ---
+        // --- GRÁFICO 1: MIX VENTAS (AHORA 100% DINÁMICO) ---
         if (chartMix) chartMix.destroy();
         chartMix = new Chart(ctxMix.getContext('2d'), {
             type: 'bar',
             data: {
                 labels: sedes,
-                datasets: [
-                    { label: 'Eventos', data: dataEventos, backgroundColor: '#10b981', stack: 'Stack 0' },
-                    { label: 'Taquilla', data: dataTaquilla, backgroundColor: '#3b82f6', stack: 'Stack 0' },
-                    { label: 'Cafetería', data: dataCafeteria, backgroundColor: '#f59e0b', stack: 'Stack 0' }
-                ]
+                // Usamos los datasets que creamos dinámicamente arriba
+                datasets: datasetsDinamicosIngresos.length > 0 ? datasetsDinamicosIngresos : [{ label: 'Sin datos', data: sedes.map(()=>0), backgroundColor: '#cbd5e1' }]
             },
-            options: { responsive: true, maintainAspectRatio: false, scales: { x: {stacked: true}, y: {stacked: true} } }
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                scales: { 
+                    x: {stacked: true}, 
+                    y: {stacked: true} 
+                } 
+            }
         });
 
         // --- GRÁFICO 2: GASTOS VS MERMAS ---
@@ -262,7 +328,7 @@
                 renderizarPaginacion();
                 renderizarGraficos(dataPyL); // Renderiza los gráficos viejos (Mix, Gastos, etc)
                 calcularTotales(dataPyL);
-                obtenerKpisEventos(sede);
+                obtenerKpisEventos(sede, inicio, fin);
             }
 
             if (resGraficos.ok) {
@@ -299,19 +365,28 @@
         } catch (e) {}
     }
 
-    async function obtenerKpisEventos(sedeId) {
+    async function obtenerKpisEventos(sedeId, inicio, fin) {
         try {
-            let url = '/api/analitica/kpis/eventos';
-            if (sedeId) url += `?sede=${sedeId}`;
-            const res = await fetch(url, { headers: { 'x-auth-token': localStorage.getItem('token') } });
+            let url = `/api/analitica/kpis/eventos?inicio=${inicio || ''}&fin=${fin || ''}`;
+            if (sedeId) url += `&sede=${sedeId}`;
+
+            const res = await fetch(url, { 
+                headers: { 'x-auth-token': localStorage.getItem('token') } // Corregido a x-auth-token
+            });
+
             if (res.ok) {
                 const data = await res.json();
                 const divConv = document.getElementById('kpi-conversion');
-                const divTick = document.getElementById('kpi-ticket');
+                const divTickVentas = document.getElementById('kpi-ticket');
+                const divTickEventos = document.getElementById('kpi-ticket-eventos');
+                
                 if(divConv) divConv.innerText = data.conversion + "%";
-                if(divTick) divTick.innerText = "Ticket Prom: S/ " + data.ticketPromedio;
+                
+                // 🔥 Sincronizado con el nuevo HTML
+                if(divTickVentas) divTickVentas.innerText = `🎟️ POS: S/ ${data.ticketPromedio}`;
+                if(divTickEventos) divTickEventos.innerText = `🎪 Eventos: S/ ${data.ticketPromedioEventos}`;
             }
-        } catch (e) {}
+        } catch (e) { console.error("Error en KPIs:", e); }
     }
 
     window.aplicarFiltrosAnalitica = obtenerReporteCompleto;
@@ -322,29 +397,68 @@
     }
     
     window.exportarReporteExcel = function() {
-        if (!datosGlobalesPyL.length) return alert("Sin datos.");
-        if (typeof XLSX === 'undefined') return alert("Librería Excel no cargada");
-        const ws = XLSX.utils.json_to_sheet(datosGlobalesPyL);
+
+        if (!datosGlobalesPyL || datosGlobalesPyL.length === 0) {
+            return Swal.fire('Sin datos', 'No hay información para exportar en este rango.', 'warning');
+        }
+        
+        if (typeof XLSX === 'undefined') {
+            return Swal.fire('Error', 'La librería Excel (xlsx) no está cargada.', 'error');
+        }
+
+        // --- 1. PREPARAR LOS DATOS CON DESGLOSE CONTABLE ---
+        const datosParaExportar = datosGlobalesPyL.map(row => {
+            const totalBruto = parseFloat(row.ingresos) || 0;
+            const egresos = parseFloat(row.egresos) || 0;
+            const cat = row.categoria || '';
+            
+            let ventaNeta = totalBruto;
+            let igv = 0;
+
+            // Aplicamos la misma lógica de la tabla: Desglose 1.18
+            if (totalBruto > 0 && !cat.includes('Caja')) {
+                ventaNeta = totalBruto / 1.18;
+                igv = totalBruto - ventaNeta;
+            }
+
+            return {
+                'Sede': row.nombre_sede,
+                'Categoría': cat,
+                'Venta Neta (Base)': parseFloat(ventaNeta.toFixed(2)),
+                'IGV (18%)': parseFloat(igv.toFixed(2)),
+                'Total Ingresos': parseFloat(totalBruto.toFixed(2)),
+                'Egresos/Mermas': parseFloat(egresos.toFixed(2)),
+                'Utilidad Neta': parseFloat((totalBruto - egresos).toFixed(2))
+            };
+        });
+
+        // --- 2. GENERAR EL ARCHIVO EXCEL ---
+        const ws = XLSX.utils.json_to_sheet(datosParaExportar);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Reporte");
-        XLSX.writeFile(wb, "Reporte_Financiero.xlsx");
-    }
+        
+        // Ajustar anchos de columna automáticamente
+        const wscols = [
+            {wch: 20}, // Sede
+            {wch: 20}, // Categoría
+            {wch: 15}, // Venta Neta
+            {wch: 12}, // IGV
+            {wch: 15}, // Total Ingresos
+            {wch: 15}, // Egresos
+            {wch: 15}  // Utilidad
+        ];
+        ws['!cols'] = wscols;
+
+        XLSX.utils.book_append_sheet(wb, ws, "Reporte P&L");
+
+        // --- 3. DESCARGAR ---
+        const fecha = new Date().toISOString().split('T')[0];
+        XLSX.writeFile(wb, `Reporte_Financiero_SuperNova_${fecha}.xlsx`);
+    };
 
     window.obtenerReporteCompleto = obtenerReporteCompleto; 
 
-    // --- 3. INICIALIZAR (ARRANQUE) ---
-    async function initAnalitica() {
-        try {
-            await cargarLibreriaGraficos();
-            await cargarSedesFiltro();
-            await obtenerReporteCompleto();
-        } catch (error) {
-            console.error("Error init:", error);
-        }
-    }
 
-// --- VARIABLES GLOBALES PARA LOS GRÁFICOS (Pegar esto antes de la función) ---
-    let chartEvo=null, chartTop=null, chartPagos=null, chartHoras=null, chartVendedores=null;
+
 
     // --- FUNCIÓN AUXILIAR: GENERAR COLORES DINÁMICOS ---
     // (Necesaria para productos donde hay muchos ítems)
@@ -500,6 +614,21 @@
         }
     }
 
-    initAnalitica();
+    // --- 3. INICIALIZAR (ARRANQUE PARA ROUTER SPA) ---
+    window.initAnalitica = async function() {
+        console.log("▶️ Iniciando módulo Analítica...");
+        try {
+            await cargarLibreriaGraficos();
+            await cargarSedesFiltro();
+            await obtenerReporteCompleto();
+        } catch (error) {
+            console.error("Error init:", error);
+        }
+    };
 
-})();
+    // Fallback: Si la página se recarga manualmente (F5) estando en esta vista
+    if (document.getElementById('chart-mix-ventas')) {
+        window.initAnalitica();
+    }
+
+})(); 

@@ -339,6 +339,8 @@
         passInput.required = true;
         passInput.placeholder = " ";
         document.getElementById('preview-img').src = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
+        const estadoSelect = document.getElementById('edit-estado');
+        if(estadoSelect) estadoSelect.value = 'activo';
     }
 
 
@@ -369,10 +371,9 @@
     }
 
     // --- 7. ENVÍO DEL FORMULARIO (CREAR O ACTUALIZAR) ---
-    const form = document.getElementById('form-crear-usuario-completo');
-        if(form) {
-            form.addEventListener('submit', async (e) => {
-        e.preventDefault();
+    // Exponemos la función al entorno global para que el HTML la encuentre
+    window.guardarUsuario = async function() {
+        const form = document.getElementById('form-crear-usuario-completo');
         const btnSubmit = form.querySelector('.btn-save');
         const originalText = btnSubmit.innerHTML;
         
@@ -384,7 +385,6 @@
             const formData = new FormData();
 
             // --- 🛡️ FUNCIÓN DE CAPTURA SEGURA ---
-            // Evita que el código se rompa si un ID no existe en el HTML
             const safeAppend = (id, key) => {
                 const el = document.getElementById(id);
                 if (el) {
@@ -402,7 +402,7 @@
             safeAppend('direccion', 'direccion');
             safeAppend('cargo', 'cargo');
             safeAppend('sede', 'sede_id');
-            safeAppend('rol-usuario', 'rol'); // ✅ Corregido de 'rol' a 'rol-usuario'
+            safeAppend('rol-usuario', 'rol'); 
             safeAppend('email', 'email');
             
             // 🔥 Estado seleccionado
@@ -428,6 +428,7 @@
             let url = '/api/usuarios';
             let method = 'POST';
 
+            // Si hay ID de edición guardado en memoria, hacemos PUT
             if (editModeUserId) {
                 url = `/api/usuarios/${editModeUserId}`;
                 method = 'PUT';
@@ -436,7 +437,7 @@
             const response = await fetch(url, {
                 method: method,
                 headers: { 'x-auth-token': token },
-                body: formData
+                body: formData // No ponemos Content-Type, fetch lo pone automático con el boundary del FormData
             });
 
             const data = await response.json();
@@ -449,10 +450,14 @@
                 }
 
                 if (editModeUserId) {
-                    toggleUserView();
+                    toggleUserView(); // Volver a la lista
                 } else {
-                    resetearFormulario();
+                    resetearFormulario(); // Limpiar para crear otro
                 }
+                
+                // Refrescar la tabla en segundo plano
+                cargarListaUsuarios();
+                
             } else {
                 throw new Error(data.msg || "Operación fallida");
             }
@@ -460,7 +465,6 @@
         } catch (error) {
             console.error("❌ Error en submit:", error);
             
-            // Notificación de error
             const errorMsg = error.message || "Error de conexión con el servidor";
             if (typeof showToast === 'function') {
                 showToast(errorMsg, "error");
@@ -472,8 +476,7 @@
             btnSubmit.innerHTML = originalText;
             btnSubmit.disabled = false;
         }
-    });
-    }
+    };
 
     // Previsualizar foto al seleccionar archivo
     setTimeout(() => {
@@ -491,5 +494,22 @@
         }
     }, 500);
 
-    initConfig();
-})();
+// --- ARRANQUE: Exponemos la función para el Router SPA ---
+    window.initConfiguracion = function() {
+        console.log("▶️ Iniciando módulo Configuración...");
+        
+        // Ejecutamos tu función original de carga
+        initConfig(); 
+        
+        // Por seguridad, siempre que se entra al módulo nos aseguramos de que el form esté limpio
+        if (typeof resetearFormulario === 'function') {
+            resetearFormulario();
+        }
+    };
+
+    // Fallback: Si la página se recarga manualmente (F5) estando en esta vista, la auto-ejecutamos
+    if (document.getElementById('form-crear-usuario-completo')) {
+        window.initConfiguracion();
+    }
+
+})(); // <--- Fin del archivo

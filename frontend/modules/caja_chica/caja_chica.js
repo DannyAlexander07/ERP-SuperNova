@@ -209,10 +209,6 @@
         cargarCajaChica(); // Recargamos para mostrar los siguientes 10
     };
 
-    window.cambiarPaginaChica = function(delta) {
-        currentPage += delta;
-        cargarCajaChica();
-    };
 
 // --- GUARDAR (BLINDAJE TOTAL E INDEPENDIENTE) ---
     const form = document.getElementById('form-chica');
@@ -335,5 +331,20 @@
         }
     };
 
-    init();
-})();
+// --- ARRANQUE: Exponemos la función para el Router SPA ---
+    window.initCaja_chica = function() {
+        console.log("▶️ Iniciando módulo Caja Chica...");
+        if (typeof init === 'function') {
+            init(); 
+        }
+    };
+
+    // Alias por si el router lo formatea en camelCase
+    window.initCajaChica = window.initCaja_chica;
+
+    // Fallback: Si la página se recarga manualmente (F5) estando en esta vista
+    if (document.getElementById('tabla-chica-body')) {
+        window.initCaja_chica();
+    }
+
+})(); 

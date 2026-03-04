@@ -290,16 +290,17 @@
 .badge-green { background: #ecfdf5; color: var(--success); }
 .badge-blue { background: #eff6ff; color: var(--info); }
 
+/* 🔥 AQUÍ ESTÁ EL AJUSTE PARA DARLE MÁS ALTURA A LOS GRÁFICOS 🔥 */
 .chart-body {
     position: relative;
-    height: 300px; /* Altura fija para evitar saltos */
+    height: 450px; /* Aumentado de 300px a 450px para espacio de leyendas */
     width: 100%;
 }
 
 .donut-container {
     display: flex;
     justify-content: center;
-    height: 250px;
+    height: 380px; /* Aumentado de 250px a 380px para que coincida visualmente */
 }
 
 /* --- TABLA PREMIUM --- */
@@ -357,7 +358,7 @@
     text-align: right;
 }
 
-/* --- PAGINACIÓN "PRIME" (Pegar al final del archivo) --- */
+/* --- PAGINACIÓN "PRIME" --- */
 
 .pagination-container {
     margin-top: 24px;
@@ -443,48 +444,41 @@
     margin: 0 2px;
 }
 
-/* Ajuste móvil para la paginación */
-@media (max-width: 768px) {
-    .pagination-container {
-        justify-content: center; /* Centrado en celular */
-    }
-    
-    .pagination-wrapper {
-        width: 100%;
-        justify-content: space-between; /* Separar texto de botones */
-    }
-}
-/* --- RESPONSIVE --- */
-@media (max-width: 768px) {
-    .charts-grid { grid-template-columns: 1fr; }
-    .toolbar-container { flex-direction: column; align-items: stretch; }
-    .actions-wrapper { justify-content: flex-end; }
-    .input-group input, .input-group select { width: 100%; }
-}
+/* ==========================================================================
+   📱 RESPONSIVE DESIGN (TABLETS & MÓVILES)
+   ========================================================================== */
 
-/* --- 📱 RESPONSIVE & MOVIL FIXES (Pegar al final del archivo) --- */
-
-/* Ajustes para Tablets (Pantallas medianas hasta 1024px) */
+/* --- AJUSTES PARA TABLETS (Pantallas medianas hasta 1024px) --- */
 @media (max-width: 1024px) {
     .charts-grid {
-        /* En tablet forzamos 2 columnas máximo, o 1 si es muy estrecha */
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        /* Fuerza a 1 sola columna si la pantalla no es lo suficientemente ancha */
+        grid-template-columns: 1fr;
+    }
+    
+    .chart-body {
+        height: 420px; /* Ligeramente más pequeño que desktop pero muy espacioso */
+    }
+    
+    .donut-container {
+        height: 350px;
     }
 }
 
-/* Ajustes para Móviles (Pantallas pequeñas hasta 768px) */
+/* --- AJUSTES PARA MÓVILES (Pantallas pequeñas hasta 768px) --- */
 @media (max-width: 768px) {
     
-    /* 1. Reducir padding general para ganar espacio */
+    /* 1. Contenedor General */
     .analytics-container {
         padding: 10px;
-        padding-bottom: 80px; /* Espacio extra abajo para scroll */
+        padding-bottom: 80px; /* Espacio extra abajo para hacer scroll cómodamente */
     }
-
 
     /* 2. Cabecera más compacta */
     .module-header {
         margin-bottom: 20px;
+    }
+    .title-wrapper {
+        gap: 10px;
     }
     .icon-header {
         font-size: 1.8rem;
@@ -494,16 +488,16 @@
         font-size: 1.3rem;
     }
 
-    /* 3. KPIs: Una sola columna vertical */
+    /* 3. Tarjetas KPI: Una sola columna vertical */
     .summary-cards-grid {
-        grid-template-columns: 1fr; /* 1 sola columna */
+        grid-template-columns: 1fr; 
         gap: 16px;
     }
 
-    /* 4. Toolbar (Filtros): Todo apilado verticalmente */
+    /* 4. Toolbar (Filtros y Búsqueda): Todo apilado verticalmente */
     .toolbar-container {
         flex-direction: column;
-        align-items: stretch; /* Estirar todo al ancho completo */
+        align-items: stretch; /* Estira todos los elementos al 100% */
         padding: 15px;
     }
 
@@ -517,11 +511,11 @@
         width: 100%;
     }
 
-    /* Inputs y Selects al 100% del ancho */
+    /* Inputs y Selects al 100% del ancho (Evita desbordes) */
     .modern-input, .modern-select {
         width: 100%;
-        min-width: 0; /* Vital para evitar desborde */
-        box-sizing: border-box; /* Asegura que el padding no sume al ancho */
+        min-width: 0; 
+        box-sizing: border-box; 
     }
 
     .actions-wrapper {
@@ -533,13 +527,13 @@
 
     .btn-prime {
         width: 100%;
-        justify-content: center;
+        justify-content: center; /* Centra el texto y el ícono en el botón */
     }
 
-    /* 5. Gráficos: Forzar 1 columna y ajustar altura */
+    /* 5. Gráficos: 1 columna y altura ajustada a la nueva leyenda */
     .charts-grid {
         display: flex;
-        flex-direction: column; /* Apilar gráficos */
+        flex-direction: column; 
         gap: 20px;
     }
 
@@ -550,26 +544,40 @@
     }
 
     .chart-body {
-        height: 250px; /* Un poco más bajos en móvil */
+        /* 🔥 VITAL: Aumentado para que la leyenda de muchos colores no aplaste las barras en celular */
+        height: 380px; 
+    }
+    
+    .donut-container {
+        height: 320px;
     }
 
-    /* 6. TABLA (EL FIX DEL DESBORDE) */
-    /* Esto permite que solo la tabla tenga scroll horizontal sin romper la página */
+    /* 6. TABLA (EL FIX DEL DESBORDE HORIZONTAL) */
+    /* Esto permite que la tabla se deslice con el dedo sin romper el resto de la página */
     .table-responsive-modern {
         display: block;
         width: 100%;
-        overflow-x: auto; /* Activa scroll horizontal */
-        -webkit-overflow-scrolling: touch; /* Scroll suave en iPhone */
+        overflow-x: auto; 
+        -webkit-overflow-scrolling: touch; /* Scroll fluido y nativo en iOS */
     }
 
     .premium-table {
-        min-width: 600px; /* Fuerza un ancho mínimo para que no se aplaste la data */
+        min-width: 600px; /* Obliga a la tabla a no aplastarse aunque la pantalla sea minúscula */
     }
     
     .premium-table th, 
     .premium-table td {
-        padding: 12px 10px; /* Menos padding en celdas */
-        white-space: nowrap; /* Evita que el texto se parta en líneas raras */
+        padding: 12px 10px; 
+        white-space: nowrap; /* Evita que el texto de las celdas se parta en varias líneas */
+    }
+
+    /* 7. Paginación Centrada */
+    .pagination-container {
+        justify-content: center; 
+    }
+    
+    .pagination-wrapper {
+        width: 100%;
+        justify-content: space-between; /* Separa el texto "Pág 1 de X" de los botones */
     }
 }
-

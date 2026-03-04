@@ -109,8 +109,20 @@
                 
                 // Mapear datos
                 eventosGlobales = datos.map(evt => {
-                    let inicio = evt.fecha_inicio ? evt.fecha_inicio.replace(' ', 'T') : null;
-                    let fin = evt.fecha_fin ? evt.fecha_fin.replace(' ', 'T') : null;
+                    // 🛡️ SANITIZACIÓN DE FECHAS (Protección contra crasheos de FullCalendar)
+                    let inicio = null;
+                    let fin = null;
+
+                    if (evt.fecha_inicio) {
+                        inicio = evt.fecha_inicio.includes('T') ? evt.fecha_inicio : evt.fecha_inicio.replace(' ', 'T');
+                    }
+                    if (evt.fecha_fin) {
+                        fin = evt.fecha_fin.includes('T') ? evt.fecha_fin : evt.fecha_fin.replace(' ', 'T');
+                    }
+
+                    // Si no hay fecha de inicio válida, ignoramos el evento para no romper el renderizado
+                    if (!inicio) return null;
+                    
                     const nombreSala = evt.nombre_sala_real || evt.salon || 'Sala General';
 
                     return {
@@ -125,7 +137,7 @@
                             estado: evt.estado
                         }
                     };
-                });
+                }).filter(evt => evt !== null); // 🔥 Eliminamos eventos corruptos
 
                 // Pintar calendario
                 filtrarCalendarioLocal();
@@ -208,6 +220,16 @@
         if(m) m.classList.remove('active'); 
     }
 
-    // Iniciar
-    initModule();
-})();
+    // --- 8. ARRANQUE: Exponemos la función para el Router SPA ---
+    window.initCalendario = function() {
+        console.log("▶️ Iniciando módulo Calendario...");
+        // Tu función principal está en la línea 16 y se llama initModule
+        initModule(); 
+    };
+
+    // Fallback: Si la página se recarga manualmente (F5) estando en esta vista
+    if (document.getElementById('calendar-main') || document.querySelector('.calendar-module-container')) {
+        window.initCalendario();
+    }
+
+})(); // <--- Fin del archivo

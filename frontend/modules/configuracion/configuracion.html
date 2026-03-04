@@ -13,7 +13,9 @@
     </div>
 
     <div id="view-create">
-        <form id="form-crear-usuario-completo" class="grid-layout">
+        <form id="form-crear-usuario-completo" class="grid-layout" onsubmit="event.preventDefault(); guardarUsuario();">
+            <input type="hidden" id="usuario-id">
+            
             <div class="card-block photo-section">
                 <h3>Avatar Corporativo</h3>
                 <div class="photo-upload-container" title="Clic para cambiar foto" onclick="document.getElementById('input-foto').click()">

@@ -69,7 +69,7 @@
                     <div class="row-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                         
                         <div class="input-group" style="position: relative;">
-                            <input type="text" id="cli-dni" required placeholder=" " maxlength="8" style="padding-right: 40px;">
+                            <input type="text" id="cli-dni" required placeholder=" " maxlength="8" pattern="[0-9]*" oninput="this.value = this.value.replace(/[^0-9]/g, '')" style="padding-right: 40px;">
                             <label>DNI</label>
                             <button type="button" onclick="buscarDatosClienteModal()" 
                                     title="Buscar en RENIEC"
@@ -79,7 +79,7 @@
                         </div>
 
                         <div class="input-group" style="position: relative;">
-                            <input type="text" id="cli-ruc" placeholder=" " maxlength="11" style="padding-right: 40px;">
+                            <input type="text" id="cli-ruc" placeholder=" " maxlength="11" pattern="[0-9]*" oninput="this.value = this.value.replace(/[^0-9]/g, '')" style="padding-right: 40px;">
                             <label>RUC (Opcional)</label>
                             <button type="button" onclick="buscarDatosClienteModal()" 
                                     title="Buscar en SUNAT"
@@ -154,7 +154,7 @@
 
             <div class="modal-footer">
                 <button class="btn-cancel" onclick="cerrarModalCliente()">Cancelar</button>
-                <button class="btn-primary" onclick="guardarCliente()">Guardar Ficha</button>
+                <button type="button" id="btn-guardar-cliente" class="btn-primary" onclick="guardarCliente()">Guardar Ficha</button>
             </div>
         </div>
     </div>

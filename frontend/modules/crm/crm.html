@@ -25,10 +25,10 @@
                     <th width="20%">Cliente / Prospecto</th>
                     <th width="15%">Contacto</th>
                     <th width="12%">Origen</th>
-                    <th width="15%">Evento / Fecha</th>
-                    <th width="12%">Estado</th>
-                    <th width="10%">Sede</th>
-                    <th width="16%" style="text-align: right;">Acciones</th>
+                    <th width="15%">Evento / Paquete</th>
+                    <th width="12%">Estado Pago</th>
+                    <th width="10%">Estado Lead</th>
+                    <th width="16%" style="text-align: center;">Acciones</th>
                 </tr>
             </thead>
             <tbody id="crm-table-body">
@@ -57,7 +57,7 @@
             </div>
             
             <div class="modal-body">
-                <form id="form-lead">
+                <form id="form-lead" onsubmit="event.preventDefault(); guardarLead();">
                     <input type="hidden" id="lead-id">
                     
                     <h4 class="form-subtitle">Datos del Contacto</h4>
@@ -101,7 +101,7 @@
                         </div>
                     </div>
 
-                    <h4 class="form-subtitle mt-3">Detalles del Evento</h4>
+                    <h4 class="form-subtitle mt-3">Detalles del Evento (Interés)</h4>
                     <div class="form-group">
                         <label>Nombre del Cumpleañero(a)</label>
                         <div class="input-wrapper">
@@ -154,12 +154,19 @@
                                 </select>
                             </div>
                         </div>
-                        <div class="form-group"></div>
+                        
+                        <div class="form-group">
+                            <label>Cantidad de Niños</label>
+                            <div class="input-wrapper">
+                                <i class='bx bx-face'></i>
+                                <input type="number" id="lead-cantidad-ninos" value="15" min="1" autocomplete="off" onchange="calcularTotalLead()" onkeyup="calcularTotalLead()">
+                            </div>
+                        </div>
                     </div>
 
                     <div class="row-grid">
-                        <div class="form-group">
-                            <label>Combo / Paquete (Inventario)</label>
+                        <div class="form-group" style="grid-column: span 2;">
+                            <label>Combo / Paquete de Interés</label>
                             <div class="input-wrapper">
                                 <i class='bx bx-gift'></i>
                                 <select id="lead-paquete" onchange="calcularTotalLead()">
@@ -167,40 +174,15 @@
                                 </select>
                             </div>
                         </div>
-                        
-                        <div class="form-group">
-                            <label>Cantidad de Niños</label>
-                            <div class="input-wrapper">
-                                <i class='bx bx-face'></i>
-                                <input type="number" id="lead-cantidad-ninos" value="15" min="1" onchange="calcularTotalLead()" onkeyup="calcularTotalLead()">
-                            </div>
-                        </div>
-
                         <div class="form-group">
                             <label>Total Estimado (S/)</label>
                             <div class="input-wrapper">
                                 <i class='bx bx-money'></i>
-                                <input type="number" id="lead-valor" placeholder="0.00" readonly style="background-color: #f3f4f6; font-weight: bold;">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="row-grid">
-                        <div class="form-group">
-                            <label>Método de Pago (Señal)</label>
-                            <div class="input-wrapper">
-                                <i class='bx bx-credit-card'></i>
-                                <select id="lead-metodo-pago">
-                                    <option value="transferencia">Transferencia</option>
-                                    <option value="efectivo">Efectivo</option>
-                                    <option value="yape">Yape</option>
-                                    <option value="plin">Plin</option>
-                                    <option value="tarjeta_credito">Tarjeta Crédito</option>
-                                    <option value="tarjeta_debito">Tarjeta Débito</option>
-                                </select>
+                                <input type="number" id="lead-valor" placeholder="0.00" readonly style="background-color: #f3f4f6; font-weight: bold; color: #333; cursor: not-allowed;">
                             </div>
                         </div>
                         <div class="form-group">
-                            <label>Vendedor (Comisionista)</label>
+                            <label>Vendedor Asignado</label>
                             <div class="input-wrapper">
                                 <i class='bx bx-user-voice'></i>
                                 <select id="lead-vendedor">
@@ -208,43 +190,145 @@
                                 </select>
                             </div>
                         </div>
-                        <div class="form-group">
-                            <label>Nro Operación / Ref (Opcional)</label>
-                            <div class="input-wrapper">
-                                <i class='bx bx-barcode'></i>
-                                <input type="text" id="lead-nro-operacion" placeholder="Ej: 123456" autocomplete="off">
-                            </div>
-                        </div>
                     </div>
+                    
                     <div class="form-group">
                         <label>Estado del Lead</label>
                         <div class="input-wrapper">
                             <i class='bx bx-flag'></i>
                             <select id="lead-estado">
-                                <option value="nuevo">☀️ Nuevo</option>
-                                <option value="contactado">📞 Contactado</option>
-                                <option value="cotizado">📄 Cotizado</option>
-                                <option value="seguimiento">👀 Seguimiento</option>
-                                <option value="perdido">❌ Perdido</option>
+                                <option value="nuevo">☀️ Nuevo prospecto</option>
+                                <option value="contactado">📞 Ya contactado</option>
+                                <option value="cotizado">📄 Se le envió info</option>
+                                <option value="seguimiento">👀 En seguimiento</option>
+                                <option value="perdido">❌ No le interesó</option>
                             </select>
                         </div>
                     </div>
 
                     <div class="form-group">
-                        <label>Notas / Comentarios</label>
+                        <label>Notas / Comentarios Internos</label>
                         <div class="input-wrapper">
-                            <textarea id="lead-obs" rows="2" placeholder="Ej: Preguntó por paquete galáctico..." autocomplete="off"></textarea>
+                            <textarea id="lead-obs" rows="2" placeholder="Ej: La mamá quiere temática de dinosaurios..." autocomplete="off"></textarea>
                         </div>
                     </div>
                 </form>
             </div>
             
-            <div class="modal-footer">
-                <button type="button" id="btn-cobrar-saldo" class="btn-secondary" style="display:none; background-color: #10b981; color: white; margin-right: 10px; border:none; padding: 10px 15px; border-radius: 8px; cursor:pointer;">
-                    💰 Cobrar Saldo (50%)
-                </button>
+            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">
                 <button class="btn-cancel" onclick="cerrarModalLead()">Cancelar</button>
-                <button class="btn-primary" onclick="guardarLead()">Guardar Lead</button>
+                <button type="button" id="btn-guardar-lead" class="btn-primary" onclick="guardarLead()">Guardar Lead</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-pagos-lead" class="modal-overlay">
+        <div class="modal-content center-modal" style="max-width: 550px;">
+            <div class="modal-header">
+                <h3><i class='bx bx-receipt' style="color:#10b981;"></i> Generar Adelanto / Reserva</h3>
+                <button class="btn-close" onclick="cerrarModalPagos()"><i class='bx bx-x'></i></button>
+            </div>
+            
+            <div class="modal-body">
+                <input type="hidden" id="pago-lead-id">
+                
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="color: #64748b; font-size: 13px;">Paquete a Reservar:</span>
+                        <strong id="pago-nombre-paquete" style="color: #1e293b; font-size: 13px;">-</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="color: #64748b; font-size: 13px;">Niños Estimados:</span>
+                        <strong id="pago-cantidad-ninos" style="color: #1e293b; font-size: 13px;">0</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="color: #64748b; font-size: 14px;">Costo Total Estimado:</span>
+                        <strong id="pago-total-estimado" style="color: #1e293b; font-size: 14px;">S/ 0.00</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px;">
+                        <span style="color: #10b981; font-size: 14px;">(-) Ya Pagado:</span>
+                        <strong id="pago-ya-pagado" style="color: #10b981; font-size: 14px;">S/ 0.00</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 8px;">
+                        <span style="color: #ef4444; font-size: 16px; font-weight: bold;">SALDO PENDIENTE:</span>
+                        <strong id="pago-saldo-pendiente" style="color: #ef4444; font-size: 18px; font-weight: bold;">S/ 0.00</strong>
+                    </div>
+                </div>
+
+                <form id="form-registrar-pago" onsubmit="event.preventDefault(); procesarPagoLead();">
+                    
+                    <h4 class="form-subtitle" style="font-size: 14px; margin-bottom: 15px; color: #4f46e5;">1. Datos del Comprobante</h4>
+                    <div class="row-grid">
+                        <div class="form-group">
+                            <label>Comprobante</label>
+                            <div class="input-wrapper">
+                                <i class='bx bx-file-blank'></i>
+                                <select id="pago-tipo-comprobante" required onchange="cambiarTipoDocumentoPago()">
+                                    <option value="BOLETA">Boleta Electrónica</option>
+                                    <option value="FACTURA">Factura Electrónica</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label id="label-doc-pago">DNI / RUC del Cliente</label>
+                            <div class="input-wrapper" style="display: flex; gap: 5px;">
+                                <div style="position: relative; flex: 1;">
+                                    <i class='bx bx-id-card' style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9ca3af;"></i>
+                                    <input type="text" id="pago-documento" placeholder="Opcional..." autocomplete="off" style="width: 100%; padding-left: 38px;">
+                                </div>
+                                <button type="button" class="btn-primary" style="padding: 10px 15px; border-radius: 8px;" onclick="buscarDocumentoPagoLead()" title="Buscar en API">
+                                    <i class='bx bx-search'></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label id="label-nom-pago">Nombre / Razón Social</label>
+                        <div class="input-wrapper">
+                            <i class='bx bx-user'></i>
+                            <input type="text" id="pago-nombre-cliente" required placeholder="Nombre para el comprobante" autocomplete="off">
+                        </div>
+                    </div>
+
+                    <h4 class="form-subtitle" style="font-size: 14px; margin-bottom: 15px; margin-top: 20px; color: #4f46e5;">2. Detalle del Pago</h4>
+                    <div class="row-grid">
+                        <div class="form-group">
+                            <label>Monto a Pagar Hoy (S/)</label>
+                            <input type="number" 
+                                id="abono-monto" 
+                                step="0.01" 
+                                required 
+                                placeholder="0.00" 
+                                style="font-weight: bold; font-size: 18px; color: #10b981; background: #ecfdf5; border-color: #a7f3d0;" 
+                                onkeyup="actualizarResumenPagoEnVivo()" 
+                                oninput="actualizarResumenPagoEnVivo()">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Método de Pago</label>
+                            <div class="input-wrapper">
+                                <select id="abono-metodo" required>
+                                    <option value="transferencia">Transferencia</option>
+                                    <option value="yape">Yape</option>
+                                    <option value="plin">Plin</option>
+                                    <option value="efectivo">Efectivo</option>
+                                    <option value="tarjeta_credito">Tarjeta de Crédito</option>
+                                    <option value="tarjeta_debito">Tarjeta de Débito</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Comentario</label>
+                            <div class="input-wrapper">
+                                <i class='bx bx-barcode'></i>
+                                <input type="text" id="abono-referencia" placeholder="Ej: 84758392">
+                            </div>
+                            <button type="submit" id="btn-procesar-abono" class="btn-primary" style="width: 100%; margin-top: 15px; justify-content: center; background-color: #10b981; padding: 12px; font-size: 16px;">
+                            <i class='bx bx-check-circle'></i> Generar Comprobante y Cobrar
+                            </button>
+                        </div>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -302,10 +386,8 @@
             </div>
 
             <div class="modal-footer">
-                <button class="btn-secondary" onclick="cerrarModalCobroFinal()">Cancelar</button>
-                <button class="btn-cobrar" onclick="procesarCobroFinal()">
-                    <i class='bx bx-check-circle'></i> Confirmar Cobro
-                </button>
+                <button class="btn-cancel" onclick="cerrarModalCobroFinal()">Cancelar</button>
+                <button type="button" class="btn-primary" style="background-color: #10b981;" onclick="procesarCobroFinal()">Finalizar y Cobrar Saldo</button>
             </div>
         </div>
     </div>
@@ -344,4 +426,48 @@
         </div>
     </div>
 
+    <div id="modal-historial-pagos" class="modal-overlay">
+        <div class="modal-content center-modal" style="max-width: 650px;">
+            <div class="modal-header">
+                <h3><i class='bx bx-history' style="color:#6366f1;"></i> Historial de Abonos</h3>
+                <button class="btn-close" onclick="cerrarModalHistorial()"><i class='bx bx-x'></i></button>
+            </div>
+            
+            <div class="modal-body">
+                <div id="info-cliente-pago" style="margin-bottom: 15px; padding: 10px; background: #f8fafc; border-radius: 8px; border-left: 4px solid #6366f1;">
+                    <strong id="historial-nombre-cliente" style="display: block; color: #1e293b;">-</strong>
+                    <span id="historial-evento-info" style="font-size: 12px; color: #64748b;">-</span>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="crm-table" style="font-size: 13px;">
+                        <thead>
+                            <tr style="background: #f1f5f9;">
+                                <th>Fecha</th>
+                                <th>Monto</th>
+                                <th>Método</th>
+                                <th>Tipo</th>
+                                <th>Recibido por</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historial-pagos-body">
+                            </tbody>
+                    </table>
+                </div>
+
+                <div id="historial-empty" style="display:none; text-align:center; padding:20px; color:#94a3b8;">
+                    <i class='bx bx-ghost' style="font-size: 30px;"></i>
+                    <p>No se encontraron registros de pagos.</p>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <div style="flex-grow: 1; text-align: left;">
+                    <span style="color: #64748b; font-size: 14px;">Total Recaudado:</span>
+                    <strong id="historial-total-monto" style="font-size: 16px; color: #10b981; margin-left: 5px;">S/ 0.00</strong>
+                </div>
+                <button class="btn-primary" onclick="cerrarModalHistorial()">Cerrar</button>
+            </div>
+        </div>
+    </div>
 </div>

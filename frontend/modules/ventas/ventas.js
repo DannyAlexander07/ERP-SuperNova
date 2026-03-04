@@ -211,17 +211,19 @@
             container.appendChild(card);
         });
     }
-        // --- CARRITO (VERSION OPTIMIZADA CON VALIDACION PREVENTIVA) ---
-    function agregarAlCarrito(producto) {
+    
+    // --- CARRITO (VERSION BLINDADA) ---
+    window.agregarAlCarrito = function(producto) {
         const itemEnCarrito = carrito.find(i => i.id === producto.id);
-        const cantidadFutura = (itemEnCarrito ? itemEnCarrito.cantidad : 0) + 1;
+        const cantidadActual = itemEnCarrito ? itemEnCarrito.cantidad : 0;
+        const cantidadFutura = cantidadActual + 1;
 
         if (producto.tipo === 'fisico') {
             if (producto.stock <= 0) {
-                return window.showMiniNotif(`⚠️ El producto ${producto.nombre} está agotado.`, 'error');
+                return window.showMiniNotif(`⚠️ ${producto.nombre} está agotado.`, 'error');
             }
             if (cantidadFutura > producto.stock) {
-                return window.showMiniNotif(`⚠️ Solo quedan ${producto.stock} unidades.`, 'error');
+                return window.showMiniNotif(`⚠️ Solo quedan ${producto.stock} unidades de ${producto.nombre}.`, 'error');
             }
         }
 
@@ -231,7 +233,6 @@
             carrito.push({ ...producto, cantidad: 1 });
         }
         
-        // Feedback positivo al añadir
         window.showMiniNotif(`+1 ${producto.nombre}`);
         renderCarrito();
     }
@@ -640,104 +641,118 @@ window.toggleCarritoMovil = function() {
         modalResult.classList.add('active');
     };
 
-// --- CONSULTA DNI/RUC (Actualizado y Sincronizado con HTML) ---
-window.consultarIdentidadPOS = async function(tipo) {
-    // 1. Determinar si es DNI o RUC basado en el parámetro string ('dni' o 'ruc')
-    const esDNI = (tipo === 'dni');
-    const inputId = esDNI ? 'cliente-dni' : 'cliente-ruc';
-    
-    // 2. Obtener elementos del DOM
-    const inputDocumento = document.getElementById(inputId);
-    const numero = inputDocumento.value.trim();
-    const token = localStorage.getItem('token');
+    // --- CONSULTA DNI/RUC (Actualizado y Sincronizado con HTML) ---
+    window.consultarIdentidadPOS = async function(tipo) {
+        // 1. Determinar si es DNI o RUC basado en el parámetro string ('dni' o 'ruc')
+        const esDNI = (tipo === 'dni');
+        const inputId = esDNI ? 'cliente-dni' : 'cliente-ruc';
+        
+        // 2. Obtener elementos del DOM
+        const inputDocumento = document.getElementById(inputId);
+        const numero = inputDocumento.value.trim();
+        const token = localStorage.getItem('token');
 
-    // 3. Validaciones de longitud
-    if (esDNI && numero.length !== 8) return window.showMiniNotif("⚠️ DNI debe tener 8 dígitos.", "error");
-    if (!esDNI && numero.length !== 11) return window.showMiniNotif("⚠️ RUC debe tener 11 dígitos.", "error");
+        // 3. Validaciones de longitud
+        if (esDNI && numero.length !== 8) return window.showMiniNotif("⚠️ DNI debe tener 8 dígitos.", "error");
+        if (!esDNI && numero.length !== 11) return window.showMiniNotif("⚠️ RUC debe tener 11 dígitos.", "error");
 
-    // 4. Efecto visual en el botón (Loading)
-    const btn = event.currentTarget; // El botón lupa que se presionó
-    const originalHtml = btn.innerHTML;
-    btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i>";
-    btn.disabled = true;
+        // 4. Efecto visual en el botón (Loading)
+        const btn = event.currentTarget; // El botón lupa que se presionó
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i>";
+        btn.disabled = true;
 
-    // 5. Definir campos de destino (Output)
-    const inputNombre = document.getElementById(esDNI ? 'cliente-nombre-natural' : 'cliente-razon');
-    const inputDireccion = document.getElementById('cliente-direccion'); // Solo para RUC
-    const inputEmail = document.getElementById('cliente-email');
+        // 5. Definir campos de destino (Output)
+        const inputNombre = document.getElementById(esDNI ? 'cliente-nombre-natural' : 'cliente-razon');
+        const inputDireccion = document.getElementById('cliente-direccion'); // Solo para RUC
+        const inputEmail = document.getElementById('cliente-email');
 
-    // Bloquear input de nombre mientras busca
-    if(inputNombre) {
-        inputNombre.placeholder = "Buscando...";
-        inputNombre.value = "";
-    }
-
-    try {
-        // 🔥 LLAMADA AL BACKEND SEGURO
-        const res = await fetch(`/api/consultas/${numero}`, {
-            headers: { 'x-auth-token': token }
-        });
-
-        const data = await res.json();
-
-        if (res.ok && data.success) {
-            // ✅ ÉXITO: CLIENTE ENCONTRADO
-            window.showMiniNotif(`✅ Encontrado: ${data.nombre}`);
-
-            if (inputNombre) {
-                inputNombre.value = data.nombre;
-                inputNombre.readOnly = true; // Bloquear edición si es oficial
-                inputNombre.style.backgroundColor = "#dcfce7"; // Verde éxito
-            }
-
-            if (!esDNI) {
-                // Lógica Extra para RUC
-                if (inputDireccion) {
-                    inputDireccion.value = data.direccion || "";
-                    inputDireccion.readOnly = true;
-                }
-                
-                // Advertencias de estado SUNAT
-                if (data.estado !== 'ACTIVO') {
-                    window.showMiniNotif(`⚠️ RUC en estado: ${data.estado}`, "warning");
-                }
-            }
-
-            // Desbloquear email por si quieren editarlo
-            if (inputEmail) inputEmail.readOnly = false;
-
-        } else {
-            // ❌ NO ENCONTRADO (Modo Manual)
-            window.showMiniNotif("ℹ️ No encontrado. Ingrese datos manualmente.", "info");
-
-            // Desbloquear para escribir
-            if (inputNombre) {
-                inputNombre.value = "";
-                inputNombre.readOnly = false;
-                inputNombre.placeholder = "Escriba el nombre aquí...";
-                inputNombre.style.backgroundColor = "#fff";
-                inputNombre.focus(); // Poner cursor listo para escribir
-            }
-
-            if (!esDNI && inputDireccion) {
-                inputDireccion.readOnly = false;
-                inputDireccion.value = "";
-            }
+        // Bloquear input de nombre mientras busca
+        if(inputNombre) {
+            inputNombre.placeholder = "Buscando...";
+            inputNombre.value = "";
         }
 
-    } catch (error) {
-        console.error("Error en consulta API:", error);
-        window.showMiniNotif("❌ Error de conexión con el servidor.", "error");
-        
-        // En caso de error crítico, desbloquear para permitir venta manual
-        if(inputNombre) inputNombre.readOnly = false;
-        
-    } finally {
-        // Restaurar botón
-        btn.innerHTML = originalHtml;
-        btn.disabled = false;
-    }
-};
+        try {
+            // 🔥 LLAMADA AL BACKEND SEGURO
+            const res = await fetch(`/api/consultas/${numero}`, {
+                headers: { 'x-auth-token': token }
+            });
 
-    initPOS();
+            const data = await res.json();
+
+            if (res.ok && data.success) {
+                // ✅ ÉXITO: CLIENTE ENCONTRADO
+                window.showMiniNotif(`✅ Encontrado: ${data.nombre}`);
+
+                if (inputNombre) {
+                    inputNombre.value = data.nombre;
+                    inputNombre.readOnly = true; // Bloquear edición si es oficial
+                    inputNombre.style.backgroundColor = "#dcfce7"; // Verde éxito
+                }
+
+                if (!esDNI) {
+                    // Lógica Extra para RUC
+                    if (inputDireccion) {
+                        inputDireccion.value = data.direccion || "";
+                        inputDireccion.readOnly = true;
+                    }
+                    
+                    // Advertencias de estado SUNAT
+                    if (data.estado !== 'ACTIVO') {
+                        window.showMiniNotif(`⚠️ RUC en estado: ${data.estado}`, "warning");
+                    }
+                }
+
+                // Desbloquear email por si quieren editarlo
+                if (inputEmail) inputEmail.readOnly = false;
+
+            } else {
+                // ❌ NO ENCONTRADO (Modo Manual)
+                window.showMiniNotif("ℹ️ No encontrado. Ingrese datos manualmente.", "info");
+
+                // Desbloquear para escribir
+                if (inputNombre) {
+                    inputNombre.value = "";
+                    inputNombre.readOnly = false;
+                    inputNombre.placeholder = "Escriba el nombre aquí...";
+                    inputNombre.style.backgroundColor = "#fff";
+                    inputNombre.focus(); // Poner cursor listo para escribir
+                }
+
+                if (!esDNI && inputDireccion) {
+                    inputDireccion.readOnly = false;
+                    inputDireccion.value = "";
+                }
+            }
+
+        } catch (error) {
+            console.error("Error en consulta API:", error);
+            window.showMiniNotif("❌ Error de conexión con el servidor.", "error");
+            
+            // En caso de error crítico, desbloquear para permitir venta manual
+            if(inputNombre) inputNombre.readOnly = false;
+            
+        } finally {
+            // Restaurar botón
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        }
+    };
+
+    // --- ARRANQUE VENTAS (Con Timeout protector) ---
+    window.initVentas = function() {
+        console.log("▶️ Iniciando módulo de Ventas (POS)...");
+        // Le damos 150ms al navegador para dibujar el HTML antes de buscar los productos
+        setTimeout(() => {
+            if (typeof initPOS === 'function') initPOS(); 
+        }, 150);
+    };
+
+    // Alias
+    window.initPos = window.initVentas;
+
+    if (document.getElementById('pos-products-container') || document.querySelector('.pos-container')) {
+        window.initVentas();
+    }
 })();

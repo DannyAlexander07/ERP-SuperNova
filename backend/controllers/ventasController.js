@@ -506,8 +506,8 @@ exports.eliminarVenta = async (req, res) => {
                     }
                     
                     await client.query(
-                        `UPDATE ventas SET sunat_ticket_anulacion = $1, sunat_estado = 'ANULADA', observaciones = observaciones || ' [ANULADA SUNAT]' WHERE id = $2`,
-                        [nubefactRes.sunat_ticket_numero, id]
+                        `UPDATE ventas SET sunat_estado = 'ANULADA', observaciones = COALESCE(observaciones, '') || ' [ANULADA SUNAT TICKET: ' || $1 || ']' WHERE id = $2`,
+                        [nubefactRes.sunat_ticket_numero || 'S/N', id]
                     );
                 } else {
                     await client.query(`UPDATE ventas SET sunat_estado = 'ANULADA' WHERE id = $1`, [id]);
@@ -520,50 +520,38 @@ exports.eliminarVenta = async (req, res) => {
             await client.query(`UPDATE ventas SET sunat_estado = 'ANULADA' WHERE id = $1`, [id]);
         }
 
-        // 🔥 5. REVERTIR STOCK (CON COSTOS REALES) 🔥
+        // 🔥 5. REVERTIR STOCK (CORRECCIÓN: ANTI-DOBLE DEVOLUCIÓN) 🔥
         // Si la venta viene de una CUOTA (B2B), NO devolvemos stock (solo financiero).
         if (venta.origen !== 'COBRO_CUOTA') {
             
-            // ✅ CORRECCIÓN: Traemos también 'costo_historico' para devolverlo al Kardex con valor
+            // Leemos todo lo que se vendió (Combos e Ingredientes ya están detallados y separados aquí)
             const detallesRes = await client.query('SELECT producto_id, cantidad, costo_historico FROM detalle_ventas WHERE venta_id = $1 ORDER BY producto_id ASC', [id]);
             
             for (const item of detallesRes.rows) {
                 if (!item.producto_id) continue;
 
-                // Revisar si es combo
-                const esCombo = await client.query('SELECT producto_hijo_id, cantidad FROM productos_combo WHERE producto_padre_id = $1', [item.producto_id]);
-                
-                if (esCombo.rows.length > 0) {
-                    for (const hijo of esCombo.rows) {
-                        const totalInsumo = Number(hijo.cantidad) * Number(item.cantidad);
-                        
-                        // ✅ CORRECCIÓN: Buscamos el costo actual del ingrediente para que el Kardex no entre en 0
-                        const resCostoHijo = await client.query('SELECT costo_promedio FROM productos WHERE id = $1', [hijo.producto_hijo_id]);
-                        const costoHijo = resCostoHijo.rows[0]?.costo_promedio || 0;
+                // 1. Verificamos si este ítem específico controla stock físico
+                const prodInfo = await client.query('SELECT controla_stock, tipo_item, costo_compra FROM productos WHERE id = $1', [item.producto_id]);
+                if (prodInfo.rows.length === 0) continue;
 
-                        await client.query('UPDATE inventario_sedes SET cantidad = cantidad + $1 WHERE producto_id = $2 AND sede_id = $3', [totalInsumo, hijo.producto_hijo_id, venta.sede_id]);
-                        
-                        // Kardex Ingrediente (Usando costo recuperado)
-                        await client.query(
-                            `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
-                             VALUES ($1, $2, $3, 'entrada_anulacion', $4, (SELECT cantidad FROM inventario_sedes WHERE producto_id = $2 AND sede_id = $1), $5, $6)`,
-                            [venta.sede_id, hijo.producto_hijo_id, usuarioId, totalInsumo, `Anulación Venta (Ingrediente) #${venta.numero_ticket_sede}`, costoHijo]
-                        );
-                    }
+                const { controla_stock, tipo_item, costo_compra } = prodInfo.rows[0];
+
+                // 2. SOLO devolvemos al inventario si es un insumo físico (Ignoramos el producto "Combo" si es solo servicio)
+                if (controla_stock && tipo_item !== 'servicio') {
+                    
+                    // Sumamos el stock físico a la sede
+                    await client.query('UPDATE inventario_sedes SET cantidad = cantidad + $1 WHERE producto_id = $2 AND sede_id = $3', [item.cantidad, item.producto_id, venta.sede_id]);
+                    
+                    // Aseguramos que el costo no sea 0 para el Kardex
+                    const costoParaKardex = parseFloat(item.costo_historico) || parseFloat(costo_compra) || 0;
+
+                    // Registramos en el Kardex la entrada por anulación
+                    await client.query(
+                        `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
+                         VALUES ($1, $2, $3, 'entrada_anulacion', $4, (SELECT cantidad FROM inventario_sedes WHERE producto_id = $2 AND sede_id = $1), $5, $6)`,
+                        [venta.sede_id, item.producto_id, usuarioId, item.cantidad, `Anulación Venta #${venta.numero_ticket_sede}`, costoParaKardex]
+                    );
                 }
-                
-                // Devolver Producto Principal
-                await client.query('UPDATE inventario_sedes SET cantidad = cantidad + $1 WHERE producto_id = $2 AND sede_id = $3', [item.cantidad, item.producto_id, venta.sede_id]);
-                
-                // ✅ CORRECCIÓN: Usamos 'item.costo_historico' en lugar de 0
-                const costoParaKardex = item.costo_historico || 0;
-
-                // Kardex Principal
-                await client.query(
-                    `INSERT INTO movimientos_inventario (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento)
-                     VALUES ($1, $2, $3, 'entrada_anulacion', $4, (SELECT cantidad FROM inventario_sedes WHERE producto_id = $2 AND sede_id = $1), $5, $6)`,
-                    [venta.sede_id, item.producto_id, usuarioId, item.cantidad, `Anulación Venta #${venta.numero_ticket_sede}`, costoParaKardex]
-                );
             }
         } else {
             console.log("ℹ️ Anulación B2B detectada: Se omite la devolución de stock (solo movimiento financiero).");
@@ -625,12 +613,13 @@ exports.obtenerVendedores = async (req, res) => {
     }
 };
 
-// 🔥 Nuevo parámetro agregado al final: precioVenta
+// 🔥 IMPORTANTE: Asegúrate de que esta sea la ÚNICA función descontarStock en tu archivo.
 async function descontarStock(client, prodId, sedeId, cantidad, usuarioId, ticketCodigo, motivo, precioVenta = 0) {
-    // 1. Validar producto
-    const prod = await client.query('SELECT controla_stock, tipo_item, nombre FROM productos WHERE id = $1', [prodId]);
+    
+    // 1. Validar producto y traer costo_compra real
+    const prod = await client.query('SELECT controla_stock, tipo_item, nombre, costo_compra FROM productos WHERE id = $1', [prodId]);
     if (prod.rows.length === 0) return;
-    const { controla_stock, tipo_item, nombre } = prod.rows[0];
+    const { controla_stock, tipo_item, nombre, costo_compra } = prod.rows[0];
 
     if (tipo_item === 'servicio' || !controla_stock) return;
 
@@ -642,11 +631,10 @@ async function descontarStock(client, prodId, sedeId, cantidad, usuarioId, ticke
         throw new Error(`Stock insuficiente para: ${nombre} (Quedan: ${stockActual})`);
     }
 
-    // 3. 🔥 ALGORITMO PEPS: Consumir Lotes (Del más viejo al más nuevo)
+    // 3. ALGORITMO PEPS
     let cantidadRestante = cantidad;
-    let stockParaKardex = stockActual; // Variable temporal para calcular el stock restante línea por línea
+    let stockParaKardex = stockActual; 
 
-    // Buscamos lotes activos ordenados por fecha
     const lotesRes = await client.query(
         `SELECT id, cantidad_actual, costo_unitario FROM inventario_lotes 
          WHERE producto_id = $1 AND sede_id = $2 AND cantidad_actual > 0 
@@ -654,30 +642,39 @@ async function descontarStock(client, prodId, sedeId, cantidad, usuarioId, ticke
         [prodId, sedeId]
     );
 
-    // Caso especial: Si hay stock físico pero no lotes (migración antigua)
+    // 🔥 CASO ESPECIAL: Sin Lote (AQUÍ ESTÁ LA CORRECCIÓN DE TU COSTO)
     if (lotesRes.rows.length === 0 && stockActual > 0) {
-        // Descontamos del total sin tocar lotes
         await client.query('UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3', [cantidad, prodId, sedeId]);
         
-        // 🔥 Guardamos el precio histórico aquí también
+        // Atrapamos el costo real de la base de datos (Ej: 1.50)
+        const costoReal = parseFloat(costo_compra) || 0;
+        console.log(`✅ [KARDEX] Producto: ${nombre} | Descontando SIN LOTE | Costo inyectado: S/ ${costoReal}`);
+
         await client.query(
             `INSERT INTO movimientos_inventario 
-            (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento, precio_venta_historico)
-             VALUES ($1, $2, $3, 'salida_venta', $4, $5, $6, 0, $7)`, 
-            [sedeId, prodId, usuarioId, -cantidad, (stockActual - cantidad), `Venta ${ticketCodigo} (Sin Lote)`, precioVenta]
+            (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento, precio_venta_historico, fecha)
+             VALUES ($1, $2, $3, 'salida_venta', $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`, 
+            [
+                sedeId, 
+                prodId, 
+                usuarioId, 
+                -cantidad, 
+                (stockActual - cantidad), 
+                `Venta ${ticketCodigo} (${motivo})`, // Ya no dirá "Sin Lote" ciego
+                costoReal, 
+                precioVenta 
+            ]
         );
         return;
     }
 
-    // ITERAMOS LOS LOTES
+    // ITERAMOS LOS LOTES (Si tuviera lotes)
     for (const lote of lotesRes.rows) {
         if (cantidadRestante <= 0) break;
 
-        // Cuánto sacamos de ESTE lote específico
         const aSacar = Math.min(cantidadRestante, lote.cantidad_actual);
         const costoDeEsteLote = parseFloat(lote.costo_unitario);
 
-        // A. Actualizar Lote en BD
         await client.query(
             `UPDATE inventario_lotes 
              SET cantidad_actual = cantidad_actual - $1,
@@ -686,13 +683,12 @@ async function descontarStock(client, prodId, sedeId, cantidad, usuarioId, ticke
             [aSacar, lote.id]
         );
 
-        // B. 🔥 REGISTRAR EN KARDEX POR CADA LOTE
         stockParaKardex -= aSacar;
 
         await client.query(
             `INSERT INTO movimientos_inventario 
-            (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento, precio_venta_historico)
-             VALUES ($1, $2, $3, 'salida_venta', $4, $5, $6, $7, $8)`, 
+            (sede_id, producto_id, usuario_id, tipo_movimiento, cantidad, stock_resultante, motivo, costo_unitario_movimiento, precio_venta_historico, fecha)
+             VALUES ($1, $2, $3, 'salida_venta', $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`, 
             [
                 sedeId, 
                 prodId, 
@@ -701,14 +697,13 @@ async function descontarStock(client, prodId, sedeId, cantidad, usuarioId, ticke
                 stockParaKardex, 
                 `Venta ${ticketCodigo} (${motivo}) - Lote ${lote.id}`, 
                 costoDeEsteLote, 
-                precioVenta // 🔥 AQUÍ SE GUARDA EL PRECIO PARA SIEMPRE
+                precioVenta 
             ]
         );
 
         cantidadRestante -= aSacar;
     }
 
-    // 4. Finalmente actualizamos el Stock Total (Resumen)
     await client.query('UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3', [cantidad, prodId, sedeId]);
 }
 

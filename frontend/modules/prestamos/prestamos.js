@@ -102,15 +102,11 @@ window.initPrestamos = async function() {
     }
 };
 
-// =======================================================
-// 5. RENDERIZADO Y FILTROS
-// =======================================================
 window.renderizarTablaCreditos = function() {
     const tbody = document.getElementById('tabla-creditos-body');
     if(!tbody) return;
     tbody.innerHTML = '';
 
-    // Filtro local por texto
     const inputBusqueda = document.getElementById('buscador-creditos');
     const busqueda = inputBusqueda ? inputBusqueda.value.toLowerCase() : '';
     
@@ -127,7 +123,6 @@ window.renderizarTablaCreditos = function() {
     filtrados.forEach(c => {
         const tr = document.createElement('tr');
         
-        // Lógica de Badges (Etiquetas de color)
         let tipoBadge = c.tipo_flujo === 'RECIBIDO' 
             ? '<span class="badge bg-red" style="color:#ef4444; background:#fee2e2"><i class="bx bx-down-arrow-alt"></i> Deuda</span>'
             : '<span class="badge bg-green" style="color:#16a34a; background:#dcfce7"><i class="bx bx-up-arrow-alt"></i> Cobranza</span>';
@@ -139,16 +134,23 @@ window.renderizarTablaCreditos = function() {
         if(c.estado === 'ANULADO') estadoBadge = '<span class="badge bg-gray">ANULADO</span>';
 
         const simbolo = c.moneda === 'USD' ? '$' : 'S/';
+        
+        // 🚀 Mostrar el Saldo Real en lugar del texto "X cuotas"
+        const saldoMostrado = c.cuotas_pendientes > 0 
+            ? `${simbolo} ${parseFloat(c.saldo_pendiente).toFixed(2)}` 
+            : 'S/ 0.00';
 
         tr.innerHTML = `
             <td style="font-weight:bold; color:#64748b;">${c.codigo_prestamo}</td>
             <td>${tipoBadge}</td>
             <td>${c.contraparte || 'Desconocido'}</td>
-            <td style="font-family:monospace; font-size:1.05rem;">${simbolo} ${parseFloat(c.monto_capital).toFixed(2)}</td>
+            <td style="color:#64748b;">${simbolo} ${parseFloat(c.monto_capital).toFixed(2)}</td>
             <td><small>${c.tasa_interes}% (${c.cuotas_pendientes} cuotas pend.)</small></td>
-            <td style="font-weight:bold; color:${c.tipo_flujo==='RECIBIDO' ? '#ef4444':'#10b981'}">
-                ${c.cuotas_pendientes > 0 ? c.cuotas_pendientes + ' Cuotas' : 'PAGADO'}
+            
+            <td style="font-weight:bold; font-size:1.05rem; color:${c.tipo_flujo==='RECIBIDO' ? '#ef4444':'#10b981'}">
+                ${saldoMostrado}
             </td>
+            
             <td>${estadoBadge}</td>
             
             <td class="text-center">
@@ -159,15 +161,12 @@ window.renderizarTablaCreditos = function() {
                 <button class="btn-icon" onclick="verDetallePrestamo(${c.id})" title="Ver Detalle">
                     <i class='bx bx-show'></i>
                 </button>
-                
                 <button class="btn-icon" onclick="cargarDatosEditar(${c.id})" title="Editar">
                     <i class='bx bx-pencil'></i>
                 </button>
-                
                 <button class="btn-icon" onclick="descargarPDFTabla(${c.id})" title="Descargar Contrato">
                     <i class='bx bxs-file-pdf'></i>
                 </button>
-                
                 <button class="btn-icon" onclick="eliminarPrestamo(${c.id})" title="Eliminar" style="color:#ef4444;">
                     <i class='bx bx-trash'></i>
                 </button>
@@ -177,25 +176,57 @@ window.renderizarTablaCreditos = function() {
     });
 };
 
-// Calcular Totales Superiores
+// Calcular Totales Superiores (DINÁMICOS)
 function actualizarKpisResumen(data) {
     let porPagar = 0;
     let porCobrar = 0;
+    let fechasVencimiento = [];
 
     data.forEach(c => {
-        const monto = parseFloat(c.monto_capital); 
-        // Solo sumamos lo que está ACTIVO
+        // 🚀 AHORA USAMOS EL SALDO PENDIENTE, NO EL CAPITAL ORIGINAL
+        const saldo = parseFloat(c.saldo_pendiente || 0); 
+        
         if (c.estado === 'ACTIVO') {
-            if (c.tipo_flujo === 'RECIBIDO') porPagar += monto;
-            else porCobrar += monto;
+            if (c.tipo_flujo === 'RECIBIDO') porPagar += saldo;
+            else porCobrar += saldo;
+
+            // Recolectar fechas para saber cuál es la más próxima
+            if (c.proximo_vencimiento) {
+                fechasVencimiento.push(new Date(c.proximo_vencimiento));
+            }
         }
     });
 
+    // Actualizar Textos de Dinero
     const elPagar = document.getElementById('kpi-total-pagar');
     const elCobrar = document.getElementById('kpi-total-cobrar');
-
     if(elPagar) elPagar.innerText = `S/ ${porPagar.toLocaleString('es-PE', {minimumFractionDigits: 2})}`;
     if(elCobrar) elCobrar.innerText = `S/ ${porCobrar.toLocaleString('es-PE', {minimumFractionDigits: 2})}`;
+
+    // Actualizar Fecha de Próximo Vencimiento
+    const elProxVenc = document.getElementById('kpi-prox-vencimiento');
+    if (elProxVenc) {
+        if (fechasVencimiento.length > 0) {
+            // Encontrar la fecha más pequeña (la más cercana)
+            const fechaMasCercana = new Date(Math.min(...fechasVencimiento));
+            elProxVenc.innerText = fechaMasCercana.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' });
+            
+            // Efecto visual si vence en menos de 3 días o ya venció
+            const hoy = new Date();
+            const diffDias = Math.ceil((fechaMasCercana - hoy) / (1000 * 60 * 60 * 24));
+            
+            if (diffDias < 0) {
+                elProxVenc.innerHTML = `<span style="color:#ef4444;">¡Vencido! (${Math.abs(diffDias)}d)</span>`;
+            } else if (diffDias <= 3) {
+                elProxVenc.style.color = '#f59e0b'; // Naranja alerta
+            } else {
+                elProxVenc.style.color = '#0f172a'; // Color normal
+            }
+        } else {
+            elProxVenc.innerText = "Sin deudas próximas";
+            elProxVenc.style.color = '#10b981'; // Verde paz
+        }
+    }
 }
 
 // =======================================================
@@ -230,6 +261,15 @@ window.cerrarModalDetalle = function() {
 // --- MODAL PAGO ---
 window.cerrarModalPagoCuota = function() {
     document.getElementById('modal-pagar-cuota').classList.remove('active');
+    
+    // Limpiar campos para la próxima vez
+    document.getElementById('pago-cuota-id').value = "";
+    document.getElementById('pago-cuota-fecha').value = "";
+    document.getElementById('pago-cuota-operacion').value = "";
+    
+    // Dejar el selector de método en su valor por defecto
+    const selectMetodo = document.getElementById('pago-cuota-metodo');
+    if(selectMetodo) selectMetodo.selectedIndex = 0;
 };
 
 // Helper: Cargar Proveedores en Select
@@ -418,46 +458,126 @@ window.verDetallePrestamo = async function(id) {
     } catch (e) { console.error(e); }
 };
 
-function renderizarModalDetalle(data) {
+window.cambiarTabModalCredito = function(tabName) {
+    document.getElementById('tab-det-resumen').style.display = 'none';
+    document.getElementById('tab-det-pagos').style.display = 'none';
+    
+    document.querySelectorAll('#modal-detalle-credito .tab-btn').forEach(btn => btn.classList.remove('active'));
+
+    document.getElementById(`tab-det-${tabName}`).style.display = 'block';
+    document.getElementById(`btn-tab-det-${tabName}`).classList.add('active');
+};
+
+window.renderizarModalDetalle = function(data) {
     const head = data.datos;
     const cron = data.cronograma;
+    const pagos = data.pagos || [];
     const simbolo = head.moneda === 'USD' ? '$' : 'S/';
+    const fmt = (m) => parseFloat(m || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    document.getElementById('det-titulo').innerText = `${head.codigo_prestamo} - ${head.tipo_flujo}`;
-    document.getElementById('det-cliente').innerText = head.razon_social || "Sin Nombre";
-    document.getElementById('det-capital').innerText = `${simbolo} ${parseFloat(head.monto_capital).toFixed(2)}`;
+    // 1. Llenar Cabecera y Datos Básicos
+    document.getElementById('det-credito-id').value = head.id;
+    document.getElementById('det-titulo').innerHTML = `<i class='bx bx-briefcase'></i> ${head.codigo_prestamo} - ${head.tipo_flujo}`;
+    document.getElementById('det-cliente').innerText = head.razon_social || "Sin Nombre Registrado";
+    document.getElementById('det-capital').innerText = `${simbolo} ${fmt(head.monto_capital)}`;
     document.getElementById('det-tasa').innerText = `${head.tasa_interes}% (${head.tipo_tasa})`;
-    
+
+    // Cambiar color del badge principal según estado
+    const badgeEstado = document.getElementById('det-estado');
+    badgeEstado.innerText = head.estado;
+    badgeEstado.style.background = head.estado === 'PAGADO' ? '#dcfce7' : '#eff6ff';
+    badgeEstado.style.color = head.estado === 'PAGADO' ? '#16a34a' : '#2563eb';
+
+    // 2. Cálculos Financieros (La Magia)
     let saldoReal = 0;
-    cron.forEach(c => { if(c.estado !== 'PAGADO') saldoReal += parseFloat(c.cuota_total); });
-    document.getElementById('det-saldo').innerText = `${simbolo} ${saldoReal.toFixed(2)}`;
+    let interesTotalProyectado = 0;
+    let interesTotalPagado = 0;
+    let capitalTotalPagado = 0;
 
-    const tbody = document.getElementById('tabla-detalle-body');
-    tbody.innerHTML = '';
+    const tbodyCronograma = document.getElementById('tabla-detalle-body');
+    tbodyCronograma.innerHTML = '';
 
-    cron.forEach(getRow => {
-        const tr = document.createElement('tr');
-        const esPagado = getRow.estado === 'PAGADO';
-        
+    cron.forEach((c, index) => {
+        const esPagado = c.estado === 'PAGADO';
+        const cuotaTotal = parseFloat(c.cuota_total);
+        const interes = parseFloat(c.interes_periodo);
+        const capital = parseFloat(c.capital_amortizado);
+
+        // Sumatorias
+        interesTotalProyectado += interes;
+        if (esPagado) {
+            interesTotalPagado += interes;
+            capitalTotalPagado += capital;
+        } else {
+            saldoReal += cuotaTotal; // Lo que falta pagar
+        }
+
+        // Determinar Fechas de Inicio y Fin
+        if (index === 0) document.getElementById('det-fecha-inicio').innerText = new Date(c.fecha_vencimiento).toLocaleDateString('es-PE');
+        if (index === cron.length - 1) document.getElementById('det-fecha-fin').innerText = new Date(c.fecha_vencimiento).toLocaleDateString('es-PE');
+
+        // Renderizar fila del cronograma
         let btnAccion = esPagado 
-            ? `<span class="badge bg-green"><i class='bx bx-check'></i> Pagado</span>` 
-            : `<button class="btn-primary btn-sm" onclick="abrirModalPagoCuota(${getRow.id}, '${getRow.cuota_total}', ${getRow.numero_cuota})"><i class='bx bx-money'></i> Pagar</button>`;
+            ? `<span class="badge" style="background:#f1f5f9; color:#64748b;"><i class='bx bx-check-double'></i> Ok</span>` 
+            : `<button class="btn-primary btn-sm" onclick="abrirModalPagoCuota(${c.id}, '${cuotaTotal.toFixed(2)}', ${c.numero_cuota})" style="padding: 4px 10px; font-size:0.8rem;"><i class='bx bx-money'></i> Pagar</button>`;
 
+        const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>${getRow.numero_cuota}</td>
-            <td>${new Date(getRow.fecha_vencimiento).toLocaleDateString('es-PE')}</td>
-            <td style="font-weight:bold">${simbolo} ${parseFloat(getRow.cuota_total).toFixed(2)}</td>
-            <td style="color:#64748b">${parseFloat(getRow.capital_amortizado).toFixed(2)}</td>
-            <td style="color:#64748b">${parseFloat(getRow.interes_periodo).toFixed(2)}</td>
-            <td>${parseFloat(getRow.saldo_restante).toFixed(2)}</td>
-            <td>${esPagado ? '<span class="badge bg-green">PAGADO</span>' : '<span class="badge bg-yellow">PENDIENTE</span>'}</td>
-            <td>${btnAccion}</td>
+            <td style="font-weight:bold; color:#64748b;">${c.numero_cuota}</td>
+            <td>${new Date(c.fecha_vencimiento).toLocaleDateString('es-PE')}</td>
+            <td style="font-weight:800; color:#1e293b;">${simbolo} ${fmt(cuotaTotal)}</td>
+            <td style="color:#64748b">${fmt(capital)}</td>
+            <td style="color:#f59e0b">${fmt(interes)}</td>
+            <td style="color:#ef4444">${fmt(c.saldo_restante)}</td>
+            <td>${esPagado ? '<span class="badge" style="background:#dcfce7; color:#16a34a;">PAGADO</span>' : '<span class="badge" style="background:#fef9c3; color:#ca8a04;">PENDIENTE</span>'}</td>
+            <td style="text-align:center;">${btnAccion}</td>
         `;
-        tbody.appendChild(tr);
+        tbodyCronograma.appendChild(tr);
     });
 
+    // 3. Renderizar Historial de Pagos (Pestaña 2)
+    const tbodyPagos = document.getElementById('tabla-pagos-credito-body');
+    tbodyPagos.innerHTML = '';
+    
+    if (pagos.length === 0) {
+        tbodyPagos.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 20px; color:#64748b;">No hay transacciones registradas para este préstamo.</td></tr>`;
+    } else {
+        pagos.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${new Date(p.fecha_pago).toLocaleDateString('es-PE')}</td>
+                <td style="font-weight:bold; color:#10b981;">${simbolo} ${fmt(p.monto)}</td>
+                <td><span class="badge" style="background:#eff6ff; color:#3b82f6;">${p.metodo_pago}</span></td>
+                <td style="font-family:monospace;">${p.numero_operacion || '-'}</td>
+                <td style="font-size:0.85rem; color:#475569;">${p.notas || '-'}</td>
+            `;
+            tbodyPagos.appendChild(tr);
+        });
+    }
+
+    // 4. Actualizar Tarjetas de Resumen Financiero
+    document.getElementById('det-saldo').innerText = `${simbolo} ${fmt(saldoReal)}`;
+    document.getElementById('det-interes-proyectado').innerText = `${simbolo} ${fmt(interesTotalProyectado)}`;
+    document.getElementById('det-interes-recaudado').innerText = `${simbolo} ${fmt(interesTotalPagado)}`;
+
+    // 5. Actualizar Barra de Progreso Matemática
+    const capitalTotal = parseFloat(head.monto_capital);
+    let porcentaje = 0;
+    if (capitalTotal > 0) {
+        porcentaje = (capitalTotalPagado / capitalTotal) * 100;
+    }
+    // Si el estado es pagado, forzamos a 100% visualmente
+    if (head.estado === 'PAGADO') porcentaje = 100;
+
+    document.getElementById('det-progreso-bar').style.width = `${porcentaje}%`;
+    document.getElementById('det-progreso-text').innerText = `${porcentaje.toFixed(1)}% Amortizado`;
+
+    // 6. Restablecer siempre a la pestaña de resumen al abrir
+    cambiarTabModalCredito('resumen');
+
+    // 7. Mostrar el Modal
     document.getElementById('modal-detalle-credito').classList.add('active');
-}
+};
 
 // --- PAGO DE CUOTA ---
 window.abrirModalPagoCuota = function(idCuota, monto, numero) {
@@ -503,8 +623,9 @@ window.confirmarPagoCuota = async function() {
 
 // DESCARGAR PDF (Botón en Modal Detalle)
 window.imprimirContratoDetalle = async function() {
-    if (!detalleActual) return;
-    descargarPDFTabla(detalleActual.datos.id);
+    const id = document.getElementById('det-credito-id').value;
+    if (!id) return showToast("Error: No se encontró el ID del contrato", "error");
+    descargarPDFTabla(id);
 };
 
 // DESCARGAR PDF (Botón en Tabla)
@@ -589,6 +710,14 @@ window.cerrarModalConfirmar = function() {
 // 10. SIMULADOR PESTAÑA (TAB)
 // =======================================================
 window.calcularSimulacionTab = async function() {
+    const capital = document.getElementById('sim-tab-capital').value;
+    const plazo = document.getElementById('sim-tab-plazo').value;
+    const tasa = document.getElementById('sim-tab-tasa').value;
+
+    if (!capital || !plazo || !tasa || capital <= 0 || plazo <= 0) {
+        return showToast("Por favor complete el Capital, Plazo y Tasa para simular.", "warning");
+    }
+
     const btn = document.querySelector('#tab-simulador button');
     const originalTxt = btn.innerHTML;
     btn.innerHTML = "..."; btn.disabled = true;

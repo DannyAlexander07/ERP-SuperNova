@@ -60,7 +60,7 @@
                         <th>Saldo Pendiente</th>
                         <th>Estado</th>
                         <th>Contrato</th>
-                        <th>Acciones</th>
+                        <th style="text-align: center;">Acciones</th>
                     </tr>
                 </thead>
                 <tbody id="tabla-creditos-body">
@@ -75,41 +75,41 @@
             <h3 style="margin-top:0; color:#334155; border-bottom:1px solid #f1f5f9; padding-bottom:15px; margin-bottom:20px;">
                 <i class='bx bx-calculator'></i> Calculadora Financiera (Método Francés)
             </h3>
+            <form id="form-simulador-rapido" onsubmit="event.preventDefault(); calcularSimulacionTab();">
+                <div class="grid-row col-3">
+                    <div class="input-group">
+                        <label>Monto a Simular</label>
+                        <input type="number" id="sim-tab-capital" placeholder="Ej: 5000" class="input-bold">
+                    </div>
+                    <div class="input-group">
+                        <label>Tasa Interés (%)</label>
+                        <input type="number" id="sim-tab-tasa" placeholder="Ej: 5">
+                    </div>
+                    <div class="input-group">
+                        <label>Tipo Tasa</label>
+                        <select id="sim-tab-tipo-tasa">
+                            <option value="ANUAL">Anual (TEA)</option>
+                            <option value="MENSUAL">Mensual (TEM)</option>
+                        </select>
+                    </div>
+                </div>
 
-            <div class="grid-row col-3">
-                <div class="input-group">
-                    <label>Monto a Simular</label>
-                    <input type="number" id="sim-tab-capital" placeholder="Ej: 5000" class="input-bold">
+                <div class="grid-row col-3">
+                    <div class="input-group">
+                        <label>Plazo (Cuotas)</label>
+                        <input type="number" id="sim-tab-plazo" placeholder="12">
+                    </div>
+                    <div class="input-group">
+                        <label>Periodo Gracia</label>
+                        <input type="number" id="sim-tab-gracia" value="0">
+                    </div>
+                    <div class="input-group" style="justify-content: flex-end;">
+                        <button class="btn-primary full-width" onclick="calcularSimulacionTab()">
+                            <i class='bx bx-play'></i> Calcular Ahora
+                        </button>
+                    </div>
                 </div>
-                <div class="input-group">
-                    <label>Tasa Interés (%)</label>
-                    <input type="number" id="sim-tab-tasa" placeholder="Ej: 5">
-                </div>
-                <div class="input-group">
-                    <label>Tipo Tasa</label>
-                    <select id="sim-tab-tipo-tasa">
-                        <option value="ANUAL">Anual (TEA)</option>
-                        <option value="MENSUAL">Mensual (TEM)</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="grid-row col-3">
-                <div class="input-group">
-                    <label>Plazo (Cuotas)</label>
-                    <input type="number" id="sim-tab-plazo" placeholder="12">
-                </div>
-                <div class="input-group">
-                    <label>Periodo Gracia</label>
-                    <input type="number" id="sim-tab-gracia" value="0">
-                </div>
-                <div class="input-group" style="justify-content: flex-end;">
-                    <button class="btn-primary full-width" onclick="calcularSimulacionTab()">
-                        <i class='bx bx-play'></i> Calcular Ahora
-                    </button>
-                </div>
-            </div>
-
+            </form>
             <div id="sim-tab-resultado" class="hidden" style="margin-top: 20px; border-top: 2px dashed #e2e8f0; padding-top: 20px;">
                 <div class="summary-pills">
                     <span class="pill">Cuota Fija: <b id="res-tab-cuota" style="color:#2563eb; font-size:1.1rem;">0.00</b></span>
@@ -284,62 +284,114 @@
         </div>
     </div>
 
-    <div id="modal-detalle-credito" class="modal-overlay">
-        <div class="modal-content modal-xl"> <div class="modal-header">
-                <div class="header-info">
-                    <h3 id="det-titulo">Detalle de Operación</h3>
-                    <span id="det-estado" class="badge">ACTIVO</span>
+    <div id="modal-detalle-credito" class="modal-overlay" style="z-index: 2000;">
+        <div class="modal-content slide-in-right" style="max-width: 900px; padding: 0;">
+            
+            <div class="modal-header" style="padding: 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                <div class="header-info" style="width: 100%;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h3 id="det-titulo" style="margin: 0; color: #0f172a;"><i class='bx bx-briefcase'></i> Detalle de Operación</h3>
+                        <span id="det-estado" class="badge" style="padding-right: 2rem;">ACTIVO</span>
+                    </div>
+                    
+                    <div style="width: 100%; background: #e2e8f0; height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 5px;">
+                        <div id="det-progreso-bar" style="height: 100%; background: #10b981; width: 0%; transition: width 0.5s ease;"></div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #64748b; font-weight: 600;">
+                        <span>Progreso de Pago</span>
+                        <span id="det-progreso-text">0% Completado</span>
+                    </div>
                 </div>
-                <button class="btn-close" onclick="cerrarModalDetalle()"><i class='bx bx-x'></i></button>
+                <button class="btn-close" onclick="cerrarModalDetalle()" style="position: absolute; top: 15px; right: 15px;"><i class='bx bx-x'></i></button>
             </div>
 
-            <div class="modal-body">
-                
-                <div class="credit-summary-card">
-                    <div class="summary-item">
-                        <small>Contraparte</small>
-                        <strong id="det-cliente">...</strong>
-                    </div>
-                    <div class="summary-item">
-                        <small>Capital Prestado</small>
-                        <strong id="det-capital" style="color:var(--text-dark);">S/ 0.00</strong>
-                    </div>
-                    <div class="summary-item">
-                        <small>Tasa Interés</small>
-                        <strong id="det-tasa">0%</strong>
-                    </div>
-                    <div class="summary-item">
-                        <small>Deuda Restante</small>
-                        <strong id="det-saldo" style="color:var(--danger-color); font-size:1.2rem;">S/ 0.00</strong>
-                    </div>
+            <div class="modal-body" style="padding: 0;">
+                <input type="hidden" id="det-credito-id">
+
+                <div class="tabs-wrapper" style="border-bottom: 1px solid #e2e8f0; padding: 0 20px; background: #f8fafc; gap: 10px;">
+                    <button class="tab-btn active" id="btn-tab-det-resumen" onclick="cambiarTabModalCredito('resumen')">
+                        <i class='bx bx-pie-chart-alt-2'></i> Resumen y Cronograma
+                    </button>
+                    <button class="tab-btn" id="btn-tab-det-pagos" onclick="cambiarTabModalCredito('pagos')">
+                        <i class='bx bx-transfer'></i> Historial de Transacciones
+                    </button>
                 </div>
 
-                <div class="table-responsive" style="max-height: 400px; overflow-y: auto; margin-top: 15px;">
-                    <table class="premium-table">
-                        <thead style="position: sticky; top: 0; z-index: 5;">
-                            <tr>
-                                <th>#</th>
-                                <th>Vencimiento</th>
-                                <th>Cuota Total</th>
-                                <th>Capital</th>
-                                <th>Interés</th>
-                                <th>Saldo Restante</th>
-                                <th>Estado</th>
-                                <th>Acción</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabla-detalle-body">
-                            </tbody>
-                    </table>
+                <div style="padding: 20px;">
+                    <div id="tab-det-resumen" style="display: block;">
+                        
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;">
+                            <div style="background: #fff; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px;">
+                                <small style="color: #64748b; display: block; margin-bottom: 4px;">Contraparte</small>
+                                <strong id="det-cliente" style="font-size: 0.95rem; color: #1e293b;">...</strong>
+                            </div>
+                            <div style="background: #fff; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px;">
+                                <small style="color: #64748b; display: block; margin-bottom: 4px;">Capital Original</small>
+                                <strong id="det-capital" style="font-size: 1.1rem; color: #3b82f6;">S/ 0.00</strong>
+                            </div>
+                            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px; border-radius: 8px;">
+                                <small style="color: #166534; display: block; margin-bottom: 4px;">Interés a Ganar/Pagar</small>
+                                <strong id="det-interes-proyectado" style="font-size: 1.1rem; color: #10b981;">S/ 0.00</strong>
+                            </div>
+                            <div style="background: #fef2f2; border: 1px solid #fecaca; padding: 12px; border-radius: 8px;">
+                                <small style="color: #991b1b; display: block; margin-bottom: 4px;">Deuda Restante</small>
+                                <strong id="det-saldo" style="font-size: 1.1rem; color: #ef4444;">S/ 0.00</strong>
+                            </div>
+                        </div>
+
+                        <div style="display: flex; gap: 20px; margin-bottom: 15px; padding: 10px 15px; background: #f8fafc; border-radius: 8px; font-size: 0.85rem;">
+                            <span><i class='bx bx-calendar' style="color:#3b82f6;"></i> <b>Inicio:</b> <span id="det-fecha-inicio">-</span></span>
+                            <span><i class='bx bx-calendar-check' style="color:#10b981;"></i> <b>Fin Estimado:</b> <span id="det-fecha-fin">-</span></span>
+                            <span><i class='bx bx-line-chart' style="color:#f59e0b;"></i> <b>Tasa:</b> <span id="det-tasa">-</span></span>
+                            <span style="margin-left: auto; color: #10b981; font-weight: bold;"><i class='bx bx-money'></i> Interés Recaudado: <span id="det-interes-recaudado">S/ 0.00</span></span>
+                        </div>
+
+                        <h4 class="form-subtitle">Cronograma de Cuotas</h4>
+                        <div class="table-responsive" style="max-height: 350px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <table class="premium-table" style="margin: 0;">
+                                <thead style="position: sticky; top: 0; z-index: 5;">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Vencimiento</th>
+                                        <th>Cuota Total</th>
+                                        <th>Capital</th>
+                                        <th>Interés</th>
+                                        <th>Saldo Restante</th>
+                                        <th>Estado</th>
+                                        <th style="text-align: center;">Acción</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabla-detalle-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div id="tab-det-pagos" style="display: none;">
+                        <h4 class="form-subtitle">Transacciones Registradas</h4>
+                        <div class="table-responsive" style="border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <table class="premium-table" style="margin: 0;">
+                                <thead>
+                                    <tr>
+                                        <th>Fecha de Pago</th>
+                                        <th>Monto</th>
+                                        <th>Método</th>
+                                        <th>N° Operación</th>
+                                        <th>Detalle</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabla-pagos-credito-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
             </div>
             
-            <div class="modal-footer space-between">
+            <div class="modal-footer space-between" style="background: #f8fafc; border-top: 1px solid #e2e8f0;">
                 <button class="btn-secondary" onclick="imprimirContratoDetalle()">
-                    <i class='bx bxs-file-pdf'></i> Descargar Contrato
+                    <i class='bx bxs-file-pdf'></i> Descargar Contrato Legal
                 </button>
-                <button class="btn-cancel" onclick="cerrarModalDetalle()">Cerrar</button>
+                <button class="btn-cancel" onclick="cerrarModalDetalle()">Cerrar Vista</button>
             </div>
         </div>
     </div>
@@ -355,20 +407,22 @@
                 <p id="pago-cuota-txt" style="margin-bottom: 15px; font-weight: 500;">Confirmar pago...</p>
                 
                 <div class="input-group">
-                    <input type="date" id="pago-cuota-fecha" required>
                     <label class="static">Fecha de Realización</label>
+                    <input type="date" id="pago-cuota-fecha" required>
                 </div>
                 <div class="input-group">
+                    <br>
+                    <label class="static">Medio de Pago</label>
                     <select id="pago-cuota-metodo">
                         <option value="TRANSFERENCIA">Transferencia Bancaria</option>
                         <option value="EFECTIVO">Efectivo / Caja</option>
                         <option value="CHEQUE">Cheque</option>
                     </select>
-                    <label class="static">Medio de Pago</label>
                 </div>
                 <div class="input-group">
-                    <input type="text" id="pago-cuota-operacion" placeholder="Ej: 1234567">
+                    <br>
                     <label>N° Operación</label>
+                    <input type="text" id="pago-cuota-operacion" placeholder="Ej: 1234567">
                 </div>
             </div>
             <div class="modal-footer">

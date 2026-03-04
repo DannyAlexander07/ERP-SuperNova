@@ -106,6 +106,12 @@ exports.actualizarUsuario = async (req, res) => {
     
     // 🔥 NUEVO: Capturamos 'estado' junto con los demás datos
     let { nombres, apellidos, dni, celular, direccion, cargo, sede_id, rol, email, password, estado } = req.body;
+
+    if (req.usuario && parseInt(id) === req.usuario.id) {
+        // No permitimos que se cambie a sí mismo de rol ni que se desactive
+        rol = req.usuario.rol; 
+        estado = 'activo';
+    }
     
     // 🛡️ BLINDAJE 1: Sanitización de datos (Limpiar espacios accidentales)
     if (dni) dni = dni.toString().trim();
@@ -272,8 +278,10 @@ exports.obtenerPerfil = async (req, res) => {
 
 // 5. ACTUALIZAR MI PERFIL (El usuario se edita a sí mismo)
 exports.actualizarPerfil = async (req, res) => {
+    // 🛡️ BLINDAJE: Extraemos solo campos no críticos.
+    // Ignoramos intencionalmente 'rol', 'estado' y 'sede_id' si vienen en el body para evitar auto-escalada de privilegios.
     const { nombres, apellidos, cargo, telefono, direccion, password } = req.body;
-    const idUsuario = req.usuario.id; // ID del token
+    const idUsuario = req.usuario.id; // ID del token (Nadie puede editar a otro desde aquí)
 
     try {
         // Validación básica
@@ -284,22 +292,28 @@ exports.actualizarPerfil = async (req, res) => {
 
         // Si manda contraseña, la encriptamos y actualizamos todo
         if (password && password.length > 0) {
+            if (password.length < 8) return res.status(400).json({ msg: "La contraseña debe tener al menos 8 caracteres." });
             const salt = await bcrypt.genSalt(10);
             const passwordHash = await bcrypt.hash(password, salt);
             
             query = `UPDATE usuarios 
                      SET nombres=$1, apellidos=$2, cargo=$3, celular=$4, direccion=$5, clave=$6 
-                     WHERE id=$7 RETURNING id, nombres, apellidos`;
+                     WHERE id=$7 AND estado != 'eliminado' RETURNING id, nombres, apellidos`;
             values = [nombres, apellidos, cargo, telefono, direccion, passwordHash, idUsuario];
         } else {
             // Si no, solo actualizamos datos
             query = `UPDATE usuarios 
                      SET nombres=$1, apellidos=$2, cargo=$3, celular=$4, direccion=$5 
-                     WHERE id=$6 RETURNING id, nombres, apellidos`;
+                     WHERE id=$6 AND estado != 'eliminado' RETURNING id, nombres, apellidos`;
             values = [nombres, apellidos, cargo, telefono, direccion, idUsuario];
         }
 
-        await pool.query(query, values);
+        const result = await pool.query(query, values);
+        
+        if (result.rowCount === 0) {
+            return res.status(404).json({ msg: 'Usuario no válido o eliminado.' });
+        }
+        
         res.json({ msg: 'Tus datos han sido actualizados.' });
 
     } catch (err) {

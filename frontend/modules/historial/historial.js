@@ -551,15 +551,18 @@ window.verDetallesVenta = async function(ventaId, codigoVisual) {
     window.confirmarAnulacionBackend = async function() {
         if (!idVentaParaAnular) return;
         
-        // Identificamos el botón dentro del modal para dar feedback visual
-        const btnConfirmar = document.querySelector('#modal-confirmar-anulacion .btn-primary');
-        const textoOriginal = btnConfirmar ? btnConfirmar.innerHTML : 'Confirmar';
+        // ✅ CORRECCIÓN: Buscamos el botón por su ID exacto
+        const btnConfirmar = document.getElementById('btnConfirmarAnulacion');
+        const textoOriginal = btnConfirmar ? btnConfirmar.innerHTML : 'Sí, Anular';
 
         try {
             // 🛡️ BLINDAJE 1: Bloqueo de UI para evitar múltiples clics
             if (btnConfirmar) {
                 btnConfirmar.disabled = true;
-                btnConfirmar.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Procesando...";
+                // Lo ponemos gris visualmente para que se note bloqueado
+                btnConfirmar.style.backgroundColor = '#9ca3af'; 
+                btnConfirmar.style.cursor = 'not-allowed';
+                btnConfirmar.innerHTML = "⏳ Anulando en SUNAT...";
             }
 
             const token = localStorage.getItem('token');
@@ -596,6 +599,9 @@ window.verDetallesVenta = async function(ventaId, codigoVisual) {
             idVentaParaAnular = null;
             if (btnConfirmar) {
                 btnConfirmar.disabled = false;
+                // Le devolvemos su color rojo original
+                btnConfirmar.style.backgroundColor = '#ef4444'; 
+                btnConfirmar.style.cursor = 'pointer';
                 btnConfirmar.innerHTML = textoOriginal;
             }
         }

@@ -43,9 +43,12 @@
         <div class="kpi-card kpi-purple">
             <div class="kpi-icon"><i class='bx bx-target-lock'></i></div>
             <div class="kpi-info">
-                <h4>Conversión / Ticket</h4>
+                <h4>Conversión Eventos</h4>
                 <p class="data-big" id="kpi-conversion">0%</p>
-                <small id="kpi-ticket">Ticket: S/ 0</small>
+                <div style="display: flex; flex-direction: column; gap: 2px; margin-top: 5px;">
+                    <small style="color: #6366f1; font-weight: 600;" id="kpi-ticket">🎟️ POS: S/ 0.00</small>
+                    <small style="color: #8b5cf6; font-weight: 600;" id="kpi-ticket-eventos">🎪 Evento: S/ 0.00</small>
+                </div>
             </div>
         </div>
     </div>
@@ -86,7 +89,7 @@
                 <h4>🛒 Mix de Ingresos</h4>
                 <span class="badge badge-gray">Por Sede</span>
             </div>
-            <div class="chart-body">
+            <div class="chart-body" style="position: relative; height: 250px; width: 100%;">
                 <canvas id="chart-mix-ventas"></canvas>
             </div>
         </div>
@@ -96,7 +99,7 @@
                 <h4>📉 Gastos y Mermas</h4>
                 <span class="badge badge-red">Crítico</span>
             </div>
-            <div class="chart-body">
+            <div class="chart-body" style="position: relative; height: 250px; width: 100%;">
                 <canvas id="chart-gastos-mermas"></canvas>
             </div>
         </div>
@@ -106,7 +109,7 @@
                 <h4>💰 Utilidad Neta</h4>
                 <span class="badge badge-green">Rentabilidad</span>
             </div>
-            <div class="chart-body">
+            <div class="chart-body" style="position: relative; height: 250px; width: 100%;">
                 <canvas id="chart-utilidad"></canvas>
             </div>
         </div>
@@ -116,7 +119,7 @@
                 <h4>🌍 Estructura Global</h4>
                 <span class="badge badge-blue">Resumen</span>
             </div>
-            <div class="chart-body donut-container">
+            <div class="chart-body donut-container" style="position: relative; height: 250px; width: 100%;">
                 <canvas id="chart-global"></canvas>
             </div>
         </div>

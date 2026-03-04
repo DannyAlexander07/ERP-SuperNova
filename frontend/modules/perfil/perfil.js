@@ -107,63 +107,84 @@
         }
     }
 
-    // 5. GUARDAR CAMBIOS (A LA RUTA DE PERFIL)
-    const formProfile = document.getElementById('form-update-profile');
-    if(formProfile) {
-        formProfile.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const btn = formProfile.querySelector('.btn-save');
-            const txtOriginal = btn.innerHTML;
-            btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Guardando..."; 
-            btn.disabled = true;
+    // Exponemos la función al entorno global para que el HTML la pueda llamar
+    window.actualizarMiPerfil = async function() {
+        const formProfile = document.getElementById('form-update-profile');
+        if(!formProfile) return;
 
-            // Usamos JSON porque tu endpoint 'actualizarPerfil' espera JSON, no FormData
-            // (Si quisieras subir foto, tendríamos que cambiar el backend para usar Multer en /perfil)
-            const data = {
-                nombres: document.getElementById('me-nombres').value,
-                apellidos: document.getElementById('me-apellidos').value,
-                celular: document.getElementById('me-celular').value,
-                direccion: document.getElementById('me-direccion').value,
-                cargo: document.getElementById('me-cargo').value,
-                password: document.getElementById('me-password').value
-            };
+        const btn = formProfile.querySelector('.btn-save');
+        const txtOriginal = btn.innerHTML;
+        
+        // Bloqueo visual del botón
+        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Guardando..."; 
+        btn.disabled = true;
 
-            try {
-                const token = localStorage.getItem('token');
-                
-                // 🔥 CAMBIO CLAVE: PUT a /api/usuarios/perfil
-                const res = await fetch('/api/usuarios/perfil', {
-                    method: 'PUT',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'x-auth-token': token 
-                    }, 
-                    body: JSON.stringify(data)
-                });
+        // Usamos JSON porque el endpoint 'actualizarPerfil' espera JSON.
+        // Nota: Para la foto habría que habilitar multer en el backend.
+        const data = {
+            nombres: document.getElementById('me-nombres').value,
+            apellidos: document.getElementById('me-apellidos').value,
+            telefono: document.getElementById('me-celular').value, // IMPORTANTE: El backend espera 'telefono', no 'celular'
+            direccion: document.getElementById('me-direccion').value,
+            cargo: document.getElementById('me-cargo').value,
+            password: document.getElementById('me-password').value
+        };
 
-                const result = await res.json();
+        try {
+            const token = localStorage.getItem('token');
+            
+            // PUT a /api/usuarios/perfil
+            const res = await fetch('/api/usuarios/perfil', {
+                method: 'PUT',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-auth-token': token 
+                }, 
+                body: JSON.stringify(data)
+            });
 
-                if (res.ok) {
+            const result = await res.json();
+
+            if (res.ok) {
+                // Usamos la función showToast que vimos en módulos anteriores para mantener la estética
+                if (typeof showToast === 'function') {
+                    showToast(result.msg, "success");
+                    setTimeout(() => location.reload(), 1500); // Recargamos para ver los cambios aplicados
+                } else {
                     alert("✅ " + result.msg);
                     location.reload();
-                } else {
-                    alert("❌ Error: " + result.msg);
                 }
-            } catch (error) {
-                console.error(error);
-                alert("❌ Error de conexión");
-            } finally {
-                btn.innerHTML = txtOriginal; 
-                btn.disabled = false;
+            } else {
+                throw new Error(result.msg || "Error al actualizar perfil");
             }
+        } catch (error) {
+            console.error(error);
+            if (typeof showToast === 'function') {
+                showToast(error.message, "error");
+            } else {
+                alert("❌ Error: " + error.message);
+            }
+        } finally {
+            // Restaurar botón
+            btn.innerHTML = txtOriginal; 
+            btn.disabled = false;
+        }
+    };
+
+
+    // INICIO: Exponemos la función globalmente para que el Router de SuperNova la encuentre
+    window.initPerfil = function() {
+        console.log("▶️ Iniciando módulo Perfil...");
+        cargarSedes().then(() => {
+            cargarDatosPerfil();
+            // setTimeout(activarSubidaFoto, 100); // (Puedes borrar esta línea si ocultaste el botón de foto)
         });
+    };
+
+    // Si estás en una página que carga este script de forma tradicional, 
+    // la ejecutamos por si acaso. Si el router la llama, se ejecutará cuando deba.
+    if (document.getElementById('form-update-profile')) {
+        window.initPerfil();
     }
 
-    // INICIO
-    // Primero cargamos sedes, luego el perfil
-    cargarSedes().then(() => {
-        cargarDatosPerfil();
-        setTimeout(activarSubidaFoto, 100);
-    });
-
-})();
+})(); 

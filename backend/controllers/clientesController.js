@@ -32,6 +32,10 @@ exports.crearCliente = async (req, res) => {
         // 🛡️ BLINDAJE 1: Sanitización y Normalización
         const dniLimpio = documento_id ? documento_id.toString().trim() : null;
         const rucLimpio = ruc ? ruc.toString().trim() : null;
+
+        if (!nombre_completo || nombre_completo.trim() === '') {
+            return res.status(400).json({ msg: 'El nombre completo o Razón Social es obligatorio.' });
+        }
         
         // El cliente debe tener al menos un identificador
         if (!dniLimpio && !rucLimpio) {
@@ -102,7 +106,17 @@ exports.actualizarCliente = async (req, res) => {
     let { nombre_completo, documento_id, ruc, telefono, correo, direccion, nombre_hijo, fecha_nacimiento_hijo, observaciones_medicas, categoria } = req.body;
 
     try {
+        if (!nombre_completo || nombre_completo.trim() === '') {
+            return res.status(400).json({ msg: 'El nombre completo o Razón Social es obligatorio.' });
+        }
+        
         const dniLimpio = documento_id ? documento_id.toString().trim() : null;
+
+        const rucLimpio = ruc ? ruc.toString().trim() : null;
+
+        if (!dniLimpio && !rucLimpio) {
+            return res.status(400).json({ msg: 'El cliente no puede quedarse sin documentos. Debe tener al menos DNI o RUC.' });
+        }
 
         // 🛡️ BLINDAJE 2: Validar que el DNI no sea de OTRO cliente
         const checkDni = await pool.query('SELECT id FROM clientes WHERE documento_id = $1 AND id != $2', [dniLimpio, id]);
@@ -117,7 +131,7 @@ exports.actualizarCliente = async (req, res) => {
                 categoria = $10
             WHERE id = $11 RETURNING *`,
             [
-                nombre_completo, dniLimpio, ruc || null, telefono, correo || null, direccion || null,
+                nombre_completo, dniLimpio, ruc || null, rucLimpio , telefono, correo || null, direccion || null,
                 nombre_hijo || null, fecha_nacimiento_hijo || null, observaciones_medicas || null, categoria,
                 id
             ]

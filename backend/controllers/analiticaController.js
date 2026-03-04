@@ -1,7 +1,7 @@
 // Ubicación: SuperNova/backend/controllers/analiticaController.js
 const pool = require('../db');
 
-// 1. P&L Detallado (Corregido para excluir anulaciones)
+// 1. P&L Detallado (Analítica Comercial Pura: Ventas, CRM unificado, Canjes, Eventos)
 exports.obtenerPyL = async (req, res) => {
     const rol = req.usuario ? req.usuario.rol.toLowerCase() : '';
     const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
@@ -16,9 +16,9 @@ exports.obtenerPyL = async (req, res) => {
     try {
         const query = `
             WITH Ingresos AS (
-                -- A. PAGOS DE EVENTOS
+                -- A. PAGOS DE EVENTOS (Módulo Eventos -> Ahora unificado como Cumpleaños)
                 SELECT
-                    e.sede_id, s.nombre AS nombre_sede, 'Eventos' AS categoria,
+                    e.sede_id, s.nombre AS nombre_sede, 'Cumpleaños' AS categoria,
                     pe.monto AS ingreso, 0 AS egreso
                 FROM pagos_evento pe
                 JOIN eventos e ON pe.evento_id = e.id
@@ -28,18 +28,24 @@ exports.obtenerPyL = async (req, res) => {
 
                 UNION ALL
 
-                -- B. VENTAS POS (Tickets) - ACTUALIZADO CON FILTRO DE ANULACIÓN
+                -- B. VENTAS POS DESGLOSADAS (Módulo Ventas cruzado con Productos)
                 SELECT
                     v.sede_id, s.nombre AS nombre_sede,
                     CASE 
-                        WHEN UPPER(v.linea_negocio) LIKE '%CAFETERIA%' THEN 'Cafetería'
-                        WHEN UPPER(v.linea_negocio) LIKE '%TAQUILLA%' THEN 'Taquilla'
-                        WHEN UPPER(v.linea_negocio) LIKE '%MERCH%' THEN 'Merchandising'
-                        ELSE 'Otros Ingresos'
+                        WHEN p.tipo_item = 'combo' THEN 'Combos'
+                        WHEN p.tipo_item = 'servicio' THEN 'Servicios'
+                        WHEN UPPER(p.categoria) LIKE '%CAFETERIA%' THEN 'Cafetería'
+                        WHEN UPPER(p.categoria) LIKE '%TAQUILLA%' THEN 'Taquilla'
+                        WHEN UPPER(p.categoria) LIKE '%MERCH%' THEN 'Merchandising'
+                        WHEN UPPER(p.categoria) LIKE '%ARCADE%' OR UPPER(p.categoria) LIKE '%JUEGO%' THEN 'Arcade'
+                        WHEN UPPER(p.categoria) LIKE '%EVENTO%' THEN 'Eventos POS' -- Por si vendes algo extra como evento en caja
+                        ELSE 'Ventas Generales'
                     END AS categoria,
-                    COALESCE(v.subtotal, v.total_venta / 1.18) AS ingreso, 
+                    dv.subtotal AS ingreso, 
                     0 AS egreso
-                FROM ventas v
+                FROM detalle_ventas dv
+                JOIN ventas v ON dv.venta_id = v.id
+                LEFT JOIN productos p ON dv.producto_id = p.id
                 JOIN sedes s ON v.sede_id = s.id
                 WHERE v.fecha_venta >= $1::date AND v.fecha_venta < ($2::date + interval '1 day')
                 AND v.estado IN ('completado', 'pagado', 'cerrado')
@@ -48,22 +54,34 @@ exports.obtenerPyL = async (req, res) => {
 
                 UNION ALL
 
-                -- C. INGRESOS MANUALES DE CAJA
+                -- C. INGRESOS POR CRM / LEADS (Módulo CRM -> Ahora unificado como Cumpleaños)
                 SELECT 
-                    mc.sede_id, s.nombre AS nombre_sede, 'Ingresos Varios (Caja)' AS categoria,
-                    mc.monto AS ingreso, 0 AS egreso
-                FROM movimientos_caja mc
-                JOIN sedes s ON mc.sede_id = s.id
-                WHERE mc.tipo_movimiento = 'INGRESO'
-                AND mc.categoria != 'VENTA_POS'
-                AND mc.fecha_registro >= $1::date AND mc.fecha_registro < ($2::date + interval '1 day')
-                AND ($3::int IS NULL OR mc.sede_id = $3::int)
+                    l.sede_interes AS sede_id, s.nombre AS nombre_sede, 'Cumpleaños' AS categoria,
+                    l.pago_inicial AS ingreso, 0 AS egreso
+                FROM leads l
+                JOIN sedes s ON l.sede_interes = s.id
+                WHERE l.pago_inicial > 0
+                AND l.ultima_actualizacion >= $1::date AND l.ultima_actualizacion < ($2::date + interval '1 day')
+                AND ($3::int IS NULL OR l.sede_interes = $3::int)
+
+                UNION ALL
+
+                -- D. INGRESOS POR CANJES / TERCEROS (Módulo Acuerdos Comerciales)
+                SELECT
+                    u.sede_id, s.nombre AS nombre_sede, 'Canje / Tercero' AS categoria,
+                    pa.monto AS ingreso, 0 AS egreso
+                FROM pagos_acuerdos pa
+                JOIN acuerdos_comerciales ac ON pa.acuerdo_id = ac.id
+                JOIN usuarios u ON ac.usuario_id = u.id  
+                JOIN sedes s ON u.sede_id = s.id         
+                WHERE pa.fecha_pago >= $1::date AND pa.fecha_pago < ($2::date + interval '1 day')
+                AND ($3::int IS NULL OR u.sede_id = $3::int)
             ),
             
             Egresos AS (
-                -- D. MERMAS (Excluyendo Canjes)
+                -- E. MERMAS
                 SELECT
-                    mi.sede_id, s.nombre AS nombre_sede, 'Mermas' AS categoria,
+                    mi.sede_id, s.nombre AS nombre_sede, 'Inventario: Mermas' AS categoria,
                     0 as ingreso, (ABS(mi.cantidad) * COALESCE(mi.costo_unitario_movimiento, 0)) as egreso
                 FROM movimientos_inventario mi
                 JOIN sedes s ON mi.sede_id = s.id
@@ -75,10 +93,10 @@ exports.obtenerPyL = async (req, res) => {
                 AND ($3::int IS NULL OR mi.sede_id = $3::int)
                 
                 UNION ALL
-
-                -- E. COSTO OPERATIVO POR CANJES
+                
+                -- F. COSTO OPERATIVO POR CANJES
                 SELECT
-                    mi.sede_id, s.nombre AS nombre_sede, 'Costo Operativo (Canjes)' AS categoria,
+                    mi.sede_id, s.nombre AS nombre_sede, 'Inventario: Costo Canjes' AS categoria,
                     0 as ingreso, (ABS(mi.cantidad) * COALESCE(mi.costo_unitario_movimiento, 0)) as egreso
                 FROM movimientos_inventario mi
                 JOIN sedes s ON mi.sede_id = s.id
@@ -88,24 +106,38 @@ exports.obtenerPyL = async (req, res) => {
 
                 UNION ALL
                 
-                -- F. GASTOS OPERATIVOS (Caja)
+                -- G. GASTOS OPERATIVOS (Caja)
                 SELECT
-                    mc.sede_id, s.nombre AS nombre_sede, 'Gastos Operativos' AS categoria,
+                    mc.sede_id, s.nombre AS nombre_sede, 
+                    CONCAT('Caja Gasto: ', COALESCE(NULLIF(TRIM(mc.categoria), ''), 'Operativo')) AS categoria,
                     0 AS ingreso, mc.monto AS egreso
                 FROM movimientos_caja mc
                 JOIN sedes s ON mc.sede_id = s.id
                 WHERE mc.tipo_movimiento = 'EGRESO'
                 AND mc.fecha_registro >= $1::date AND mc.fecha_registro < ($2::date + interval '1 day')
                 AND ($3::int IS NULL OR mc.sede_id = $3::int)
+
+                UNION ALL
+                
+                -- H. GASTOS POR FACTURAS (Cuentas por Pagar)
+                SELECT 
+                    f.sede_id, s.nombre, 
+                    CONCAT('Factura: ', COALESCE(NULLIF(TRIM(f.clasificacion), ''), 'General')) AS categoria,
+                    0 AS ingreso, f.monto_total AS egreso
+                FROM facturas f
+                JOIN sedes s ON f.sede_id = s.id
+                WHERE f.estado_pago IN ('pagado', 'parcial') 
+                AND f.fecha_emision >= $1::date AND f.fecha_emision < ($2::date + interval '1 day')
+                AND ($3::int IS NULL OR f.sede_id = $3::int)
             ),
             
             Todo AS ( SELECT * FROM Ingresos UNION ALL SELECT * FROM Egresos )
 
             SELECT
                 nombre_sede, categoria,
-                ROUND(COALESCE(SUM(ingreso), 0)::numeric, 2) AS ingresos,
-                ROUND(COALESCE(SUM(egreso), 0)::numeric, 2) AS egresos,
-                ROUND((COALESCE(SUM(ingreso), 0) - COALESCE(SUM(egreso), 0))::numeric, 2) AS pnl
+                SUM(ingreso) AS ingresos,
+                SUM(egreso) AS egresos,
+                (SUM(ingreso) - SUM(egreso)) AS pnl
             FROM Todo
             GROUP BY nombre_sede, categoria
             ORDER BY nombre_sede, ingresos DESC;
@@ -121,7 +153,7 @@ exports.obtenerPyL = async (req, res) => {
     }
 };
 
-// 2. KPIs OPERATIVOS
+// 2. KPIs OPERATIVOS (CORREGIDO: Fechas dinámicas, Ticket Promedio separado y UPPER aplicado)
 exports.obtenerKpisEventos = async (req, res) => {
     const rol = req.usuario ? req.usuario.rol.toLowerCase() : '';
     const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
@@ -130,37 +162,71 @@ exports.obtenerKpisEventos = async (req, res) => {
     let sedeId = req.query.sede || null;
     if (!esSuperAdmin) sedeId = usuarioSedeId;
     
-    const fechaInicio = new Date();
-    fechaInicio.setDate(1); 
-    const startStr = fechaInicio.toISOString().slice(0, 10);
+    const startStr = req.query.inicio || '2023-01-01';
+    const endStr = req.query.fin || '2030-12-31';
 
     try {
-        const leadsQuery = `SELECT COUNT(*) FROM leads WHERE fecha_creacion >= $1 AND ($2::int IS NULL OR sede_interes = $2::int)`;
-        const eventosQuery = `SELECT COUNT(*) FROM eventos WHERE fecha_creacion >= $1 AND estado IN ('confirmado', 'celebrado') AND ($2::int IS NULL OR sede_id = $2::int)`;
-        const ticketQuery = `
-            SELECT AVG(monto) as promedio FROM (
-                SELECT total_venta as monto FROM ventas WHERE fecha_venta >= $1 AND ($2::int IS NULL OR sede_id = $2::int)
-                UNION ALL
-                SELECT costo_total as monto FROM eventos WHERE fecha_creacion >= $1 AND ($2::int IS NULL OR sede_id = $2::int)
-            ) as unificado
+        // 1. Conteo de Leads (Oportunidades)
+        const leadsQuery = `
+            SELECT COUNT(*)::int as count 
+            FROM leads 
+            WHERE fecha_creacion >= $1::date AND fecha_creacion < ($2::date + interval '1 day') 
+            AND ($3::int IS NULL OR sede_interes = $3::int)
         `;
 
-        const [resLeads, resEventos, resTicket] = await Promise.all([
-            pool.query(leadsQuery, [startStr, sedeId]),
-            pool.query(eventosQuery, [startStr, sedeId]),
-            pool.query(ticketQuery, [startStr, sedeId])
+        // 2. Conteo de Eventos Confirmados/Celebrados (Éxitos) - CORREGIDO CON UPPER
+        const eventosQuery = `
+            SELECT COUNT(*)::int as count 
+            FROM eventos 
+            WHERE fecha_creacion >= $1::date AND fecha_creacion < ($2::date + interval '1 day') 
+            AND UPPER(estado) IN ('CONFIRMADO', 'CELEBRADO') 
+            AND ($3::int IS NULL OR sede_id = $3::int)
+        `;
+        
+        // 3. Ticket Promedio Ventas POS (Cafetería, Taquilla, etc.) - CORREGIDO CON UPPER Y ALIAS
+        // Filtramos total_venta > 0 para no promediar anulaciones o errores
+        const ticketVentasQuery = `
+            SELECT SUM(total_venta) / NULLIF(COUNT(*), 0) as promedio
+            FROM ventas 
+            WHERE UPPER(linea_negocio) != 'EVENTOS' 
+            AND fecha_venta >= $1::date AND fecha_venta < ($2::date + interval '1 day') 
+            AND UPPER(estado) IN ('COMPLETADO', 'PAGADO', 'CERRADO') 
+            AND total_venta > 0
+            AND ($3::int IS NULL OR sede_id = $3::int)
+        `;
+
+        // 4. Ticket Promedio de Eventos (Valor del contrato) - CORREGIDO CON UPPER
+        // Usamos SUM/COUNT en lugar de AVG para mayor control sobre los ceros
+        const ticketEventosQuery = `
+            SELECT SUM(costo_total) / NULLIF(COUNT(*), 0) as promedio 
+            FROM eventos 
+            WHERE fecha_creacion >= $1::date AND fecha_creacion < ($2::date + interval '1 day') 
+            AND UPPER(estado) NOT IN ('CANCELADO', 'ANULADO') 
+            AND costo_total > 0
+            AND ($3::int IS NULL OR sede_id = $3::int)
+        `;
+
+        const [resLeads, resEventos, resTicketVentas, resTicketEventos] = await Promise.all([
+            pool.query(leadsQuery, [startStr, endStr, sedeId]),
+            pool.query(eventosQuery, [startStr, endStr, sedeId]),
+            pool.query(ticketVentasQuery, [startStr, endStr, sedeId]),
+            pool.query(ticketEventosQuery, [startStr, endStr, sedeId])
         ]);
 
-        const totalLeads = parseInt(resLeads.rows[0].count) || 0;
-        const totalExitos = parseInt(resEventos.rows[0].count) || 0; 
-        const ticketPromedio = parseFloat(resTicket.rows[0].promedio) || 0;
+        const totalLeads = resLeads.rows[0].count || 0;
+        const totalExitos = resEventos.rows[0].count || 0; 
+        const ticketPromedioVentas = parseFloat(resTicketVentas.rows[0].promedio) || 0;
+        const ticketPromedioEventos = parseFloat(resTicketEventos.rows[0].promedio) || 0;
+        
+        // Cálculo de conversión: (Eventos Confirmados / Leads Totales) * 100
         const conversion = totalLeads > 0 ? ((totalExitos / totalLeads) * 100).toFixed(1) : 0;
 
         res.json({
             leads: totalLeads,
             eventos: totalExitos,
             conversion: conversion,
-            ticketPromedio: ticketPromedio.toFixed(2)
+            ticketPromedio: ticketPromedioVentas.toFixed(2),
+            ticketPromedioEventos: ticketPromedioEventos.toFixed(2)
         });
 
     } catch (err) {
@@ -213,38 +279,30 @@ exports.obtenerResumenGlobal = async (req, res) => {
     }
 };
 
-// 4. RESUMEN DEL DÍA (OPTIMIZADO VELOCIDAD EXTREMA)
+// 4. RESUMEN DEL DÍA (CORREGIDO: Zona Horaria manejada 100% por PostgreSQL)
 exports.obtenerResumenDia = async (req, res) => {
     const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
     const esAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
     const sedeId = req.usuario.sede_id; 
 
-    // 1. Calculamos el Rango de Fechas (Inicio y Fin del día en Perú)
-    // Esto evita usar funciones pesadas dentro del WHERE
-    const now = new Date();
-    const inicioDia = new Date(now.toLocaleDateString("en-US", {timeZone: "America/Lima"}));
-    const finDia = new Date(inicioDia);
-    finDia.setDate(finDia.getDate() + 1);
-
     try {
-        const filtroSede = esAdmin ? "" : "AND sede_id = $3";
-        const params = esAdmin ? [inicioDia, finDia] : [inicioDia, finDia, sedeId];
+        const filtroSede = esAdmin ? "" : "AND sede_id = $1";  
+        const params = esAdmin ? [] : [sedeId];
 
-        // Consulta de Ventas (Usando rango >= y < para aprovechar índices)
+        // 🔥 CORRECCIÓN 3: Usamos "AT TIME ZONE 'America/Lima'" directamente en SQL
         const ventasQuery = `
             SELECT COALESCE(SUM(total_venta), 0) as total 
             FROM ventas 
-            WHERE fecha_venta >= $1 AND fecha_venta < $2
+            WHERE fecha_venta::date = (CURRENT_TIMESTAMP AT TIME ZONE 'America/Lima')::date
             AND UPPER(estado) IN ('COMPLETADO', 'PAGADO', 'CERRADO')
             AND sunat_estado != 'ANULADA'
             ${filtroSede}
         `;
         
-        // Consulta de Eventos
         const eventosQuery = `
             SELECT COUNT(*) as cantidad 
             FROM eventos 
-            WHERE fecha_inicio >= $1 AND fecha_inicio < $2
+            WHERE fecha_inicio::date = (CURRENT_TIMESTAMP AT TIME ZONE 'America/Lima')::date
             AND estado != 'cancelado' 
             ${filtroSede}
         `;
@@ -256,8 +314,7 @@ exports.obtenerResumenDia = async (req, res) => {
 
         res.json({
             ventasHoy: parseFloat(resVentas.rows[0].total),
-            eventosHoy: parseInt(resEventos.rows[0].cantidad),
-            fechaServer: inicioDia.toISOString().split('T')[0]
+            eventosHoy: parseInt(resEventos.rows[0].cantidad)
         });
 
     } catch (err) {
@@ -266,9 +323,9 @@ exports.obtenerResumenDia = async (req, res) => {
     }
 };
 
-// 5. GRÁFICOS AVANZADOS (CORREGIDO: Categorías de Pago Estrictas)
+// 5. GRÁFICOS AVANZADOS (ACTUALIZADO: Limpieza de nombres de productos y agrupación)
 exports.obtenerGraficosAvanzados = async (req, res) => {
-    // Validar usuario
+    // Validar usuario y permisos de sede
     const rol = (req.usuario && req.usuario.rol) ? req.usuario.rol.toLowerCase() : '';
     const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
     const usuarioSedeId = (req.usuario && req.usuario.sede_id) ? req.usuario.sede_id : null;
@@ -280,10 +337,12 @@ exports.obtenerGraficosAvanzados = async (req, res) => {
     const endMonth = req.query.fin || '2030-12-31';
     const params = [startMonth, endMonth, sedeId];
 
+    // Cláusula base para filtrar ventas válidas
     const whereClause = `
         WHERE v.fecha_venta >= $1::date 
         AND v.fecha_venta < ($2::date + interval '1 day')
         AND v.estado IN ('completado', 'pagado', 'cerrado')
+        AND v.sunat_estado != 'ANULADA'
         AND ($3::int IS NULL OR v.sede_id = $3::int)
     `;
 
@@ -297,91 +356,98 @@ exports.obtenerGraficosAvanzados = async (req, res) => {
         }
     };
 
-    // A. EVOLUCIÓN
+    // A. EVOLUCIÓN DIARIA
     const sqlEvo = `
         SELECT TO_CHAR(v.fecha_venta, 'YYYY-MM-DD') as fecha, 
-               SUM(COALESCE(v.subtotal, v.total_venta / 1.18)) as total
+               SUM(v.total_venta) as total
         FROM ventas v
         ${whereClause}
         GROUP BY 1 ORDER BY 1 ASC
     `;
 
-    // B. TOP PRODUCTOS
+    // B. TOP PRODUCTOS (CON LIMPIEZA DE NOMBRES)
+    // 1. REGEXP_REPLACE quita prefijos como "(Hijo) " o "(Hijo)"
+    // 2. SPLIT_PART con '[' quita los sufijos de cuotas como "[Cuota 1]"
+    // 3. TRIM limpia espacios sobrantes para que la agrupación sea exacta
     const sqlTop = `
-        SELECT dv.nombre_producto_historico as producto, SUM(dv.cantidad) as cantidad
+        SELECT 
+            TRIM(
+                SPLIT_PART(
+                    REGEXP_REPLACE(dv.nombre_producto_historico, '\\((.*?)\\)', '', 'g'), 
+                    '[', 1
+                )
+            ) as producto, 
+            SUM(dv.cantidad) as cantidad
         FROM detalle_ventas dv
         JOIN ventas v ON dv.venta_id = v.id
         ${whereClause}
-        GROUP BY 1 ORDER BY 2 DESC
+        GROUP BY 1 
+        HAVING SUM(dv.cantidad) > 0
+        ORDER BY 2 DESC
+        LIMIT 10
     `;
 
-    // C. MÉTODOS DE PAGO (ESTRICTO: Sin "Genérica")
-    // 🔥 Lógica:
-    // 1. Detectamos Efectivo, Yape, Plin, Transferencia.
-    // 2. Si es Tarjeta/Credito/Debito, miramos el tipo.
-    // 3. Si el tipo es NULL pero es tarjeta, asumimos 'Tarjeta de Crédito' para eliminar "Genérica".
+    // C. MÉTODOS DE PAGO
     const sqlPagos = `
         SELECT 
             CASE 
-                -- 1. Billeteras y Efectivo
                 WHEN v.metodo_pago ILIKE '%efectivo%' THEN 'Efectivo'
                 WHEN v.metodo_pago ILIKE '%yape%' THEN 'Yape'
                 WHEN v.metodo_pago ILIKE '%plin%' THEN 'Plin'
                 WHEN v.metodo_pago ILIKE '%transferencia%' THEN 'Transferencia'
-                
-                -- 2. Tarjetas (Lógica Estricta)
                 WHEN (v.metodo_pago ILIKE '%tarjeta%' OR v.metodo_pago ILIKE '%credito%' OR v.metodo_pago ILIKE '%debito%') THEN
                     CASE 
-                        -- Si dice explícitamente débito en el tipo o en el método
                         WHEN v.tipo_tarjeta ILIKE '%debito%' OR v.metodo_pago ILIKE '%debito%' THEN 'Tarjeta de Débito'
-                        -- En cualquier otro caso de tarjeta (incluso si es null), lo marcamos como Crédito
                         ELSE 'Tarjeta de Crédito'
                     END
-                
-                -- 3. Cualquier otra cosa extraña
                 ELSE 'Otros'
             END as metodo_pago, 
-            COUNT(*) as transacciones, 
-            SUM(v.total_venta) as total
+            COUNT(*)::int as transacciones, 
+            ROUND(SUM(v.total_venta)::numeric, 2) as total
         FROM ventas v
         ${whereClause}
-        GROUP BY 1 ORDER BY 3 DESC
+        GROUP BY 1 ORDER BY total DESC
     `;
 
-    // D. HORAS
+    // D. FLUJO POR HORAS
     const sqlHoras = `
-        SELECT EXTRACT(HOUR FROM v.fecha_venta) as hora, COUNT(*) as cantidad
+        SELECT EXTRACT(HOUR FROM v.fecha_venta)::int as hora, COUNT(*)::int as cantidad
         FROM ventas v
         ${whereClause}
         GROUP BY 1 ORDER BY 1 ASC
     `;
 
-    // E. VENDEDORES
+    // E. DESEMPEÑO DE VENDEDORES
     const sqlVendedores = `
         SELECT 
-            COALESCE(u.nombres || ' ' || u.apellidos, 'Desconocido') as vendedor, 
-            COUNT(*) as ventas_cantidad,
-            SUM(v.total_venta) as total_vendido
+            COALESCE(u.nombres || ' ' || u.apellidos, 'Venta Sistema/Otro') as vendedor, 
+            COUNT(*)::int as ventas_cantidad,
+            ROUND(SUM(v.total_venta)::numeric, 2) as total_vendido
         FROM ventas v
         LEFT JOIN usuarios u ON v.vendedor_id = u.id
         ${whereClause}
         GROUP BY 1 
-        ORDER BY 3 DESC 
+        ORDER BY total_vendido DESC 
     `;
 
-    const [evo, top, pagos, horas, vendedores] = await Promise.all([
-        safeQuery('Evolucion', sqlEvo, params),
-        safeQuery('TopProductos', sqlTop, params),
-        safeQuery('Pagos', sqlPagos, params),
-        safeQuery('Horas', sqlHoras, params),
-        safeQuery('Vendedores', sqlVendedores, params)
-    ]);
+    try {
+        const [evo, top, pagos, horas, vendedores] = await Promise.all([
+            safeQuery('Evolucion', sqlEvo, params),
+            safeQuery('TopProductos', sqlTop, params),
+            safeQuery('Pagos', sqlPagos, params),
+            safeQuery('Horas', sqlHoras, params),
+            safeQuery('Vendedores', sqlVendedores, params)
+        ]);
 
-    res.json({
-        evolucion: evo,
-        top: top,
-        pagos: pagos,
-        horas: horas,
-        vendedores: vendedores
-    });
+        res.json({
+            evolucion: evo,
+            top: top,
+            pagos: pagos,
+            horas: horas,
+            vendedores: vendedores
+        });
+    } catch (err) {
+        console.error("Error General Gráficos:", err.message);
+        res.status(500).json({ msg: 'Error al procesar datos de gráficos' });
+    }
 };

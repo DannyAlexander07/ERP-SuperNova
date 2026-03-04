@@ -12,7 +12,7 @@
         <div class="calendar-sidebar">
             
             <div class="mini-calendar-title">Sede</div>
-            <select id="filtro-sede-calendario" class="select-sede-full" onchange="cambiarSedeCalendario()">
+            <select id="filtro-sede-calendario" name="sede_calendario" class="select-sede-full" onchange="cambiarSedeCalendario()">
                 <option value="">🏢 Todas las Sedes</option>
                 </select>
 
@@ -41,7 +41,7 @@
             </div>
             
             <div class="modal-body">
-                <form id="form-reserva">
+                <form id="form-reserva" onsubmit="event.preventDefault(); guardarReserva();">
                     <input type="hidden" id="evt-id">
 
                     <h4 class="form-subtitle">Cliente</h4>
@@ -108,7 +108,7 @@
                     <div class="payment-summary-box">
                         <div class="payment-row">
                             <span class="pay-label">Adelanto / A Cuenta:</span>
-                            <input type="number" id="evt-acuenta" class="pay-val" value="0.00" oninput="calcularSaldoManual()">
+                            <input type="number" id="evt-acuenta" class="pay-val" value="0.00" min="0" step="0.01" oninput="calcularSaldoManual()">
                         </div>
                         <div class="payment-row">
                             <span class="pay-total-label">Saldo Pendiente:</span>

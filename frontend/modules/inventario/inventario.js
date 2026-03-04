@@ -73,14 +73,39 @@
         } catch (error) { console.error(error); }
     }
 
-// --- RENDERIZADO ---
+    // --- RENDERIZADO ---
     function renderizarTabla(datos = productosData) {
         const tbody = document.getElementById('tabla-productos-body');
         if (!tbody) return;
         tbody.innerHTML = '';
 
-        // 1. Filtrar
-        const datosFiltrados = filtroActual === 'todos' ? datos : datos.filter(p => p.tipo === filtroActual);
+        // 1. Filtrar (ACTUALIZADO: Excluye combos EXCEPTO en la categoría Eventos)
+        let datosFiltrados = datos;
+        
+        if (filtroActual !== 'todos') {
+            if (filtroActual === 'agotado') {
+                // Muestra productos físicos o combos cuyo stock sea 0 o menor
+                datosFiltrados = datos.filter(p => (p.tipo === 'fisico' || p.tipo === 'combo') && p.stock <= 0);
+            } 
+            else if (filtroActual.startsWith('cat-')) {
+                const categoriaBuscada = filtroActual.replace('cat-', '');
+                
+                datosFiltrados = datos.filter(p => {
+                    // 1. Primero, debe coincidir con la categoría exacta
+                    if (p.categoria !== categoriaBuscada) return false;
+                    
+                    // 2. Si la categoría es "Eventos", mostramos TODO (incluyendo Combos de fiesta)
+                    if (categoriaBuscada === 'Eventos') return true;
+                    
+                    // 3. Para el resto de categorías (Merch, Cafetería, etc.), ocultamos los combos
+                    return p.tipo !== 'combo';
+                });
+            } 
+            else {
+                // Filtros por Tipo (fisico, servicio, combo)
+                datosFiltrados = datos.filter(p => p.tipo === filtroActual);
+            }
+        }
 
         if (datosFiltrados.length === 0) {
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;">No se encontraron productos.</td></tr>';
@@ -107,14 +132,12 @@
                 
                 // Formato visual del stock
                 if (prod.stock <= 0) {
-                    // AGOTADO (Rojo + Icono Palpitante)
+                    // AGOTADO (Badge Rojo Sólido Mejorado)
                     stockHtml = `
-                        <div style="display:flex; align-items:center;">
-                            <i class='bx bxs-error-circle icono-alerta-pulsante'></i> 
-                            <div>
-                                <span style="color:#dc2626; font-weight:bold;">0 AGOTADO</span>
-                                <span class="texto-alerta-bajo">¡Reponer ya!</span>
-                            </div>
+                        <div style="display:flex; align-items:center; gap: 8px;">
+                            <span style="background-color: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; padding: 4px 8px; border-radius: 6px; font-weight: 800; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 2px 4px rgba(220, 38, 38, 0.1);">
+                                <i class='bx bxs-error-circle' style="font-size: 14px;"></i> AGOTADO
+                            </span>
                         </div>
                     `;
                 }
@@ -1196,20 +1219,42 @@ window.toggleTipoProducto = function() {
         }
     }
 
-    // Filtros y Búsqueda
-    window.filtrarTab = function(tipo, btn) {
-        filtroActual = tipo;
+    // Filtros y Búsqueda (ACTUALIZADO PARA TABS MIXTOS)
+    window.filtrarTab = function(filtro, btn) {
+        filtroActual = filtro; // Guardamos el filtro seleccionado (ej: 'fisico' o 'cat-Cafeteria')
         pagInvActual = 1;
+        
+        // Estilos visuales de los botones
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+        if (btn) btn.classList.add('active');
+        
         renderizarTabla();
-    }
+    };
 
     window.filtrarPorCategoria = function() {
         pagInvActual = 1;
-        const cat = document.getElementById('filtro-categoria').value;
-        if(!cat) { renderizarTabla(productosData); return; }
-        const filtrados = productosData.filter(p => p.categoria === cat);
+        const valorSeleccionado = document.getElementById('filtro-categoria').value;
+        
+        // Si elige "Todas", pasamos la data completa
+        if (!valorSeleccionado) { 
+            renderizarTabla(productosData); 
+            return; 
+        }
+
+        let filtrados = [];
+
+        // Lógica especial para "Combos" y "Servicios" (buscan por 'tipo')
+        if (valorSeleccionado === 'Combos') {
+            filtrados = productosData.filter(p => p.tipo === 'combo');
+        } 
+        else if (valorSeleccionado === 'Servicio') {
+            filtrados = productosData.filter(p => p.tipo === 'servicio');
+        } 
+        else {
+            // Para Cafetería, Taquilla, Merch, Eventos, Arcade (buscan por 'categoria')
+            filtrados = productosData.filter(p => p.categoria === valorSeleccionado);
+        }
+
         renderizarTabla(filtrados);
     }
 
@@ -1224,24 +1269,6 @@ window.toggleTipoProducto = function() {
             renderizarTabla(filtrados);
         };
     }
-
-    // --- FUNCIONES PARA COMBOS ---
-
-    function llenarDatalistCombos() {
-        const datalist = document.getElementById('lista-productos-combo');
-        if(!datalist) return;
-        
-        datalist.innerHTML = '';
-        const candidatos = productosData.filter(p => p.tipo === 'fisico');
-        
-        candidatos.forEach(p => {
-            const option = document.createElement('option');
-            option.value = p.nombre; 
-            option.dataset.id = p.id; 
-            datalist.appendChild(option);
-        });
-    }
-
     // B. Agregar Item a la lista temporal
     window.agregarItemAlCombo = function() {
         const idSeleccionado = document.getElementById('combo-selected-id').value;
@@ -1265,7 +1292,7 @@ window.toggleTipoProducto = function() {
     } 
 
     // C. Renderizar la tabla visual de ingredientes
-function renderizarTablaCombo() {
+    function renderizarTablaCombo() {
         const tbody = document.getElementById('tabla-combo-items');
         if (!tbody) return;
         tbody.innerHTML = '';
