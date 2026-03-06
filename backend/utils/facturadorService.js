@@ -33,6 +33,11 @@ const enviarFactura = async (data) => {
     console.log("Observaciones:", data.observaciones);
     console.log("-----------------------------------");
 
+    console.log("=== RASTREO DE FORMATO EN SERVICE ===");
+    console.log("formato_de_pdf:", data.formato_de_pdf);
+    console.log("formato_impresion:", data.formato_impresion);
+    console.log("=====================================");
+
     try {
         // 1. Validación de seguridad
         const detallesValidos = data.detalles.filter(item => Number(item.precio_unitario) > 0);
@@ -99,9 +104,13 @@ const enviarFactura = async (data) => {
             };
         });
 
-        // 4. Configuración del Documento
-        const formatosValidos = { '1': 'A4', '2': 'A5', '3': 'TICKET' };
-        const formatoFinal = formatosValidos[data.formato_de_pdf] || 'TICKET';
+        // 🔥 CORRECCIÓN: Aceptamos formatos en texto o en número
+        let formatoFinal = 'TICKET';
+        const formatoRecibido = (data.formato_de_pdf || data.formato_impresion || "").toString().toUpperCase();
+        
+        if (formatoRecibido === 'A4' || formatoRecibido === '1') formatoFinal = 'A4';
+        else if (formatoRecibido === 'A5' || formatoRecibido === '2') formatoFinal = 'A5';
+        else if (formatoRecibido === 'TICKET' || formatoRecibido === '3') formatoFinal = 'TICKET';
 
         // Código Único (UUID)
         let codigoUnicoSeguro = data.uuid_frontend 

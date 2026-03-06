@@ -8,8 +8,8 @@ exports.emitirComprobante = async (req, res) => {
     const bodyUnificado = req.body.body ? req.body.body : req.body;
     
     const ventaId = bodyUnificado.venta_id || null;
-    const formatoPdf = bodyUnificado.formato_pdf || '3'; 
-    const clienteEmail = bodyUnificado.cliente_email || ""; 
+    const formatoPdf = bodyUnificado.formato_pdf || bodyUnificado.formato_impresion || bodyUnificado.formato || '3'; 
+    const clienteEmail = bodyUnificado.cliente_email || "";
     
     if (!ventaId) {
         console.error("❌ Error: ID de venta no recibido para facturación.");

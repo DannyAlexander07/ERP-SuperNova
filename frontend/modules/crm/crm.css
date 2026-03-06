@@ -894,3 +894,11 @@ input[type="date"]::-webkit-calendar-picker-indicator {
         width: 80%;
     }
 }
+
+/* Resaltar la tarjeta cuando el radio interno está marcado */
+.format-card:has(input:checked) {
+    border-color: #6366f1 !important;
+    background-color: #f5f3ff !important;
+    color: #4338ca !important;
+    font-weight: bold;
+}

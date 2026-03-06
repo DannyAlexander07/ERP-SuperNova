@@ -63,12 +63,28 @@
                     <h4 class="form-subtitle">Datos del Contacto</h4>
                     <div class="row-grid">
                         <div class="form-group">
-                            <label>Nombre Apoderado <span class="req">*</span></label>
+                            <label>DNI / RUC (Opcional)</label>
+                            <div class="input-wrapper" style="display: flex; gap: 5px;">
+                                <div style="position: relative; flex: 1;">
+                                    <i class='bx bx-id-card' style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #6b7280;"></i>
+                                    <input type="text" id="lead-documento" placeholder="Ej: 71234567" autocomplete="off" style="padding-left: 35px; width: 100%;">
+                                </div>
+                                <button type="button" class="btn-primary" onclick="buscarDocumentoLeadCRM()" title="Buscar en RENIEC/SUNAT" style="padding: 0 15px; border-radius: 6px;">
+                                    <i class='bx bx-search'></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Nombre Apoderado / Razón Social <span class="req">*</span></label>
                             <div class="input-wrapper">
                                 <i class='bx bx-user'></i>
                                 <input type="text" id="lead-nombre" required placeholder="Ej: María Pérez" autocomplete="off">
                             </div>
                         </div>
+                    </div>
+                    
+                    <div class="row-grid">
                         <div class="form-group">
                             <label>Correo Electrónico</label>
                             <div class="input-wrapper">
@@ -76,9 +92,6 @@
                                 <input type="email" id="lead-email" placeholder="Ej: correo@empresa.com" autocomplete="off">
                             </div>
                         </div>
-                    </div>
-                    
-                    <div class="row-grid">
                         <div class="form-group">
                             <label>WhatsApp / Celular <span class="req">*</span></label>
                             <div class="input-wrapper">
@@ -86,6 +99,9 @@
                                 <input type="tel" id="lead-telefono" required placeholder="999 888 777" autocomplete="off">
                             </div>
                         </div>
+                    </div>
+                    
+                    <div class="row-grid">
                         <div class="form-group">
                             <label>Canal de Origen</label>
                             <div class="input-wrapper">
@@ -316,6 +332,22 @@
                                     <option value="tarjeta_debito">Tarjeta de Débito</option>
                                 </select>
                             </div>
+                            <div class="form-group">
+                                <label style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; display: block; margin-bottom: 5px;">
+                                    Tamaño de Impresión
+                                </label>
+                                <div style="display: flex; gap: 10px;">
+                                    <label class="format-card" style="flex:1; text-align:center; padding:8px; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer;">
+                                        <input type="radio" name="fmt_cuota" value="3" checked> Ticket
+                                    </label>
+                                    <label class="format-card" style="flex:1; text-align:center; padding:8px; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer;">
+                                        <input type="radio" name="fmt_cuota" value="1"> A4
+                                    </label>
+                                    <label class="format-card" style="flex:1; text-align:center; padding:8px; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer;">
+                                        <input type="radio" name="fmt_cuota" value="2"> A5
+                                    </label>
+                                </div>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label>Comentario</label>
@@ -333,7 +365,8 @@
         </div>
     </div>
 
-    <div id="modal-cobrar-saldo" class="modal-overlay"> <div class="modal-content">
+    <div id="modal-cobrar-saldo" class="modal-overlay"> 
+        <div class="modal-content">
             <div class="modal-header">
                 <h3><i class='bx bxs-check-shield' style="color:#10b981;"></i> Finalizar Evento</h3>
                 <button class="close-modal" onclick="cerrarModalCobroFinal()"><i class='bx bx-x'></i></button>
@@ -355,7 +388,7 @@
                 <div class="form-group">
                     <label>Confirmar Combo / Paquete</label>
                     <select id="cobro-paquete" onchange="recalcularSaldoVisual()">
-                        </select>
+                    </select>
                 </div>
 
                 <div id="resumen-cobro">
@@ -374,6 +407,15 @@
                 </div>
 
                 <div class="form-group">
+                    <label for="cobro-tipo-comprobante">Tipo de Comprobante</label>
+                    <select id="cobro-tipo-comprobante" name="cobro-tipo-comprobante">
+                        <option value="BOLETA" selected>Boleta Electrónica</option>
+                        <option value="FACTURA">Factura Electrónica</option>
+                        <option value="TICKET">Ticket Interno</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
                     <label>Método de Pago del Saldo</label>
                     <select id="cobro-metodo">
                         <option value="efectivo">Efectivo</option>
@@ -381,6 +423,15 @@
                         <option value="plin">Plin</option>
                         <option value="transferencia">Transferencia</option>
                         <option value="tarjeta">Tarjeta</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="cobro-formato-impresion">Formato de Impresión</label>
+                    <select id="cobro-formato-impresion" name="cobro-formato-impresion">
+                        <option value="ticket" selected>Ticket (Predeterminado)</option>
+                        <option value="a4">A4</option>
+                        <option value="a5">A5</option>
                     </select>
                 </div>
             </div>
@@ -434,9 +485,30 @@
             </div>
             
             <div class="modal-body">
-                <div id="info-cliente-pago" style="margin-bottom: 15px; padding: 10px; background: #f8fafc; border-radius: 8px; border-left: 4px solid #6366f1;">
-                    <strong id="historial-nombre-cliente" style="display: block; color: #1e293b;">-</strong>
-                    <span id="historial-evento-info" style="font-size: 12px; color: #64748b;">-</span>
+                
+                <div id="info-cliente-pago" style="margin-bottom: 20px; padding: 15px; background: #f8fafc; border-radius: 8px; border-left: 4px solid #6366f1; border-right: 1px solid #e2e8f0; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; font-size: 13px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <span style="color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: 700;">👤 Cliente</span>
+                            <div id="hist-cliente-nombre" style="font-weight: 700; color: #1e293b; font-size: 15px; margin-top: 2px;">Cargando...</div>
+                            <div id="hist-cliente-telefono" style="color: #3b82f6; font-weight: 500;">-</div>
+                        </div>
+                        <div>
+                            <span style="color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: 700;">🎁 Paquete y Capacidad</span>
+                            <div id="hist-paquete" style="font-weight: 700; color: #1e293b; font-size: 14px; margin-top: 2px;">-</div>
+                            <div id="hist-ninos" style="color: #64748b; font-weight: 500;">-</div>
+                        </div>
+                        <div>
+                            <span style="color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: 700;">📍 Lugar y Horario</span>
+                            <div id="hist-sede-sala" style="font-weight: 700; color: #1e293b; font-size: 14px; margin-top: 2px;">-</div>
+                            <div id="hist-fecha-hora" style="color: #64748b; font-weight: 500;">-</div>
+                        </div>
+                        <div style="background: #fff; padding: 10px; border-radius: 6px; border: 1px dashed #cbd5e1;">
+                            <span style="color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: 700;">💰 Estado Financiero</span>
+                            <div style="font-weight: 700; color: #1e293b; margin-top: 2px; font-size: 14px;">Total: <span id="hist-costo-total" style="color:#0f172a;">S/ 0.00</span></div>
+                            <div style="color: #ef4444; font-weight: 700; font-size: 14px;">Saldo: <span id="hist-saldo">S/ 0.00</span></div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="table-responsive">
@@ -451,7 +523,7 @@
                             </tr>
                         </thead>
                         <tbody id="historial-pagos-body">
-                            </tbody>
+                        </tbody>
                     </table>
                 </div>
 
