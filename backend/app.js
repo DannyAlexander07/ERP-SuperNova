@@ -67,6 +67,9 @@ app.use('/api/consultas', consultasRoutes); // DNI/RUC
 // Reportes
 app.use('/api/analitica', analiticaRoutes);
 
+// E-Commerce
+app.use('/api/ecommerce', require('./routes/ecommerceRoutes'));
+
 
 // --- ARCHIVOS ESTÁTICOS (EVIDENCIAS Y FOTOS) ---
 // --- ARCHIVOS ESTÁTICOS (EVIDENCIAS Y FOTOS) ---

@@ -679,9 +679,28 @@
         } catch(e) { console.error(e); }
     }
 
-    async function cargarProductosEnSelect() {
+    // 🔥 CORRECCIÓN: Le agregamos "window." para que el HTML la pueda encontrar
+    window.cargarProductosEnSelect = async function(sedeIdOpcional = null) {
         try {
-            const res = await fetch('/api/inventario', { headers: { 'x-auth-token': localStorage.getItem('token') } });
+            // 1. Buscamos qué sede está seleccionada. 
+            // Si nos pasan el ID por parámetro lo usamos, si no, lo buscamos en el HTML
+            let sedeId = sedeIdOpcional;
+            if (!sedeId) {
+                const selectSede = document.getElementById('lead-sede');
+                if (selectSede && selectSede.value) {
+                    sedeId = selectSede.value;
+                }
+            }
+
+            // 2. Construimos la URL dinámica (Aquí se conecta con el Backend modificado)
+            let urlFetch = '/api/inventario';
+            if (sedeId) {
+                urlFetch += `?sede=${sedeId}`;
+            }
+
+            // 3. Hacemos la petición
+            const res = await fetch(urlFetch, { headers: { 'x-auth-token': localStorage.getItem('token') } });
+            
             if(res.ok) {
                 const data = await res.json();
                 productosCache = data.productos || []; 

@@ -1,10 +1,12 @@
 // Ubicacion: SuperNova/backend/controllers/inventarioController.js
 const pool = require('../db');
 
-// 1. OBTENER PRODUCTOS (FILTRADO POR SEDE)
+// 1. OBTENER PRODUCTOS (FILTRADO POR SEDE Y SOPORTE PARA CRM)
 exports.obtenerProductos = async (req, res) => {
     try {
-        const sedeId = req.usuario.sede_id; 
+        // 🔥 MAGIA: Si nos mandan una sede por la URL (desde el CRM), usamos esa.
+        // Si no nos mandan nada, usamos la sede del usuario que está logueado (POS).
+        const sedeId = req.query.sede || req.usuario.sede_id; 
         
         const query = `
             SELECT 
@@ -17,6 +19,7 @@ exports.obtenerProductos = async (req, res) => {
                 p.costo_compra, 
                 p.unidad_medida, 
                 p.imagen_url,
+                p.linea_negocio, -- 🔥 NUEVO: Necesario para que el CRM sepa qué es un evento
                 COALESCE(i.cantidad, 0) as stock_actual,
                 COALESCE(i.stock_minimo_local, 5) as stock_minimo
             FROM productos p

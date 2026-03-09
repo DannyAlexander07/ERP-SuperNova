@@ -41,6 +41,7 @@ const menuItems = [
     { id: 'inicio', icon: 'bx-grid-alt', text: 'Dashboard', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'logistica', 'finanzas', 'contabilidad'] },
     { id: 'calendario', icon: 'bx-calendar-event', text: 'Calendario', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'finanzas', 'contabilidad'] },
     { id: 'ventas', icon: 'bx-cart-alt', text: 'Ventas', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'finanzas', 'contabilidad'] },
+    { id: 'despacho_web', icon: 'bx-shopping-bag', text: 'Despacho Web', roles: ['superadmin', 'admin', 'cajero', 'gerente'] },
     { id: 'terceros', icon: 'bx-qr-scan', text: 'Canjes / Terceros', roles: ['superadmin', 'admin', 'gerente', 'cajero', 'finanzas', 'contabilidad'] },
     { id: 'historial', icon: 'bx-history', text: 'Historial Ventas', roles: ['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad'] },
     { id: 'caja', icon: 'bx-wallet', text: 'Flujo de Caja', roles: ['superadmin', 'admin', 'gerente', 'cajero', 'finanzas', 'contabilidad'] },
@@ -198,7 +199,7 @@ async function loadModule(moduleId) {
                 'inventario': 'initInventario',
                 'terceros': 'initTerceros',
                 'prestamos': 'initPrestamos',
-                // AGREGADOS QUE FALTABAN:
+                'despacho_web': 'initDespachoWeb',
                 'caja_chica': 'initCajaChica',
                 'caja': 'initCaja', // Flujo de caja
                 'proveedores': 'initProveedores',

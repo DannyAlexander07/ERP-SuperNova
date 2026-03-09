@@ -1,0 +1,45 @@
+<div class="despacho-container">
+    
+    <div class="despacho-header">
+        <div class="despacho-title">
+            <h2><i class='bx bx-shopping-bag'></i> Despacho E-commerce</h2>
+            <p>Gestiona y entrega los pedidos comprados por internet que deben recogerse en esta sede.</p>
+        </div>
+        <div>
+            <button class="btn btn-secondary" onclick="cargarPedidosWeb()">
+                <i class='bx bx-refresh'></i> Actualizar Lista
+            </button>
+        </div>
+    </div>
+
+    <div class="despacho-actions">
+        <div class="search-box">
+            <i class='bx bx-search'></i>
+            <input type="text" id="buscar-codigo-web" placeholder="Escanea o escribe el Código de Recojo (Ej: WEB-1234)..." onkeyup="filtrarPedidosWeb()">
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="despacho-table">
+            <thead>
+                <tr>
+                    <th>Fecha de Compra</th>
+                    <th>Cliente</th>
+                    <th>Código Recojo</th>
+                    <th>Total Pagado</th>
+                    <th>Estado</th>
+                    <th style="text-align: center;">Acción</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-pedidos-web">
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 40px; color: #64748b;">
+                        <i class='bx bx-loader-alt bx-spin' style="font-size: 28px; margin-bottom: 10px;"></i><br>
+                        Cargando pedidos de internet...
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+</div>
