@@ -177,6 +177,142 @@
     transform: none;
 }
 
+/* Botón Actualizar Lista */
+.btn-secondary {
+    background-color: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+    background-color: #e2e8f0;
+    color: #1e293b;
+    border-color: #94a3b8;
+}
+
+/* =========================================
+   NUEVO: NAVEGACIÓN POR PESTAÑAS (TABS)
+========================================= */
+.despacho-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 5px;
+    /* Para móviles: permite scroll horizontal en las pestañas */
+    overflow-x: auto;
+    white-space: nowrap;
+}
+
+.tab-btn {
+    background: transparent;
+    border: none;
+    color: #64748b;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 10px 20px;
+    cursor: pointer;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    /* Evita que el texto de la pestaña se parta en móviles */
+    white-space: nowrap; 
+}
+
+.tab-btn:hover {
+    color: #3b82f6;
+    background-color: #f8fafc;
+}
+
+/* Estado activo de la pestaña */
+.tab-btn.active {
+    color: #3b82f6;
+    background-color: #eff6ff;
+    position: relative;
+}
+
+.tab-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: -7px; /* Cubre la línea gris del contenedor */
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background-color: #3b82f6;
+    border-radius: 3px 3px 0 0;
+}
+
+/* Ocultar el contenido inactivo */
+.tab-content {
+    display: none;
+    animation: fadeIn 0.4s ease-in-out;
+}
+
+/* Mostrar el contenido activo */
+.tab-content.active {
+    display: block;
+}
+
+/* Ajustes para la tabla del Historial Completo */
+.table-compacta th, 
+.table-compacta td {
+    padding: 12px 10px; /* Un poco más junta para que entren más datos */
+    font-size: 13px;
+}
+
+/* =========================================
+   6. BOTONES DE ACCIÓN (TABLAS)
+========================================= */
+.acciones-tabla {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+}
+
+.btn-icon {
+    background: #f8fafc;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    text-decoration: none;
+}
+
+.btn-icon:hover {
+    background: #e2e8f0;
+    color: #1e293b;
+    border-color: #94a3b8;
+}
+
+.btn-icon.pdf {
+    color: #ef4444;
+    background: #fef2f2;
+    border-color: #fecaca;
+}
+
+.btn-icon.pdf:hover {
+    background: #fee2e2;
+    border-color: #fca5a5;
+}
+
 /* =========================================
    5. ADAPTACIÓN PARA TABLETS Y MÓVILES
 ========================================= */
@@ -194,5 +330,17 @@
 
     .despacho-title h2 {
         font-size: 20px;
+    }
+
+    /* Agregar esto dentro de tu @media (max-width: 768px) existente */
+    .despacho-tabs {
+        flex-wrap: nowrap;
+        padding-bottom: 0;
+    }
+    .tab-btn {
+        flex: 1;
+        justify-content: center;
+        font-size: 14px;
+        padding: 12px 10px;
     }
 }

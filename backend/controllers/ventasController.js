@@ -221,18 +221,51 @@ exports.registrarVenta = async (req, res) => {
                 [item.id]
             );
             
+            // --- GESTIÓN DE STOCK (COMBOS VS VENTA DIRECTA) ---
             if (esCombo.rows.length > 0) {
+                // 🍔 ES UN COMBO: Procesamos a los "hijos" (ingredientes/componentes)
                 for (const hijo of esCombo.rows) {
+                    // A. Registramos el hijo en el detalle para transparencia del inventario
                     await client.query(
                         `INSERT INTO detalle_ventas (venta_id, producto_id, nombre_producto_historico, cantidad, precio_unitario, subtotal, costo_historico)
                          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                         [ventaId, hijo.producto_hijo_id, `(Hijo) ${hijo.nombre}`, item.cantidad * hijo.cantidad, 0, 0, hijo.costo_compra]
                     );
+                    
+                    // B. Descontamos stock físico validando contra Reservas Web
                     await descontarStock(client, hijo.producto_hijo_id, sedeId, item.cantidad * hijo.cantidad, usuarioId, codigoTicketVisual, `Ingrediente de: ${item.nombre}`, 0);
+                    
+                    // C. 🛡️ LIMPIEZA DE RESERVA: Si el hijo estaba reservado por la web (UUID), liberamos la reserva
+                    if (uuid_unico) {
+                        await client.query(
+                            'DELETE FROM reservas_ecommerce WHERE producto_id = $1 AND sede_id = $2 AND sesion_id = $3',
+                            [hijo.producto_hijo_id, sedeId, uuid_unico]
+                        );
+                    }
                 }
+
+                // D. Finalmente descontamos el "Padre" (El producto Combo en sí)
                 await descontarStock(client, item.id, sedeId, item.cantidad, usuarioId, codigoTicketVisual, 'Venta Combo', item.precioReal);
+                
+                // También limpiamos la reserva del producto Padre si existiera
+                if (uuid_unico) {
+                    await client.query(
+                        'DELETE FROM reservas_ecommerce WHERE producto_id = $1 AND sede_id = $2 AND sesion_id = $3',
+                        [item.id, sedeId, uuid_unico]
+                    );
+                }
+
             } else {
+                // 📦 ES VENTA DIRECTA (Producto simple)
                 await descontarStock(client, item.id, sedeId, item.cantidad, usuarioId, codigoTicketVisual, 'Venta Directa', item.precioReal);
+                
+                // 🛡️ LIMPIEZA DE RESERVA: Liberamos el stock reservado de este producto simple
+                if (uuid_unico) {
+                    await client.query(
+                        'DELETE FROM reservas_ecommerce WHERE producto_id = $1 AND sede_id = $2 AND sesion_id = $3',
+                        [item.id, sedeId, uuid_unico]
+                    );
+                }
             }
         }
 
@@ -247,6 +280,10 @@ exports.registrarVenta = async (req, res) => {
 
         // CIERRE DE TRANSACCIÓN
         await client.query('COMMIT');
+
+        if (uuid_unico) {
+            await pool.query('DELETE FROM reservas_ecommerce WHERE sesion_id = $1', [uuid_unico]);
+        }
 
         // --- 6. PROCESO DE FACTURACIÓN ASÍNCRONO ---
         setImmediate(() => {
@@ -290,7 +327,7 @@ exports.registrarVenta = async (req, res) => {
     }
 };
 
-// 2. OBTENER HISTORIAL (CORREGIDO: MUESTRA TIPO DE TARJETA EN LA TABLA)
+// 2. OBTENER HISTORIAL (CORREGIDO: OCULTA VENTAS WEB)
 exports.obtenerHistorialVentas = async (req, res) => {
     try {
         const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
@@ -340,7 +377,7 @@ exports.obtenerHistorialVentas = async (req, res) => {
                 LEFT JOIN usuarios vend ON v.vendedor_id = vend.id 
                 JOIN sedes s ON v.sede_id = s.id
                 LEFT JOIN clientes c ON v.cliente_id = c.id 
-                WHERE 1=1 ${sedeCondition}
+                WHERE v.origen != 'WEB' ${sedeCondition} -- 🔥 AQUÍ ESTÁ EL FILTRO PARA OCULTAR LA WEB
 
                 UNION ALL
 
@@ -613,7 +650,6 @@ exports.obtenerVendedores = async (req, res) => {
     }
 };
 
-// 🔥 IMPORTANTE: Asegúrate de que esta sea la ÚNICA función descontarStock en tu archivo.
 async function descontarStock(client, prodId, sedeId, cantidad, usuarioId, ticketCodigo, motivo, precioVenta = 0) {
     
     // 1. Validar producto y traer costo_compra real
@@ -621,17 +657,39 @@ async function descontarStock(client, prodId, sedeId, cantidad, usuarioId, ticke
     if (prod.rows.length === 0) return;
     const { controla_stock, tipo_item, nombre, costo_compra } = prod.rows[0];
 
+    // Si es servicio o no controla stock, terminamos temprano
     if (tipo_item === 'servicio' || !controla_stock) return;
 
-    // 2. Verificar Stock Total
-    const stockRes = await client.query('SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2 FOR UPDATE', [prodId, sedeId]);
-    const stockActual = stockRes.rows.length > 0 ? parseInt(stockRes.rows[0].cantidad) : 0;
+    // --- 🛡️ 2. VALIDACIÓN DE RESERVAS WEB (NUEVO) ---
+    // Consultamos la vista inteligente para ver cuánto hay disponible REALMENTE para vender
+    const stockNetoRes = await client.query(
+        'SELECT stock_neto_vender, stock_fisico FROM vista_stock_disponible WHERE producto_id = $1 AND sede_id = $2',
+        [prodId, sedeId]
+    );
 
-    if (stockActual < cantidad) {
-        throw new Error(`Stock insuficiente para: ${nombre} (Quedan: ${stockActual})`);
+    if (stockNetoRes.rows.length === 0) {
+        throw new Error(`El producto ${nombre} no está registrado en el inventario de esta sede.`);
     }
 
-    // 3. ALGORITMO PEPS
+    const { stock_neto_vender, stock_fisico } = stockNetoRes.rows[0];
+
+    // Bloqueo si lo que se quiere vender supera lo disponible (Stock Físico - Reservas)
+    if (stock_neto_vender < cantidad) {
+        throw new Error(
+            `Stock insuficiente para: ${nombre}. \n` +
+            `Físico: ${stock_fisico} | Reservado Web: ${stock_fisico - stock_neto_vender} \n` +
+            `Disponible real para venta: ${stock_neto_vender}`
+        );
+    }
+
+    // Obtenemos el stock actual para el cálculo del Kardex (usamos FOR UPDATE para bloquear la fila)
+    const stockFisicoRes = await client.query(
+        'SELECT cantidad FROM inventario_sedes WHERE producto_id = $1 AND sede_id = $2 FOR UPDATE', 
+        [prodId, sedeId]
+    );
+    const stockActual = stockFisicoRes.rows.length > 0 ? parseInt(stockFisicoRes.rows[0].cantidad) : 0;
+
+    // --- 3. ALGORITMO PEPS (LOTES) ---
     let cantidadRestante = cantidad;
     let stockParaKardex = stockActual; 
 
@@ -642,13 +700,12 @@ async function descontarStock(client, prodId, sedeId, cantidad, usuarioId, ticke
         [prodId, sedeId]
     );
 
-    // 🔥 CASO ESPECIAL: Sin Lote (AQUÍ ESTÁ LA CORRECCIÓN DE TU COSTO)
+    // 🔥 CASO ESPECIAL: Sin Lote (Mantenemos tu lógica de costo inyectado)
     if (lotesRes.rows.length === 0 && stockActual > 0) {
         await client.query('UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3', [cantidad, prodId, sedeId]);
         
-        // Atrapamos el costo real de la base de datos (Ej: 1.50)
         const costoReal = parseFloat(costo_compra) || 0;
-        console.log(`✅ [KARDEX] Producto: ${nombre} | Descontando SIN LOTE | Costo inyectado: S/ ${costoReal}`);
+        console.log(`✅ [KARDEX] Producto: ${nombre} | Descontando SIN LOTE | Costo: S/ ${costoReal}`);
 
         await client.query(
             `INSERT INTO movimientos_inventario 
@@ -660,7 +717,7 @@ async function descontarStock(client, prodId, sedeId, cantidad, usuarioId, ticke
                 usuarioId, 
                 -cantidad, 
                 (stockActual - cantidad), 
-                `Venta ${ticketCodigo} (${motivo})`, // Ya no dirá "Sin Lote" ciego
+                `Venta ${ticketCodigo} (${motivo})`, 
                 costoReal, 
                 precioVenta 
             ]
@@ -668,7 +725,7 @@ async function descontarStock(client, prodId, sedeId, cantidad, usuarioId, ticke
         return;
     }
 
-    // ITERAMOS LOS LOTES (Si tuviera lotes)
+    // ITERAMOS LOS LOTES (Si existen lotes disponibles)
     for (const lote of lotesRes.rows) {
         if (cantidadRestante <= 0) break;
 
@@ -704,6 +761,7 @@ async function descontarStock(client, prodId, sedeId, cantidad, usuarioId, ticke
         cantidadRestante -= aSacar;
     }
 
+    // Actualización final del stock físico en la sede
     await client.query('UPDATE inventario_sedes SET cantidad = cantidad - $1 WHERE producto_id = $2 AND sede_id = $3', [cantidad, prodId, sedeId]);
 }
 

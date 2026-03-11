@@ -4,6 +4,8 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
+const cron = require('node-cron');
+const pool = require('./db');
 
 // Configuracion
 dotenv.config();
@@ -114,10 +116,23 @@ app.use((err, req, res, next) => {
     });
 });
 
+cron.schedule('*/5 * * * *', async () => {
+    try {
+        // Borra las reservas cuya fecha de expiración sea menor a la hora actual
+        const res = await pool.query('DELETE FROM reservas_ecommerce WHERE expira_at < CURRENT_TIMESTAMP');
+        
+        if (res.rowCount > 0) {
+            console.log(`\n[🧹 CRON] Limpieza de Inventario: Se liberaron ${res.rowCount} reserva(s) web caducadas.`);
+        }
+    } catch (err) {
+        console.error("❌ [CRON ERROR] Falló la limpieza de reservas:", err.message);
+    }
+});
+
 // --- ARRANCAR SERVIDOR ---
 app.listen(port, () => {
     console.log(`\n==================================================`);
     console.log(`🚀 SUPERNOVA (LITE) ACTIVO EN: http://localhost:${port}`);
-    console.log(`📂 Módulo Finanzas: /api/facturas y /api/prestamos`);
+    console.log(`🧹 Cron Job Activo: Limpieza de reservas cada 5 min.`);
     console.log(`==================================================\n`);
 });
