@@ -931,8 +931,8 @@
 /* Documento: Hacer que el subtítulo (F001-...) se vea bien */
 .premium-table td small {
     display: block;
-    margin-top: 2px;
-    font-size: 11px;
+    margin-top: 1px;
+    font-size: 12px;
     color: #94a3b8;
     text-align: center;
 }

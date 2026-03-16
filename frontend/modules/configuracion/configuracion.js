@@ -145,6 +145,13 @@
                         <button class="btn-action-mini btn-del" title="Gestionar Estado / Inhabilitar" onclick="eliminarUsuario(${u.id})">
                             <i class='bx bx-user-x'></i>
                         </button>
+                        
+                        <button class="btn-action-mini" 
+                                style="color:#ef4444; background:#fef2f2; border: 1px solid #fecaca;" 
+                                title="Eliminar Permanentemente" 
+                                onclick="confirmarEliminarUsuarioReal(${u.id})">
+                            <i class='bx bx-trash'></i>
+                        </button>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -155,6 +162,60 @@
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:red;">Error de conexión.</td></tr>';
         }
     }
+
+    // --- 🚨 FUNCIONES DE ELIMINAR USUARIO PERMANENTE ---
+    window.confirmarEliminarUsuarioReal = function(id) {
+        console.log("Hiciste clic en eliminar el ID:", id); // Debe salir en consola
+        
+        const inputId = document.getElementById('delete-user-id');
+        const modal = document.getElementById('modal-eliminar-usuario');
+
+        if (!modal || !inputId) {
+            alert("❌ ERROR: El HTML del modal no existe o está mal escrito.");
+            return;
+        }
+
+        inputId.value = id;
+        modal.style.display = 'flex';
+        
+        // Si el modal existe pero sigue invisible, forzamos su visibilidad absoluta
+        modal.style.zIndex = '9999';
+        modal.style.position = 'fixed';
+    };
+
+    window.cerrarModalEliminarUsuario = function() {
+        document.getElementById('modal-eliminar-usuario').style.display = 'none';
+        document.getElementById('delete-user-id').value = '';
+    };
+
+    window.ejecutarEliminarUsuario = async function() {
+        const id = document.getElementById('delete-user-id').value;
+        if (!id) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`/api/usuarios/${id}`, {
+                method: 'DELETE',
+                headers: { 'x-auth-token': token }
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                if(typeof showToast === 'function') showToast("Usuario eliminado correctamente", "success");
+                cerrarModalEliminarUsuario();
+                paginaActual = 1; // Reseteamos la página
+                cargarListaUsuarios(); // Recargamos la tabla
+            } else {
+                if(typeof showToast === 'function') showToast(data.msg || "Error al eliminar", "error");
+                cerrarModalEliminarUsuario();
+            }
+        } catch (error) {
+            console.error("Error al eliminar:", error);
+            if(typeof showToast === 'function') showToast("Error de conexión", "error");
+            cerrarModalEliminarUsuario();
+        }
+    };
 
     // A. Escuchar el buscador
     const buscador = document.getElementById('buscador-usuarios');
@@ -512,4 +573,55 @@
         window.initConfiguracion();
     }
 
-})(); // <--- Fin del archivo
+    // --- 🔍 CONSULTA A DECOLECTA (RENIEC / SUNAT) ---
+    window.buscarDocReniec = async function() {
+        const numDoc = document.getElementById('dni').value.trim();
+        
+        if (numDoc.length !== 8 && numDoc.length !== 11) {
+            if(typeof showToast === 'function') showToast("Ingrese un DNI (8) o RUC (11) válido.", "warning");
+            return;
+        }
+
+        const btn = document.getElementById('btn-buscar-doc');
+        const originalHTML = btn.innerHTML;
+        
+        // Efecto de carga
+        btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i>";
+        btn.disabled = true;
+
+        try {
+            const token = localStorage.getItem('token');
+            // 🚨 Asegúrate de que esta URL coincida con la ruta en tu backend
+            const res = await fetch(`/api/consultas/${numDoc}`, {
+                headers: { 'x-auth-token': token }
+            });
+            
+            const data = await res.json();
+
+            if (data.success) {
+                if (data.tipo === 'DNI') {
+                    document.getElementById('nombres').value = data.nombres || '';
+                    document.getElementById('apellidos').value = `${data.apellidoPaterno || ''} ${data.apellidoMaterno || ''}`.trim();
+                } else {
+                    // Si consultan RUC
+                    document.getElementById('nombres').value = data.nombre || '';
+                    document.getElementById('apellidos').value = '-';
+                    if (document.getElementById('direccion')) {
+                        document.getElementById('direccion').value = data.direccion || '';
+                    }
+                }
+                if(typeof showToast === 'function') showToast(`✅ Datos de ${data.tipo} encontrados`, "success");
+            } else {
+                if(typeof showToast === 'function') showToast(data.msg || "No se encontraron datos", "error");
+            }
+        } catch (error) {
+            console.error("Error en consulta:", error);
+            if(typeof showToast === 'function') showToast("Error al conectar con el servidor", "error");
+        } finally {
+            // Restaurar botón
+            btn.innerHTML = originalHTML;
+            btn.disabled = false;
+        }
+    };
+
+})(); 

@@ -1,106 +1,89 @@
 // Ubicacion: SuperNova/backend/controllers/consultasController.js
 
-const API_TOKEN = "sk_13220.LZd29D09FER2004TgZRuFueUSvNsSJuZ"; 
-
-const BASE_URL = "https://api.decolecta.com/v1";
+const API_TOKEN = process.env.PERU_API_TOKEN; // 👈 Asegúrate que en tu .env se llame así
+const BASE_URL = "https://peruapi.com/api";
 
 exports.consultarEntidad = async (req, res) => {
     const { numero } = req.params;
-    const tokenLimpio = API_TOKEN.trim(); // 🔥 Limpiamos espacios invisibles
+    const tokenLimpio = API_TOKEN ? API_TOKEN.trim() : "";
 
-    // 1. Validar longitud
+    if (!tokenLimpio) {
+        return res.status(500).json({ success: false, msg: "Configuración de API faltante en el servidor." });
+    }
+
     const esDNI = numero.length === 8;
     const esRUC = numero.length === 11;
 
     if (!esDNI && !esRUC) {
-        return res.status(400).json({ success: false, msg: "El número debe tener 8 (DNI) u 11 (RUC) dígitos." });
+        return res.status(400).json({ success: false, msg: "Formato inválido (8 dígitos DNI / 11 dígitos RUC)." });
     }
 
-    // 2. Construir URL (Usamos el truco de enviar el token en la URL)
-    // RUC: /sunat/ruc?numero=...&token=...
-    // DNI: /reniec/dni?numero=...&token=...
-    const endpoint = esRUC 
-        ? `/sunat/ruc?numero=${numero}&token=${tokenLimpio}` 
-        : `/reniec/dni?numero=${numero}&token=${tokenLimpio}`; 
-    
+    // Construimos la URL según el modo REST de Perú API
+    // Agregamos summary=0 para recibir una respuesta limpia sin metadata del plan
+    const endpoint = esRUC ? `/ruc/${numero}?summary=0` : `/dni/${numero}?summary=0`;
+
     try {
-        console.log(`📡 Conectando a Decolecta...`);
-        // Ocultamos el token en el log por seguridad
-        console.log(`URL: ${BASE_URL}${esRUC ? '/sunat/ruc' : '/reniec/dni'}?numero=${numero}`);
-        
+        console.log(`📡 Conectando a Perú API... [${esRUC ? 'RUC' : 'DNI'}: ${numero}]`);
+
         const response = await fetch(`${BASE_URL}${endpoint}`, {
             method: 'GET',
             headers: {
-                // Enviamos también en header por si acaso, doble seguridad
-                'Authorization': `Bearer ${tokenLimpio}`,
+                'X-API-KEY': tokenLimpio,
                 'Content-Type': 'application/json',
-                // 🔥 Simulamos ser un navegador para evitar bloqueos
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                'User-Agent': 'SuperNova-ERP/1.0'
             }
         });
-        
+
         const data = await response.json();
 
-        // LOG DE RESPUESTA (Mira esto en la terminal negra)
-        console.log(`STATUS: ${response.status}`);
-        // console.log(`DATA:`, JSON.stringify(data, null, 2)); // Descomenta si necesitas ver todo
-
-        // 3. Manejo de Errores
-        if (!response.ok) {
-            if (response.status === 401) {
-                console.error("❌ Error 401: Token rechazado.");
-                return res.status(404).json({ success: false, msg: "Token inválido o vencido (Revise en Decolecta)." });
+        // Manejo de errores basado en el 'code' de Perú API
+        if (response.status !== 200 || data.code !== "200") {
+            if (response.status === 401 || data.code === "401") {
+                return res.status(401).json({ success: false, msg: "Token inválido o IP no autorizada." });
             }
-            if (response.status === 404 || data.message === 'Not found') {
-                return res.status(404).json({ success: false, msg: "Documento no encontrado." });
+            if (response.status === 404 || data.code === "404") {
+                return res.status(404).json({ success: false, msg: "Documento no encontrado en padrones." });
             }
-            if (response.status === 422) {
-                return res.status(404).json({ success: false, msg: "Número inválido." });
+            if (response.status === 429 || data.code === "429") {
+                return res.status(429).json({ success: false, msg: "Límite de consultas excedido." });
             }
-            return res.status(404).json({ success: false, msg: "Error al consultar API externa." });
+            return res.status(response.status).json({ success: false, msg: data.mensaje || "Error en API externa." });
         }
 
-        // 4. ADAPTADOR (Mapeo exacto según tu documentación)
-        let resultado = {};
+        // --- ADAPTADOR (Convertimos el formato de Perú API al formato que tu Frontend ya conoce) ---
+        let resultado = { success: true };
 
         if (esRUC) {
             resultado = {
-                success: true,
+                ...resultado,
                 tipo: 'RUC',
-                numero: data.numero_documento,
+                numero: data.ruc,
                 nombre: data.razon_social,
                 direccion: data.direccion || '',
                 estado: data.estado || '',
                 condicion: data.condicion || '',
-                ubigeo: data.ubigeo || '',
                 departamento: data.departamento || '',
                 provincia: data.provincia || '',
                 distrito: data.distrito || ''
             };
         } else {
-            // DNI (Renic)
-            // Según tu doc: first_name, first_last_name, second_last_name
-            const fullName = data.full_name || `${data.first_name} ${data.first_last_name} ${data.second_last_name}`;
-
+            // Para DNI, Perú API devuelve 'cliente' como nombre completo
             resultado = {
-                success: true,
+                ...resultado,
                 tipo: 'DNI',
-                numero: data.document_number,
-                
-                // Campo unificado para el frontend
-                nombre: fullName, 
-                
-                nombres: data.first_name,
-                apellidoPaterno: data.first_last_name,
-                apellidoMaterno: data.second_last_name
+                numero: data.dni,
+                nombre: data.cliente, // Nombre completo
+                nombres: data.nombres,
+                apellidoPaterno: data.apellido_paterno,
+                apellidoMaterno: data.apellido_materno
             };
         }
 
-        console.log("✅ ÉXITO: Datos recuperados ->", resultado.nombre);
+        console.log(`✅ Datos recuperados: ${resultado.nombre}`);
         res.json(resultado);
 
     } catch (error) {
-        console.error("❌ Error Crítico:", error.message);
-        res.status(500).json({ success: false, msg: "Error de conexión interna." });
+        console.error("❌ Error Crítico en Consultas:", error.message);
+        res.status(500).json({ success: false, msg: "Error de conexión con el proveedor de identidad." });
     }
 };

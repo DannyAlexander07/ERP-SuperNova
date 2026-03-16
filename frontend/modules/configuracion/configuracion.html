@@ -46,9 +46,17 @@
                     </div>
                 </div>
                 <div class="form-row">
-                    <div class="input-group">
-                        <input type="text" id="dni" required placeholder=" " maxlength="8" pattern="[0-9]*">
+                    <div class="input-group" style="position: relative;">
+                        <input type="text" id="dni" required placeholder=" " maxlength="11" pattern="[0-9]*" style="padding-right: 40px;">
                         <label>DNI / Documento Identidad</label>
+                        
+                        <button type="button" onclick="buscarDocReniec()" title="Buscar en RENIEC" 
+                                id="btn-buscar-doc"
+                                style="position: absolute; right: 5px; top: 10px; background: #eff6ff; border: none; width: 32px; height: 32px; border-radius: 6px; cursor: pointer; color: #3b82f6; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
+                                onmouseover="this.style.background='#dbeafe'"
+                                onmouseout="this.style.background='#eff6ff'">
+                            <i class='bx bx-search-alt-2'></i>
+                        </button>
                     </div>
                     <div class="input-group">
                          <input type="tel" id="celular" required placeholder=" ">
@@ -160,4 +168,30 @@
         </div>
     </div>
 
+    <div id="modal-eliminar-usuario" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0,0,0,0.6); z-index: 99999; justify-content: center; align-items: center; backdrop-filter: blur(2px);">
+        
+        <div style="background: white; padding: 30px 20px; border-radius: 12px; text-align: center; max-width: 350px; width: 90%; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
+            
+            <div style="color: #ef4444; font-size: 4rem; margin-bottom: 5px; line-height: 1;">
+                <i class='bx bx-error-circle'></i>
+            </div>
+            
+            <h3 style="margin-bottom: 10px; color: #0f172a; font-family: sans-serif; font-size: 1.5rem;">¿Eliminar Usuario?</h3>
+            
+            <p style="color: #64748b; margin-bottom: 25px; font-size: 0.95rem; font-family: sans-serif; line-height: 1.4;">
+                Esta acción inhabilitará permanentemente el acceso de este usuario al sistema.
+            </p>
+            
+            <input type="hidden" id="delete-user-id">
+
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button onclick="cerrarModalEliminarUsuario()" style="flex: 1; padding: 10px 15px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; color: #475569; font-weight: bold; cursor: pointer; transition: background 0.2s;">
+                    Cancelar
+                </button>
+                <button onclick="ejecutarEliminarUsuario()" style="flex: 1; padding: 10px 15px; border-radius: 8px; background-color: #ef4444; border: none; color: white; font-weight: bold; cursor: pointer; transition: background 0.2s;">
+                    Sí, Eliminar
+                </button>
+            </div>
+        </div>
+    </div>
 </div>

@@ -94,7 +94,7 @@ exports.crearFactura = async (req, res) => {
     } = req.body;
 
     const usuarioId = req.usuario ? req.usuario.id : null; 
-    const evidenciaUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    const evidenciaUrl = req.file ? req.file.path : null;
 
     // --- 🛡️ PROCESAMIENTO DE ADICIONALES DINÁMICOS (JSONB) ---
     let montoAdicionalTotal = 0;
@@ -316,9 +316,10 @@ exports.actualizarFactura = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // --- A. ACTUALIZAR EVIDENCIA (SI SE SUBIÓ UN NUEVO ARCHIVO) ---
+        // --- A. ACTUALIZAR EVIDENCIA EN LA NUBE ---
         if (req.file) {
-            const nuevaEvidenciaUrl = `/uploads/${req.file.filename}`;
+            // 🔥 NUEVO: Usamos directamente el link de Cloudinary
+            const nuevaEvidenciaUrl = req.file.path;
             await client.query(
                 'UPDATE facturas SET evidencia_url = $1 WHERE id = $2',
                 [nuevaEvidenciaUrl, id]
@@ -401,14 +402,20 @@ exports.subirArchivo = async (req, res) => {
     const { id } = req.params;
     const archivo = req.file;
 
-    if (!archivo) return res.status(400).json({ msg: 'No se envió archivo.' });
+    console.log("\n📥 [DEBUG CONTROLADOR] Archivo procesado por Multer:", archivo);
+
+    if (!archivo) return res.status(400).json({ msg: 'No se envió archivo al controlador.' });
 
     try {
-        const filePath = archivo.path.replace(/\\/g, '/'); 
+        const filePath = archivo.path; 
+        console.log("🔗 [DEBUG CONTROLADOR] URL a guardar en BD:", filePath);
+        
         await pool.query('UPDATE facturas SET evidencia_url = $1 WHERE id = $2', [filePath, id]);
-        res.json({ msg: 'Archivo subido', path: filePath });
+        
+        res.json({ msg: 'Archivo subido a la nube correctamente', path: filePath });
     } catch (err) {
-        res.status(500).json({ msg: 'Error al subir archivo' });
+        console.error("\n🚨 [DEBUG BASE DE DATOS] Falló el UPDATE:", err);
+        res.status(500).json({ msg: 'Error al guardar en base de datos', error: err.message });
     }
 };
 
@@ -608,8 +615,6 @@ exports.obtenerKpisPagos = async (req, res) => {
 // =======================================================
 // 8. NUEVAS FUNCIONES: FLUJO DE APROBACIÓN Y MODAL "VER" (FASE 2)
 // =======================================================
-const fs = require('fs');
-const path = require('path');
 
 // 8.1 Cambiar el Estado de Aprobación (Para el botón de Flujo)
 exports.cambiarEstadoAprobacion = async (req, res) => {
@@ -678,7 +683,7 @@ exports.obtenerDocumentos = async (req, res) => {
 
 // 8.4 Subir un Documento Extra a una Factura
 exports.subirDocumentoExtra = async (req, res) => {
-    const { id } = req.params; // ID de la factura
+    const { id } = req.params; 
     const tipo_documento = req.body.tipo_documento || 'Documento Adjunto';
 
     if (!req.file) {
@@ -686,7 +691,8 @@ exports.subirDocumentoExtra = async (req, res) => {
     }
 
     try {
-        const ruta_archivo = `/uploads/${req.file.filename}`;
+        // 🔥 NUEVO: Capturamos la URL de Cloudinary
+        const ruta_archivo = req.file.path;
         const nombre_archivo = req.file.originalname;
 
         const result = await pool.query(
@@ -695,33 +701,23 @@ exports.subirDocumentoExtra = async (req, res) => {
             [id, nombre_archivo, ruta_archivo, tipo_documento]
         );
 
-        res.json({ msg: 'Documento subido con éxito', documento: result.rows[0] });
+        res.json({ msg: 'Documento subido con éxito a la nube', documento: result.rows[0] });
     } catch (err) {
         console.error("Error al subir documento extra:", err);
         res.status(500).json({ msg: 'Error al guardar el documento' });
     }
 };
 
+
 // 8.5 Eliminar un Documento Extra
 exports.eliminarDocumento = async (req, res) => {
-    const { docId } = req.params; // ID del documento (de la tabla facturas_documentos)
+    const { docId } = req.params; 
 
     try {
-        // Primero buscamos la ruta del archivo para borrarlo del servidor
-        const docRes = await pool.query('SELECT ruta_archivo FROM facturas_documentos WHERE id = $1', [docId]);
         
-        if (docRes.rows.length > 0) {
-            const rutaRelativa = docRes.rows[0].ruta_archivo;
-            // Construimos la ruta absoluta (Ajusta '__dirname' según la estructura de tus carpetas)
-            const rutaAbsoluta = path.join(__dirname, '../..', rutaRelativa); 
-
-            // Borramos el archivo físico si existe
-            if (fs.existsSync(rutaAbsoluta)) {
-                fs.unlinkSync(rutaAbsoluta);
-            }
-
-            // Borramos el registro de la base de datos
-            await pool.query('DELETE FROM facturas_documentos WHERE id = $1', [docId]);
+        const result = await pool.query('DELETE FROM facturas_documentos WHERE id = $1 RETURNING *', [docId]);
+        
+        if (result.rows.length > 0) {
             res.json({ msg: 'Documento eliminado correctamente' });
         } else {
             res.status(404).json({ msg: 'Documento no encontrado' });

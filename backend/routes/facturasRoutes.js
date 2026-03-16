@@ -4,27 +4,49 @@ const router = express.Router();
 const facturasController = require('../controllers/facturasController');
 const { checkAuth, checkRole } = require('../middleware/auth'); 
 const multer = require('multer');
-const path = require('path');
-const mime = require('mime-types');
 
-// --- Configuración Avanzada de Multer (Manejo de Archivos) ---
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, 'uploads/');
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        let fileExtension = path.extname(file.originalname);
+// 🔥 IMPORTAMOS CLOUDINARY Y CONFIGURAMOS CREDENCIALES 🔥
+const cloudinary = require('cloudinary').v2;
 
-        if (!fileExtension && file.mimetype) {
-            const inferredExt = mime.extension(file.mimetype);
-            if (inferredExt) {
-                fileExtension = `.${inferredExt}`;
-            }
-        }
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+
+// --- Configuración Avanzada de Multer para CLOUDINARY ---
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: async (req, file) => {
+        // 1. Recuperar el nombre original traducido a UTF-8 (Para las tildes y la ñ)
+        const nombreReal = Buffer.from(file.originalname, 'latin1').toString('utf8');
         
-        const originalNameSanitized = path.basename(file.originalname, path.extname(file.originalname)).replace(/[^a-z0-9]/gi, '_').toLowerCase();
-        cb(null, `${originalNameSanitized}-${uniqueSuffix}${fileExtension}`);
+        // 2. Separar nombre y extensión de forma segura (por si el archivo se llama "reporte.final.xlsx")
+        const partes = nombreReal.split('.');
+        const extension = partes.pop().toLowerCase(); // Extrae "xlsx", "docx", "pdf"
+        const nombreBase = partes.join('.'); 
+        
+        // 3. Normalizar solo el nombre (sin tocar la extensión)
+        let nombreLimpio = nombreBase.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        nombreLimpio = nombreLimpio.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').toLowerCase();
+        
+        const codigoCorto = Math.random().toString(36).substring(2, 6);
+        
+        // 4. 🔥 MAGIA DE EXTENSIONES 🔥
+        // Cloudinary a las imágenes les pone la extensión solo, pero a los documentos (raw) no.
+        // Si no es imagen, le pegamos la extensión a la fuerza.
+        const esImagen = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(extension);
+        const idFinal = esImagen 
+            ? `${nombreLimpio}-${codigoCorto}` 
+            : `${nombreLimpio}-${codigoCorto}.${extension}`;
+        
+        return {
+            folder: 'supernova_facturas', 
+            resource_type: 'auto',
+            public_id: idFinal 
+        };
     }
 });
 
@@ -47,7 +69,18 @@ router.put('/:id', checkAuth, upload.single('evidencia'), facturasController.act
 router.post('/pago/:id', checkAuth, facturasController.pagarFactura);
 
 // Subir archivo faltante a una factura (POST)
-router.post('/upload/:id', checkAuth, upload.single('archivo'), facturasController.subirArchivo);
+// Ruta con Depurador Integrado
+router.post('/upload/:id', checkAuth, (req, res, next) => {
+    const uploadHandler = upload.single('archivo');
+    uploadHandler(req, res, function (err) {
+        if (err) {
+            console.error("\n🚨 [DEBUG CLOUDINARY/MULTER] ERROR DETALLADO:");
+            console.error(err); // Imprime todo el objeto del error real
+            return res.status(500).json({ msg: 'Error al subir a Cloudinary', detalle: err });
+        }
+        next();
+    });
+}, facturasController.subirArchivo);
 
 // Eliminar factura (DELETE)
 router.delete('/:id', checkAuth, checkRole(['admin', 'superadmin']), facturasController.eliminarFactura);

@@ -85,22 +85,23 @@
 
             // --- 4. RENDERIZADO DEL HTML ---
             tr.innerHTML = `
-                <td style="font-weight:600; font-size: 13px;">${row.nombre_sede}</td>
-                <td style="font-size: 13px;">${icon} ${cat}</td>
+                <td style="font-weight:600; font-size: 13px; text-align: center;">
+                    ${row.nombre_sede}</td>
+                <td style="font-size: 13px;  text-align: center;">${icon} ${cat}</td>
                 
-                <td style="color: #16a34a; font-weight:700; font-size: 14px; text-align: right;">
+                <td style="color: #16a34a; font-weight:700; font-size: 14px; text-align: center;">
                     S/ ${baseImponible.toLocaleString('es-PE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </td>
 
-                <td style="color: #64748b; font-size: 13px; text-align: right;">
+                <td style="color: #64748b; font-size: 13px; text-align: center;">
                     S/ ${igvMonto.toLocaleString('es-PE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </td>
                 
-                <td style="color: #dc2626; text-align: right;">
+                <td style="color: #dc2626; text-align: center;">
                     S/ ${egresos.toLocaleString('es-PE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </td>
                 
-                <td style="text-align: right;">
+                <td style="text-align: center;">
                     <div style="color: ${colorUtilidad}; font-weight: 700; font-size: 14px; background: ${bgUtilidad}; padding: 6px 10px; border-radius: 8px; display: inline-block; min-width: 90px;">
                         S/ ${pnl.toLocaleString('es-PE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                     </div>
@@ -186,7 +187,7 @@
             '#f59e0b', // Naranja/Amarillo
             '#8b5cf6', // Morado
             '#ec4899', // Rosa
-            '#06b6d4', // Cian
+            '#e7ee1f', // Cian
             '#14b8a6', // Turquesa
             '#64748b'  // Gris Azulado
         ];
@@ -488,59 +489,79 @@
                         data: data.evolucion.map(d => parseFloat(d.total)),
                         borderColor: '#4f46e5',
                         backgroundColor: 'rgba(79, 70, 229, 0.1)',
-                        fill: true, tension: 0.3
+                        fill: true,
+                        tension: 0.3
                     }]
                 },
-                options: { responsive: true, maintainAspectRatio: false }
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => ` Total: S/ ${context.raw.toFixed(2)}`
+                            }
+                        }
+                    }
+                }
             });
         }
 
-        // 2. TODOS LOS PRODUCTOS (Barra Horizontal)
+        // 2. TOP PRODUCTOS (Barra Horizontal - Ajustado para Ranking Largo)
         const ctxTop = document.getElementById('chart-top');
         if (ctxTop) {
             if (chartTop) chartTop.destroy();
             
-            // Colores dinámicos para diferenciar todos los productos
             const coloresProd = generarColores(data.top.length);
 
             chartTop = new Chart(ctxTop, {
                 type: 'bar',
-                indexAxis: 'y',
+                indexAxis: 'y', // 🔥 Horizontal
                 data: {
                     labels: data.top.map(d => d.producto),
                     datasets: [{
                         label: 'Cantidad Vendida',
                         data: data.top.map(d => parseInt(d.cantidad)),
                         backgroundColor: coloresProd,
-                        borderRadius: 6, // Bordes redondeados en las barras
-                        maxBarThickness: 35, // 🔥 ESTO EVITA QUE SE VEAN COMO BLOQUES GIGANTES
+                        borderRadius: 6,
+                        barThickness: 18, // 🔥 Grosor elegante
+                        maxBarThickness: 25
                     }]
                 },
                 options: { 
                     responsive: true, 
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } } 
+                    plugins: { 
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => ` Vendidos: ${context.raw} uds`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { beginAtZero: true, grid: { display: false } },
+                        y: { ticks: { font: { size: 11, weight: '500' } } }
+                    }
                 }
             });
         }
 
-        // 3. MÉTODOS DE PAGO (Dona con Colores Fijos + Transferencia)
+        // 3. MÉTODOS DE PAGO (Dona con Colores Fijos)
         const ctxPagos = document.getElementById('chart-pagos');
         if (ctxPagos) {
             if (chartPagos) chartPagos.destroy();
             
-            // 🔥 MAPA DE COLORES FIJOS DEFINITIVO
             const colorMap = {
-                'Efectivo': '#3b82f6',          // Azul brillante
-                'Yape': '#8b5cf6',              // Violeta (Brand Yape)
-                'Plin': '#06b6d4',              // Cian/Turquesa (Brand Plin)
-                'Tarjeta de Crédito': '#f59e0b',// Naranja
-                'Tarjeta de Débito': '#ec4899', // Rosa
-                'Transferencia': '#64748b',     // Gris Azulado (Profesional)
-                'Otros': '#9ca3af'              // Gris claro
+                'Efectivo': '#3b82f6',
+                'Yape': '#8b5cf6',
+                'Plin': '#06b6d4',
+                'Tarjeta de Crédito': '#f59e0b',
+                'Tarjeta de Débito': '#ec4899',
+                'Transferencia': '#64748b',
+                'Otros': '#9ca3af'
             };
 
-            // Asignamos el color según la etiqueta exacta que viene del backend
             const backgroundColors = data.pagos.map(d => colorMap[d.metodo_pago] || '#10b981');
 
             chartPagos = new Chart(ctxPagos, {
@@ -550,10 +571,21 @@
                     datasets: [{
                         data: data.pagos.map(d => parseFloat(d.total)),
                         backgroundColor: backgroundColors,
-                        borderWidth: 2
+                        borderWidth: 2,
+                        hoverOffset: 15
                     }]
                 },
-                options: { responsive: true, maintainAspectRatio: false }
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => ` S/ ${context.raw.toFixed(2)}`
+                            }
+                        }
+                    }
+                }
             });
         }
 
@@ -572,42 +604,55 @@
                         label: 'Tickets Emitidos',
                         data: horasMap,
                         backgroundColor: '#f97316',
-                        borderRadius: 4
+                        borderRadius: 4,
+                        barThickness: 12
                     }]
                 },
-                options: { responsive: true, maintainAspectRatio: false }
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true } }
+                }
             });
         }
 
-        // 5. RANKING VENDEDORES (Barra Horizontal - Todos)
+        // 5. RANKING VENDEDORES (Barra Horizontal)
         const ctxVendedores = document.getElementById('chart-vendedores');
         if (ctxVendedores && data.vendedores) {
             if (chartVendedores) chartVendedores.destroy();
             
             chartVendedores = new Chart(ctxVendedores, {
                 type: 'bar',
-                indexAxis: 'y', // Horizontal
                 data: {
-                    labels: data.vendedores.map(d => d.vendedor),
+                    labels: data.vendedores.map(d => d.vendedor), // Nombres de los vendedores
                     datasets: [{
-                        label: 'Total Vendido (S/)',
+                        label: 'Ventas Totales (S/)',
                         data: data.vendedores.map(d => parseFloat(d.total_vendido)),
-                        backgroundColor: '#8b5cf6', // Violeta uniforme
-                        borderRadius: 4
+                        backgroundColor: '#8b5cf6',
+                        borderRadius: 5,
+                        barThickness: 20
                     }]
                 },
                 options: { 
+                    indexAxis: 'y', // 🔥 Esto lo vuelve horizontal
                     responsive: true, 
                     maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return `S/ ${context.raw.toFixed(2)}`;
-                                }
+                    scales: {
+                        x: { 
+                            beginAtZero: true,
+                            ticks: { callback: (value) => 'S/ ' + value }
+                        },
+                        y: {
+                            // 🔥 Esto fuerza al eje a usar los nombres (labels)
+                            type: 'category', 
+                            ticks: {
+                                autoSkip: false, // No saltar ningún nombre
+                                font: { size: 12, weight: '600' }
                             }
                         }
+                    },
+                    plugins: {
+                        legend: { display: false }
                     }
                 }
             });

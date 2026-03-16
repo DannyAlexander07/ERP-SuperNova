@@ -187,35 +187,54 @@
 
                     if (diasMora < 0) {
                         const absDias = Math.abs(diasMora);
-                        diasVencidosHtml = `<span class="badge" style="font-weight:900; padding: 5px 10px; border-radius: 4px; font-size: 11px; background-color: #fee2e2; color: #dc2626;">${absDias} DÍAS VENC.</span>`;
+                        diasVencidosHtml = `<span class="badge" style="font-weight:900; padding: 5px 10px; border-radius: 4px; font-size: 0.65rem; background-color: #fee2e2; color: #dc2626;">${absDias} DÍAS VENC.</span>`;
                     } else if (diasMora <= 7) {
-                        diasVencidosHtml = `<span class="badge" style="padding: 5px 10px; border-radius: 4px; font-size: 11px; background-color: #fef9c3; color: #ca8a04;">⚠️ VENCE EN ${diasMora} DÍAS</span>`;
+                        diasVencidosHtml = `<span class="badge" style="padding: 5px 10px; border-radius: 4px; font-size: 0.65rem; background-color: #fef9c3; color: #ca8a04;">⚠️ VENCE EN ${diasMora} DÍAS</span>`;
                     } else {
-                        diasVencidosHtml = `<span class="badge" style="padding: 5px 10px; border-radius: 4px; font-size: 11px; background-color: #dcfce7; color: #16a34a;">AL DÍA</span>`;
+                        diasVencidosHtml = `<span class="badge" style="padding: 5px 10px; border-radius: 4px; font-size: 0.65rem; background-color: #dcfce7; color: #16a34a;">AL DÍA</span>`;
                     }
                 } else {
                     diasVencidosHtml = '<span class="badge" style="color:#cbd5e1">S/V</span>';
                 }
             } else {
                 // Si ya está pagado, mostramos check verde
-                diasVencidosHtml = '<span class="badge" style="padding: 5px 10px; border-radius: 4px; background-color: #dcfce7; color: #16a34a;"><i class="bx bx-check"></i></span>';
+                diasVencidosHtml = '<span class="badge" style="padding: 5px 10px; border-radius: 4px; background-color: #dcfce7; color: #16a34a;font-size: 0.65rem"><i class="bx bx-check"></i></span>';
             }
             
             // --- BADGE DE ESTADO ---
             let estadoHtml = '';
             if(f.estado_pago === 'pagado') {
-                estadoHtml = '<span class="badge" style="background-color: #dcfce7; color: #16a34a; padding: 4px 8px; border-radius: 4px; font-weight: 600;">PAGADO</span>';
+                estadoHtml = '<span class="badge" style="background-color: #dcfce7; color: #16a34a; padding: 4px 8px; border-radius: 4px; font-weight: 600;font-size: 0.65rem">PAGADO</span>';
             } else if(f.estado_pago === 'parcial') {
-                estadoHtml = '<span class="badge" style="background-color: #fef9c3; color: #ca8a04; padding: 4px 8px; border-radius: 4px; font-weight: 600;">PARCIAL</span>';
+                estadoHtml = '<span class="badge" style="background-color: #fef9c3; color: #ca8a04; padding: 4px 8px; border-radius: 4px; font-weight: 600;font-size: 0.65rem">PARCIAL</span>';
             } else {
-                estadoHtml = '<span class="badge" style="background-color: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 4px; font-weight: 600;">PENDIENTE</span>';
+                estadoHtml = '<span class="badge" style="background-color: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 4px; font-weight: 600;font-size: 0.65rem">PENDIENTE</span>';
             }
 
-            // --- EVIDENCIA (PDF) ---
-            let evidenciaHtml = `<button class="btn-icon" onclick="subirArchivoFaltante(${f.id})" title="Subir PDF"><i class='bx bx-upload'></i></button>`;
+            // --- LÓGICA PREMIUM DEFINITIVA PARA EVIDENCIA (Frontend) ---
+            let evidenciaHtml = `<button class="btn-icon" onclick="subirArchivoFaltante(${f.id}, this)" title="Subir PDF"><i class='bx bx-upload'></i></button>`;
+            
             if (f.evidencia_url) {
-                const url = f.evidencia_url.replace(/\\/g, '/').replace('backend/', '/');
-                evidenciaHtml = `<a href="${url}" target="_blank" class="btn-icon" style="color:#e74c3c" title="Ver PDF"><i class='bx bxs-file-pdf'></i></a>`;
+                let urlFinal = f.evidencia_url;
+
+                // 1. Detectamos si la URL es externa (Cloudinary empieza con http)
+                if (urlFinal.startsWith('http')) {
+                    // ES CLOUDINARY: No tocar nada de la base de datos, está lista.
+                } else {
+                    // ES ARCHIVO ANTIGUO (Path Local): Aplicamos la limpieza que ya tenías
+                    // Limpiamos barras invertidas (\) y nos aseguramos de no prepender 'backend/'
+                    // Asumimos que tu servidor sirve estáticos en /
+                    urlFinal = urlFinal.replace(/\\/g, '/'); // Convierte \ a /
+                    
+                    // Si la URL empieza con /backend/, se la quitamos para que sea relativa al sitio
+                    if (urlFinal.startsWith('/backend/')) {
+                        urlFinal = urlFinal.replace('/backend/', '/');
+                    } else if (urlFinal.startsWith('backend/')) {
+                        urlFinal = urlFinal.replace('backend/', '/');
+                    }
+                }
+
+                evidenciaHtml = `<a href="${urlFinal}" target="_blank" class="btn-icon" style="color:#e74c3c" title="Ver PDF"><i class='bx bxs-file-pdf'></i></a>`;
             }
 
             // --- CLASIFICACIÓN ---
@@ -230,20 +249,20 @@
                     ${f.fecha_programacion ? f.fecha_programacion.slice(0, 10) : '-'}
                 </td>
                 <td>${f.fecha_vencimiento ? f.fecha_vencimiento.slice(0, 10) : '-'}</td>
-                <td style="font-weight:600; font-size: 0.85rem;">${f.proveedor || 'S/N'}</td>
-                <td>${f.tipo_documento || 'Doc'} <br> <small style="color:#666">${f.numero_documento || '-'}</small></td>
-                <td style="font-weight:bold">${f.moneda === 'USD' ? '$' : 'S/'} ${parseFloat(f.monto_total || 0).toFixed(2)}</td>
-                <td>${estadoHtml}</td>
-                <td style="text-align:center;">${diasVencidosHtml}</td> 
-                <td><span style="color:${colorClasif}; font-weight:700; font-size:0.75rem;">● ${clasif.toUpperCase()}</span></td>
+                <td style="font-weight:600; font-size: 0.65rem;">${f.proveedor || 'S/N'}</td>
+                <td style="font-size: 0.65rem">${f.tipo_documento || 'Doc'} <br> <small style="color:#666">${f.numero_documento || '-'}</small></td>
+                <td style="font-weight:bold; font-size: 0.65rem;">${f.moneda === 'USD' ? '$' : 'S/'} ${parseFloat(f.monto_total || 0).toFixed(2)}</td>
+                <td style="font-size: 0.65rem">${estadoHtml}</td>
+                <td style="text-align:center;font-size: 0.65rem;">${diasVencidosHtml}</td> 
+                <td><span style="color:${colorClasif}; font-weight:700; font-size:0.65rem;">● ${clasif.toUpperCase()}</span></td>
                 <td style="text-align:center">${evidenciaHtml}</td>
                 <td>
-                    <div class="action-buttons" style="display: flex; gap: 5px; justify-content: center;">
-                        <button class="btn-icon" style="color:#3b82f6; background:#eff6ff;" onclick="abrirModalDetallesVer(${f.id})" title="Ver Detalles">
+                    <div class="action-buttons" style="display: flex; gap: 5px; justify-content: center; font-size: 0.65rem;">
+                        <button class="btn-icon" style="color:#3b82f6; background:#eff6ff; font-size: 0.65rem;" onclick="abrirModalDetallesVer(${f.id})" title="Ver Detalles">
                             <i class='bx bx-show'></i>
                         </button>
-                        <button class="btn-icon edit" style="color:#2563eb; background:#dbeafe;" onclick="editarFactura(${f.id})" title="Editar"><i class='bx bx-edit'></i></button>
-                        <button class="btn-icon delete" style="color:#dc2626; background:#fee2e2;" onclick="eliminarFactura(${f.id})" title="Eliminar"><i class='bx bx-trash'></i></button>
+                        <button class="btn-icon edit" style="color:#2563eb; background:#dbeafe; font-size: 0.65rem;" onclick="editarFactura(${f.id})" title="Editar"><i class='bx bx-edit'></i></button>
+                        <button class="btn-icon delete" style="color:#dc2626; background:#fee2e2; font-size: 0.65rem;" onclick="eliminarFactura(${f.id})" title="Eliminar"><i class='bx bx-trash'></i></button>
                     </div>
                 </td>
             `;
@@ -430,13 +449,13 @@
             if (diasRestantes < 0) {
                 // IGUAL QUE EN GASTOS: ROJO INTENSO SI ESTÁ VENCIDO
                 const diasVencidos = Math.abs(diasRestantes);
-                semaforo = `<span class="badge" style="font-weight:900; padding: 5px 10px; border-radius: 4px; font-size: 11px; background-color: #fee2e2; color: #dc2626;">${diasVencidos} DÍAS VENC.</span>`;
+                semaforo = `<span class="badge" style="font-weight:900; padding: 5px 10px; border-radius: 4px; font-size: 0.65rem; background-color: #fee2e2; color: #dc2626;">${diasVencidos} DÍAS VENC.</span>`;
             } else if (diasRestantes <= 7) {
                 // AMARILLO SI VENCE PRONTO
-                semaforo = `<span class="badge" style="padding: 5px 10px; border-radius: 4px; font-size: 11px; background-color: #fef9c3; color: #ca8a04;">⚠️ VENCE EN ${diasRestantes} DÍAS</span>`;
+                semaforo = `<span class="badge" style="padding: 5px 10px; border-radius: 4px; font-size: 0.65rem; background-color: #fef9c3; color: #ca8a04;">⚠️ VENCE EN ${diasRestantes} DÍAS</span>`;
             } else {
                 // VERDE SI ESTÁ AL DÍA
-                semaforo = `<span class="badge" style="padding: 5px 10px; border-radius: 4px; font-size: 11px; background-color: #dcfce7; color: #16a34a;">AL DÍA</span>`;
+                semaforo = `<span class="badge" style="padding: 5px 10px; border-radius: 4px; font-size: 0.65rem; background-color: #dcfce7; color: #16a34a;">AL DÍA</span>`;
             }
 
             // Cálculos financieros
@@ -475,21 +494,21 @@
 
             // Construcción de la fila
             tr.innerHTML = `
-                <td style="font-weight: 500;">${c.fecha_vencimiento.slice(0, 10)}</td>
-                <td style="text-align:center;">${semaforo}</td>
-                <td style="color:#6366f1; font-weight:500;">
+                <td style="font-weight: 500;font-size: 0.65rem;">${c.fecha_vencimiento.slice(0, 10)}</td>
+                <td style="text-align:center;font-size: 0.65rem;">${semaforo}</td>
+                <td style="color:#6366f1; font-weight:500;font-size: 0.65rem;">
                     ${c.fecha_programacion ? c.fecha_programacion.slice(0, 10) : '<small style="color:#cbd5e1">No prog.</small>'}
                 </td>
-                <td style="font-weight:600; color: #1e293b; font-size: 0.85rem;">${c.proveedor}</td>
+                <td style="font-weight:600; color: #1e293b; font-size: 0.65rem;">${c.proveedor}</td>
                 <td style="color: #64748b;">
                     ${c.numero_documento}
                     ${badgeRevision}
                 </td>
-                <td style="font-weight: 600;">${monedaSym} ${total.toFixed(2)}</td>
-                <td style="color:#10b981; font-weight: 500;">${monedaSym} ${acuenta.toFixed(2)}</td>
-                <td style="color:#ef4444; font-weight:bold; font-size: 1rem;">${monedaSym} ${saldo.toFixed(2)}</td>
+                <td style="font-weight: 600;font-size: 0.65rem;">${monedaSym} ${total.toFixed(2)}</td>
+                <td style="color:#10b981; font-weight: 500;font-size: 0.8rem;">${monedaSym} ${acuenta.toFixed(2)}</td>
+                <td style="color:#ef4444; font-weight:bold; font-size: 0.85rem;">${monedaSym} ${saldo.toFixed(2)}</td>
                 <td>
-                    <div style="display: flex; gap: 10px; align-items: center; justify-content: center;">
+                    <div style="display: flex; gap: 10px; align-items: center; justify-content: center;font-size: 0.65rem;">
                         ${btnVerDetalles}
                         ${btnProgramarHoy}
                     </div>
@@ -643,7 +662,7 @@
         }
     }
 
-   /**
+    /**
      * 💾 GUARDAR FACTURA 
      * Actualizado: Soporte para múltiples adicionales (JSONB), operación de impuesto (suma/resta) 
      * y sincronización total con el backend.
@@ -671,8 +690,12 @@
                     document.querySelector('#modal-factura button[onclick="guardarFactura()"]');
         const txtOriginal = btn ? btn.innerText : "Guardar Compra";
         
+        // 🔥 NUEVO: Activar la pantalla de carga (Bloquea todo)
+        const loadingOverlay = document.getElementById('loading-overlay');
+        if (loadingOverlay) loadingOverlay.style.display = 'flex';
+
         if(btn) { 
-            btn.innerText = "Guardando..."; 
+            btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Guardando...`; // Se ve más pro
             btn.disabled = true; 
         }
 
@@ -810,6 +833,9 @@
             console.error("Error en guardarFactura:", e);
             showToast("Error de conexión con el servidor", "error");
         } finally {
+            // 🔥 NUEVO: Apagar la pantalla de carga (Libera el sistema)
+            if (loadingOverlay) loadingOverlay.style.display = 'none';
+
             if(btn) { 
                 btn.innerText = txtOriginal; 
                 btn.disabled = false; 
@@ -1417,29 +1443,62 @@
         }, 200); // Tiempo ajustado para asegurar estabilidad del DOM
     }
     
-    async function subirArchivoFaltante(id) {
-        // Simular click en input file oculto para subir directo
+    async function subirArchivoFaltante(id, btnElement = null) {
         const input = document.getElementById('fac-archivo');
-        document.getElementById('fac-id').value = id; // Guardar ID temporalmente
+        document.getElementById('fac-id').value = id; 
+        
+        // 💡 TRUCO: Limpiamos el input antes de hacer clic. 
+        // Así, si el usuario selecciona el mismo archivo, el evento 'change' se dispara de todos modos.
+        input.value = ''; 
         input.click();
         
         // El evento onchange del input manejará la subida
         input.onchange = async (e) => {
-            if (!e.target.files[0]) return;
+            const file = e.target.files[0];
+            if (!file) return; // Si cancela la ventana, no hace nada
+            
+            // 1. --- ⏳ EFECTO VISUAL DE CARGA ---
+            const originalText = btnElement ? btnElement.innerHTML : '';
+            if (btnElement) {
+                btnElement.disabled = true;
+                btnElement.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Subiendo...`;
+                btnElement.style.fontSize = '0.68rem'
+                btnElement.style.opacity = '0.6';
+                btnElement.style.cursor = 'wait';
+            } else {
+                // Si no nos pasan el botón, usamos tu sistema de Toasts
+                showToast("⏳ Subiendo a la nube, por favor espere...", "info");
+            }
             
             const formData = new FormData();
-            formData.append('archivo', e.target.files[0]);
+            formData.append('archivo', file);
             
-            const token = localStorage.getItem('token');
-            const res = await fetch(`/api/facturas/upload/${id}`, {
-                method: 'POST',
-                headers: { 'x-auth-token': token },
-                body: formData
-            });
-            
-            if(res.ok) {
-                showToast("Archivo subido", "success");
-                cargarGastos();
+            try {
+                const token = localStorage.getItem('token');
+                const res = await fetch(`/api/facturas/upload/${id}`, {
+                    method: 'POST',
+                    headers: { 'x-auth-token': token },
+                    body: formData
+                });
+                
+                if (res.ok) {
+                    showToast("✅ Archivo subido exitosamente", "success");
+                    cargarGastos(); // Recarga la tabla para que el botón cambie a "Ver"
+                } else {
+                    const errorData = await res.json();
+                    showToast("❌ Error al subir: " + (errorData.msg || "Desconocido"), "error");
+                }
+            } catch (error) {
+                console.error("Error en la subida:", error);
+                showToast("❌ Error de conexión con el servidor", "error");
+            } finally {
+                // 2. --- 🔄 RESTAURAR BOTÓN (en caso de error) ---
+                if (btnElement) {
+                    btnElement.disabled = false;
+                    btnElement.innerHTML = originalText;
+                    btnElement.style.opacity = '1';
+                    btnElement.style.cursor = 'pointer';
+                }
             }
         };
     }
@@ -2051,7 +2110,7 @@
      * 📂 CARGAR DOCUMENTOS EXTRA
      * Obtiene los archivos adjuntos (vouchers, facturas, PDFs) relacionados al gasto.
      */
-    window.cargarDocumentosExtra = async function(id) {
+window.cargarDocumentosExtra = async function(id) {
         const tbody = document.getElementById('ver-tabla-docs-body');
         
         // 1. Estado de carga con Spinner
@@ -2089,15 +2148,32 @@
 
             // 3. Renderizar cada documento
             docs.forEach(d => {
-                // Limpieza de ruta para asegurar compatibilidad con navegadores
-                const url = d.ruta_archivo.replace(/\\/g, '/');
-                const urlLimpia = url.startsWith('/') ? url : `/${url}`;
+                // 🔥 LÓGICA PREMIUM: Detectar Nube vs Servidor Local
+                let urlLimpia = d.ruta_archivo;
                 
+                if (!urlLimpia.startsWith('http')) {
+                    // Es un archivo local viejo, lo limpiamos
+                    urlLimpia = urlLimpia.replace(/\\/g, '/');
+                    if (urlLimpia.startsWith('backend/')) {
+                        urlLimpia = urlLimpia.replace('backend/', '/');
+                    } else if (!urlLimpia.startsWith('/')) {
+                        urlLimpia = `/${urlLimpia}`;
+                    }
+                }
+                
+                // Función auxiliar para íconos según extensión (por si no la tienes o la mejoramos)
+                const extension = d.nombre_archivo.split('.').pop().toLowerCase();
+                let iconClass = 'bxs-file';
+                if (['pdf'].includes(extension)) iconClass = 'bxs-file-pdf';
+                else if (['doc', 'docx'].includes(extension)) iconClass = 'bxs-file-doc';
+                else if (['xls', 'xlsx', 'csv'].includes(extension)) iconClass = 'bxs-file-blank'; // No hay icono nativo de excel en boxicons standard a veces, usamos blank
+                else if (['png', 'jpg', 'jpeg'].includes(extension)) iconClass = 'bxs-file-image';
+
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td style="max-width: 280px; padding: 12px;">
                         <div style="display: flex; align-items: center; gap: 10px;">
-                            <i class='bx ${getIconByFileType(d.nombre_archivo)}' style='font-size: 1.5rem; color: #3b82f6;'></i>
+                            <i class='bx ${iconClass}' style='font-size: 1.5rem; color: #3b82f6;'></i>
                             <div style="overflow: hidden;">
                                 <strong style="color: #1e293b; display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;" title="${d.nombre_archivo}">
                                     ${d.nombre_archivo}

@@ -1,7 +1,7 @@
 // Ubicación: SuperNova/backend/controllers/analiticaController.js
 const pool = require('../db');
 
-// 1. P&L Detallado (Analítica Comercial Pura: Ventas, CRM unificado, Canjes, Eventos)
+// 1. P&L Detallado (CORRECCIÓN FINAL: SIN DUPLICADOS)
 exports.obtenerPyL = async (req, res) => {
     const rol = req.usuario ? req.usuario.rol.toLowerCase() : '';
     const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
@@ -16,7 +16,7 @@ exports.obtenerPyL = async (req, res) => {
     try {
         const query = `
             WITH Ingresos AS (
-                -- A. PAGOS DE EVENTOS (Módulo Eventos -> Ahora unificado como Cumpleaños)
+                -- A. ABONOS REALES DE CUMPLEAÑOS (La fuente primaria de eventos)
                 SELECT
                     e.sede_id, s.nombre AS nombre_sede, 'Cumpleaños' AS categoria,
                     pe.monto AS ingreso, 0 AS egreso
@@ -28,7 +28,7 @@ exports.obtenerPyL = async (req, res) => {
 
                 UNION ALL
 
-                -- B. VENTAS POS DESGLOSADAS (Módulo Ventas cruzado con Productos)
+                -- B. VENTAS POS (Solo productos normales, filtrando para NO duplicar eventos)
                 SELECT
                     v.sede_id, s.nombre AS nombre_sede,
                     CASE 
@@ -38,7 +38,6 @@ exports.obtenerPyL = async (req, res) => {
                         WHEN UPPER(p.categoria) LIKE '%TAQUILLA%' THEN 'Taquilla'
                         WHEN UPPER(p.categoria) LIKE '%MERCH%' THEN 'Merchandising'
                         WHEN UPPER(p.categoria) LIKE '%ARCADE%' OR UPPER(p.categoria) LIKE '%JUEGO%' THEN 'Arcade'
-                        WHEN UPPER(p.categoria) LIKE '%EVENTO%' THEN 'Eventos POS' -- Por si vendes algo extra como evento en caja
                         ELSE 'Ventas Generales'
                     END AS categoria,
                     dv.subtotal AS ingreso, 
@@ -50,23 +49,14 @@ exports.obtenerPyL = async (req, res) => {
                 WHERE v.fecha_venta >= $1::date AND v.fecha_venta < ($2::date + interval '1 day')
                 AND v.estado IN ('completado', 'pagado', 'cerrado')
                 AND v.sunat_estado != 'ANULADA' 
+                -- 🛡️ EVITAR DUPLICADOS: No sumar ventas que ya vienen del CRM o de CANJES
+                AND v.linea_negocio != 'EVENTOS'
+                AND v.origen NOT IN ('CRM', 'CRM_SALDO', 'COBRO_CUOTA') -- 🔥 AQUI ESTÁ LA MAGIA
                 AND ($3::int IS NULL OR v.sede_id = $3::int)
 
                 UNION ALL
 
-                -- C. INGRESOS POR CRM / LEADS (Módulo CRM -> Ahora unificado como Cumpleaños)
-                SELECT 
-                    l.sede_interes AS sede_id, s.nombre AS nombre_sede, 'Cumpleaños' AS categoria,
-                    l.pago_inicial AS ingreso, 0 AS egreso
-                FROM leads l
-                JOIN sedes s ON l.sede_interes = s.id
-                WHERE l.pago_inicial > 0
-                AND l.ultima_actualizacion >= $1::date AND l.ultima_actualizacion < ($2::date + interval '1 day')
-                AND ($3::int IS NULL OR l.sede_interes = $3::int)
-
-                UNION ALL
-
-                -- D. INGRESOS POR CANJES / TERCEROS (Módulo Acuerdos Comerciales)
+                -- D. INGRESOS POR CANJES / TERCEROS
                 SELECT
                     u.sede_id, s.nombre AS nombre_sede, 'Canje / Tercero' AS categoria,
                     pa.monto AS ingreso, 0 AS egreso
@@ -94,18 +84,6 @@ exports.obtenerPyL = async (req, res) => {
                 
                 UNION ALL
                 
-                -- F. COSTO OPERATIVO POR CANJES
-                SELECT
-                    mi.sede_id, s.nombre AS nombre_sede, 'Inventario: Costo Canjes' AS categoria,
-                    0 as ingreso, (ABS(mi.cantidad) * COALESCE(mi.costo_unitario_movimiento, 0)) as egreso
-                FROM movimientos_inventario mi
-                JOIN sedes s ON mi.sede_id = s.id
-                WHERE mi.tipo_movimiento = 'salida_canje'
-                AND mi.fecha >= $1::date AND mi.fecha < ($2::date + interval '1 day')
-                AND ($3::int IS NULL OR mi.sede_id = $3::int)
-
-                UNION ALL
-                
                 -- G. GASTOS OPERATIVOS (Caja)
                 SELECT
                     mc.sede_id, s.nombre AS nombre_sede, 
@@ -123,7 +101,13 @@ exports.obtenerPyL = async (req, res) => {
                 SELECT 
                     f.sede_id, s.nombre, 
                     CONCAT('Factura: ', COALESCE(NULLIF(TRIM(f.clasificacion), ''), 'General')) AS categoria,
-                    0 AS ingreso, f.monto_total AS egreso
+                    0 AS ingreso, 
+                    -- 🔥 AHORA SÍ: Usamos las columnas reales de tu base de datos
+                    CASE 
+                        WHEN f.estado_pago = 'parcial' THEN COALESCE(f.monto_aprobado, 0)
+                        WHEN f.estado_pago = 'pagado' THEN COALESCE(f.monto_total, 0)
+                        ELSE 0
+                    END AS egreso
                 FROM facturas f
                 JOIN sedes s ON f.sede_id = s.id
                 WHERE f.estado_pago IN ('pagado', 'parcial') 
@@ -365,26 +349,36 @@ exports.obtenerGraficosAvanzados = async (req, res) => {
         GROUP BY 1 ORDER BY 1 ASC
     `;
 
-    // B. TOP PRODUCTOS (CON LIMPIEZA DE NOMBRES)
-    // 1. REGEXP_REPLACE quita prefijos como "(Hijo) " o "(Hijo)"
-    // 2. SPLIT_PART con '[' quita los sufijos de cuotas como "[Cuota 1]"
-    // 3. TRIM limpia espacios sobrantes para que la agrupación sea exacta
+    // B. TOP PRODUCTOS (CORREGIDO: Excluye los items que vienen dentro de combos)
     const sqlTop = `
         SELECT 
             TRIM(
                 SPLIT_PART(
-                    REGEXP_REPLACE(dv.nombre_producto_historico, '\\((.*?)\\)', '', 'g'), 
-                    '[', 1
+                    REGEXP_REPLACE(
+                        REGEXP_REPLACE(
+                            REGEXP_REPLACE(dv.nombre_producto_historico, '(?i)ADELANTO RESERVA:\\s*', '', 'g'), 
+                            '(?i)SALDO:\\s*', '', 'g' 
+                        ),
+                        '\\((.*?)\\)', '', 'g' -- Quita paréntesis para productos normales
+                    ), 
+                    '[', 1 -- Quita corchetes
                 )
             ) as producto, 
             SUM(dv.cantidad) as cantidad
         FROM detalle_ventas dv
         JOIN ventas v ON dv.venta_id = v.id
         ${whereClause}
+        
+        -- 🔥 EL FILTRO MÁGICO: Excluir componentes de combos
+        -- Ignoramos cualquier producto que el sistema haya marcado como (Hijo)
+        AND dv.nombre_producto_historico NOT ILIKE '%(Hijo)%'
+        -- Blindaje extra: Los componentes de combos siempre se registran con costo 0 para no duplicar el precio del combo padre
+        AND dv.subtotal > 0 
+        
         GROUP BY 1 
         HAVING SUM(dv.cantidad) > 0
         ORDER BY 2 DESC
-        LIMIT 10
+        LIMIT 40
     `;
 
     // C. MÉTODOS DE PAGO
@@ -420,7 +414,8 @@ exports.obtenerGraficosAvanzados = async (req, res) => {
     // E. DESEMPEÑO DE VENDEDORES
     const sqlVendedores = `
         SELECT 
-            COALESCE(u.nombres || ' ' || u.apellidos, 'Venta Sistema/Otro') as vendedor, 
+            -- 🔥 CONCAT_WS evita que el nombre sea NULL si falta el apellido
+            TRIM(COALESCE(NULLIF(CONCAT_WS(' ', u.nombres, u.apellidos), ''), 'Venta Sistema/Otro')) as vendedor, 
             COUNT(*)::int as ventas_cantidad,
             ROUND(SUM(v.total_venta)::numeric, 2) as total_vendido
         FROM ventas v

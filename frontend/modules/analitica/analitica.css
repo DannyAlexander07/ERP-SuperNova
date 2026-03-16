@@ -581,3 +581,20 @@
         justify-content: space-between; /* Separa el texto "Pág 1 de X" de los botones */
     }
 }
+
+/* Contenedor especial para rankings largos */
+.chart-card-ranking {
+    min-height: 500px; /* Altura mínima */
+}
+
+.chart-card-ranking .chart-body {
+    height: auto; /* Permite que el gráfico defina su altura */
+    min-height: 400px;
+    max-height: 600px; /* Evita que se estire al infinito */
+    overflow-y: auto; /* Agrega scroll si hay demasiados productos */
+}
+
+/* Ajuste fino para etiquetas largas de productos */
+.chart-body canvas {
+    padding-left: 10px;
+}

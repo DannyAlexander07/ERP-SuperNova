@@ -1,6 +1,6 @@
 // Ubicación: SuperNova/backend/controllers/ventasController.js
 const pool = require('../db');
-const facturacionController = require('./facturacionController'); // 🔥 IMPORTANTE
+const facturacionController = require('./facturacionController');
 
 // 1. REGISTRAR VENTA (CORREGIDO: ACTUALIZA EL NOMBRE SI EL CLIENTE YA EXISTE)
 exports.registrarVenta = async (req, res) => {

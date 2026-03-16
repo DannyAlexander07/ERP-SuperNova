@@ -7,6 +7,12 @@ const path = require('path'); // Auxiliar para rutas
 exports.crearUsuario = async (req, res) => {
     const { nombres, apellidos, dni, celular, direccion, cargo, sede_id, rol, email, password } = req.body;
 
+    // 🔥 CORRECCIÓN: Capturamos la URL de Cloudinary de forma ultra-segura
+    const fotoUrl = req.file ? (req.file.secure_url || req.file.path) : null;
+
+    // 🛡️ Validación de sede_id para evitar que un string vacío rompa PostgreSQL
+    const sedeIdFinal = (sede_id && sede_id !== 'null' && sede_id !== '') ? parseInt(sede_id) : null;
+
     try {
         // 1. Validar si el usuario ya existe
         const userExist = await pool.query('SELECT * FROM usuarios WHERE correo = $1', [email]);
@@ -18,19 +24,19 @@ exports.crearUsuario = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const passwordHash = await bcrypt.hash(password, salt);
 
-        // 3. Insertar en Base de Datos (Usamos sede_id directo)
+        // 3. Insertar en Base de Datos usando sedeIdFinal
         const nuevoUsuario = await pool.query(
             `INSERT INTO usuarios 
-            (nombres, apellidos, documento_id, celular, direccion, cargo, sede_id, rol, correo, clave, estado) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'activo') 
+            (nombres, apellidos, documento_id, celular, direccion, cargo, sede_id, rol, correo, clave, foto_url, estado) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'activo') 
             RETURNING id, nombres, correo`,
-            [nombres, apellidos, dni, celular, direccion, cargo, sede_id, rol, email, passwordHash]
+            [nombres, apellidos, dni, celular, direccion, cargo, sedeIdFinal, rol, email, passwordHash, fotoUrl]
         );
 
         res.json({ msg: 'Usuario creado exitosamente', usuario: nuevoUsuario.rows[0] });
 
     } catch (err) {
-        console.error(err.message);
+        console.error("Error al crear usuario:", err.message);
         res.status(500).send('Error al guardar usuario en base de datos');
     }
 };
@@ -62,9 +68,12 @@ exports.obtenerUsuarios = async (req, res) => {
             FROM usuarios u
             LEFT JOIN sedes s ON u.sede_id = s.id
             WHERE 
-                LOWER(u.nombres) LIKE $1 OR 
-                LOWER(u.apellidos) LIKE $1 OR 
-                LOWER(u.correo) LIKE $1
+                u.estado != 'eliminado' AND 
+                (
+                    LOWER(u.nombres) LIKE $1 OR 
+                    LOWER(u.apellidos) LIKE $1 OR 
+                    LOWER(u.correo) LIKE $1
+                )
             ORDER BY u.id ASC
             LIMIT $2 OFFSET $3
         `, [termino, limite, offset]);
@@ -118,8 +127,8 @@ exports.actualizarUsuario = async (req, res) => {
     if (celular) celular = celular.toString().trim();
     if (email) email = email.toLowerCase().trim();
 
-    // Validamos la ruta de la foto si subieron una nueva
-    const fotoNueva = req.file ? `backend/uploads/${req.file.filename}` : null;
+    // 🔥 CORRECCIÓN: Capturamos directamente la URL de Cloudinary de forma segura
+    const fotoNuevaUrl = req.file ? (req.file.secure_url || req.file.path) : null;
 
     // Validación de sede_id para evitar fallos de SQL
     const sedeIdFinal = (sede_id && sede_id !== 'null' && sede_id !== '') ? parseInt(sede_id) : null;
@@ -128,27 +137,6 @@ exports.actualizarUsuario = async (req, res) => {
 
     try {
         await client.query('BEGIN');
-
-        // 🛡️ BLINDAJE 2: Gestión Física de Archivos (Borrar foto anterior si hay una nueva)
-        if (fotoNueva) {
-            const userOldData = await client.query('SELECT foto_url FROM usuarios WHERE id = $1', [id]);
-            const fotoViejaPath = userOldData.rows[0]?.foto_url;
-
-            if (fotoViejaPath && fotoViejaPath !== 'null') {
-                // Construimos la ruta absoluta (asumiendo que SuperNova es la raíz)
-                // Usamos path.join para que funcione en Windows y Linux por igual
-                const absolutePath = path.join(__dirname, '../../', fotoViejaPath);
-                
-                fs.access(absolutePath, fs.constants.F_OK, (err) => {
-                    if (!err) {
-                        fs.unlink(absolutePath, (errUnlink) => {
-                            if (errUnlink) console.error("⚠️ No se pudo borrar el archivo físico:", errUnlink);
-                            else console.log("🗑️ Foto anterior eliminada del servidor para ahorrar espacio.");
-                        });
-                    }
-                });
-            }
-        }
 
         // 1. Verificar si el usuario existe y obtener su estado actual
         const usuarioExistente = await client.query('SELECT estado FROM usuarios WHERE id = $1', [id]);
@@ -193,10 +181,10 @@ exports.actualizarUsuario = async (req, res) => {
             contador++;
         }
 
-        // B. Si hay foto nueva, la actualizamos
-        if (fotoNueva) {
+        // B. Si hay foto nueva (en Cloudinary), la actualizamos
+        if (fotoNuevaUrl) {
             query += `, foto_url = $${contador}`; 
-            values.push(fotoNueva);
+            values.push(fotoNuevaUrl);
             contador++;
         }
 
@@ -215,10 +203,10 @@ exports.actualizarUsuario = async (req, res) => {
         console.error("❌ Error SQL al actualizar:", err.message);
 
         if (err.code === '23505') {
-            if (err.constraint.includes('documento_id')) {
+            if (err.constraint && err.constraint.includes('documento_id')) {
                 return res.status(400).json({ msg: "Error: El DNI ya está registrado en otro usuario." });
             }
-            if (err.constraint.includes('correo')) {
+            if (err.constraint && err.constraint.includes('correo')) {
                 return res.status(400).json({ msg: "Error: El correo ya está registrado." });
             }
         }

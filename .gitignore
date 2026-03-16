@@ -1,0 +1,43 @@
+# ==========================================
+# 🛑 CREDENCIALES Y SEGURIDAD (¡NUNCA SUBIR!)
+# ==========================================
+.env
+.env.local
+.env.production
+*.pem
+*.key
+
+# ==========================================
+# 📦 DEPENDENCIAS DE NODE.JS
+# ==========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==========================================
+# 🖼️ ARCHIVOS SUBIDOS POR USUARIOS (UPLOADS)
+# ==========================================
+# Ignoramos las imágenes y PDFs de prueba o producción
+# para no llenar el repositorio de basura.
+uploads/
+backend/uploads/
+*.pdf
+*.jpg
+*.jpeg
+*.png
+*.gif
+
+# ==========================================
+# 💻 ARCHIVOS DEL SISTEMA OPERATIVO Y EDITORES
+# ==========================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ==========================================
+# 🗑️ LOGS Y CACHÉ
+# ==========================================
+logs/
+*.log

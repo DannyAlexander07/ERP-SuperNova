@@ -71,26 +71,24 @@ app.use('/api/analitica', analiticaRoutes);
 
 // E-Commerce
 app.use('/api/ecommerce', require('./routes/ecommerceRoutes'));
+app.use('/api/prestamos', require('./routes/prestamosRoutes')); // ⬆️ Movido aquí para orden
 
 
-// --- ARCHIVOS ESTÁTICOS (EVIDENCIAS Y FOTOS) ---
 // --- ARCHIVOS ESTÁTICOS (EVIDENCIAS Y FOTOS) ---
 const uploadsPath = path.join(__dirname, 'uploads');
 app.use('/uploads', express.static(uploadsPath));
 app.use('/backend/uploads', express.static(uploadsPath));
 
-// Log para que sepas dónde está buscando las fotos el servidor al arrancar
 console.log(`📂 Carpeta de uploads vinculada en: ${uploadsPath}`);
 
-// --- SERVIR FRONTEND (SPA) ---
+// --- 🛡️ SERVIR FRONTEND SEGURO (SPA) ---
+// SOLO la carpeta frontend es pública. ¡Nunca exponemos la raíz del proyecto!
 app.use(express.static(path.join(__dirname, '../frontend')));
-// Servir archivos estáticos de la raíz si es necesario
-app.use(express.static(path.join(__dirname, '../'))); 
 
-app.use('/api/prestamos', require('./routes/prestamosRoutes'));
 // --- RUTAS DE VISTAS HTML ---
+// Ahora Express busca el index.html de forma segura DENTRO de la carpeta frontend
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../index.html'));
+    res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
 app.get('/dashboard', (req, res) => {
@@ -98,7 +96,6 @@ app.get('/dashboard', (req, res) => {
 });
 
 // MANEJO DE RUTAS NO ENCONTRADAS (404 API)
-// Esto evita que el frontend se quede "cargando" si la ruta no existe
 app.use('/api', (req, res) => {
     res.status(404).json({ 
         success: false, 
@@ -106,7 +103,7 @@ app.use('/api', (req, res) => {
     });
 });
 
-// MANEJADOR DE ERRORES GLOBAL (Evita caídas del servidor)
+// MANEJADOR DE ERRORES GLOBAL
 app.use((err, req, res, next) => {
     console.error("❌ ERROR CRÍTICO SERVIDOR:", err.stack);
     res.status(500).json({ 
@@ -116,16 +113,20 @@ app.use((err, req, res, next) => {
     });
 });
 
-cron.schedule('*/5 * * * *', async () => {
+// --- CRON JOBS OPTIMIZADO ---
+// Cambiado a cada 10 minutos para dar respiro al Event Loop
+cron.schedule('*/10 * * * *', async () => {
+    const inicio = Date.now();
     try {
-        // Borra las reservas cuya fecha de expiración sea menor a la hora actual
+        // Usamos un DELETE con RETURNING para no hacer doble consulta si quisiéramos loguear nombres
         const res = await pool.query('DELETE FROM reservas_ecommerce WHERE expira_at < CURRENT_TIMESTAMP');
         
         if (res.rowCount > 0) {
-            console.log(`\n[🧹 CRON] Limpieza de Inventario: Se liberaron ${res.rowCount} reserva(s) web caducadas.`);
+            const duracion = Date.now() - inicio;
+            console.log(`[🧹 CRON] Limpieza: ${res.rowCount} reserva(s) liberada(s) (${duracion}ms)`);
         }
     } catch (err) {
-        console.error("❌ [CRON ERROR] Falló la limpieza de reservas:", err.message);
+        console.error("❌ [CRON ERROR]:", err.message);
     }
 });
 
@@ -133,6 +134,6 @@ cron.schedule('*/5 * * * *', async () => {
 app.listen(port, () => {
     console.log(`\n==================================================`);
     console.log(`🚀 SUPERNOVA (LITE) ACTIVO EN: http://localhost:${port}`);
-    console.log(`🧹 Cron Job Activo: Limpieza de reservas cada 5 min.`);
+    console.log(`🧹 Cron Job Activo: Limpieza de reservas cada 10 min.`);
     console.log(`==================================================\n`);
 });
