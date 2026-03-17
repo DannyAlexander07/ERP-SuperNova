@@ -1,0 +1,74 @@
+<link rel="stylesheet" href="modules/inicio/inicio.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div class="dashboard-container">
+    
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-icon pending"><i class='bx bx-time-five'></i></div>
+            <div class="kpi-details">
+                <h3>Pendiente(s)</h3>
+                <p id="kpi-pendientes">0</p>
+            </div>
+            <div class="kpi-footer" onclick="cargarModulo('comprobantes')">Ver detalles <i class='bx bx-right-arrow-alt'></i></div>
+        </div>
+
+        <div class="kpi-card">
+            <div class="kpi-icon scheduled"><i class='bx bx-calendar-check'></i></div>
+            <div class="kpi-details">
+                <h3>Programado(s)</h3>
+                <p id="kpi-programados">0</p>
+            </div>
+            <div class="kpi-footer" onclick="cargarModulo('calendario')">Ver detalles <i class='bx bx-right-arrow-alt'></i></div>
+        </div>
+
+        <div class="kpi-card">
+            <div class="kpi-icon rejected"><i class='bx bx-x-circle'></i></div>
+            <div class="kpi-details">
+                <h3>Rechazado(s)</h3>
+                <p id="kpi-rechazados">0</p>
+            </div>
+            <div class="kpi-footer" onclick="cargarModulo('comprobantes')">Ver detalles <i class='bx bx-right-arrow-alt'></i></div>
+        </div>
+
+        <div class="kpi-card">
+            <div class="kpi-icon pending"><i class='bx bx-time-five'></i></div>
+            <div class="kpi-details">
+                <h3>Pendiente / Parcial</h3> <p id="kpi-pendientes">0</p>
+            </div>
+            <div class="kpi-footer" onclick="cargarModulo('comprobantes')">Ver detalles <i class='bx bx-right-arrow-alt'></i></div>
+        </div>
+
+        <div class="kpi-card">
+            <div class="kpi-icon paid"><i class='bx bx-check-double'></i></div>
+            <div class="kpi-details">
+                <h3>Pagado(s)</h3>
+                <p id="kpi-pagados">0</p>
+            </div>
+            <div class="kpi-footer" onclick="cargarModulo('comprobantes')">Ver detalles <i class='bx bx-right-arrow-alt'></i></div>
+        </div>
+    </div>
+
+    <div class="charts-grid">
+        <div class="chart-card">
+            <div class="chart-header">
+                <h3>Reporte de Estado de Comprobantes</h3>
+            </div>
+            <div class="chart-body">
+                <canvas id="chartEstados"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-header">
+                <h3>Reporte por Tipo de Servicio</h3>
+            </div>
+            <div class="chart-body">
+                <canvas id="chartTipos"></canvas>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script src="modules/inicio/inicio.js"></script>

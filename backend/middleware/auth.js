@@ -2,8 +2,8 @@
 const jwt = require('jsonwebtoken');
 
 /**
- * 1. FUNCIÓN DE AUTENTICACIÓN (BLINDADA)
- * Valida el token y asegura que el payload contenga la información de sede.
+ * 1. FUNCIÓN DE AUTENTICACIÓN (BLINDADA PARA ERP Y B2B)
+ * Valida el token y asegura que tenga sede (Internos) o proveedor_id (Externos).
  */
 const checkAuth = function(req, res, next) {
     // Soporte para ambos: header personalizado y el estándar Authorization Bearer
@@ -22,9 +22,9 @@ const checkAuth = function(req, res, next) {
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         
-        // 🛡️ REGLA DE ORO RETAIL: El usuario DEBE tener un ID y una Sede
-        if (!decoded.usuario || !decoded.usuario.id || !decoded.usuario.sede_id) {
-            throw new Error('Payload del token incompleto');
+        // 🔥 REGLA DE ORO ACTUALIZADA: El usuario DEBE tener un ID y (una Sede O un Proveedor ID)
+        if (!decoded.usuario || !decoded.usuario.id || (!decoded.usuario.sede_id && !decoded.usuario.proveedor_id)) {
+            throw new Error('Payload del token incompleto (No tiene Sede ni Proveedor asignado)');
         }
 
         req.usuario = decoded.usuario; 

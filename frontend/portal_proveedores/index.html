@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal de Proveedores | SuperNova</title>
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    <link rel="stylesheet" href="css/portal_login.css">
+</head>
+<body>
+
+    <div class="login-container">
+        <div class="login-overlay"></div>
+
+        <div class="login-card">
+            <div class="login-header">
+                <h2>SUPERNOVA</h2>
+                <p>Portal de Proveedores</p>
+            </div>
+
+            <div class="login-body">
+                <form id="form-login-proveedor">
+                    <div class="input-group">
+                        <i class='bx bxs-user'></i>
+                        <input type="email" id="correo-proveedor" placeholder="Usuario / Correo" required>
+                    </div>
+
+                    <div class="input-group">
+                        <i class='bx bxs-lock-alt'></i>
+                        <input type="password" id="clave-proveedor" placeholder="Contraseña" required>
+                    </div>
+
+                    <div class="forgot-password">
+                        <a href="#">Olvidé mi contraseña</a>
+                    </div>
+
+                    <button type="submit" class="btn-ingresar">
+                        Ingresar al Portal <i class='bx bx-right-arrow-alt'></i>
+                    </button>
+                </form>
+
+                <div class="register-section">
+                    <p>¿Es tu primera vez en el portal?</p>
+                    <button class="btn-registro" onclick="abrirModalRegistro()">
+                        <i class='bx bx-user-plus'></i> Registrarse con Código
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-registro" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Registro de Proveedor</h3>
+                <i class='bx bx-x' onclick="cerrarModalRegistro()"></i>
+            </div>
+            <div class="modal-body">
+                <p class="modal-instruccion">Ingresa el código de acceso único proporcionado por el área de compras de SuperNova para enlazar tu cuenta.</p>
+                
+                <div class="input-group">
+                    <i class='bx bx-key'></i>
+                    <input type="text" id="reg-codigo" placeholder="Código de Acceso (Ej: SN-4928)" required>
+                </div>
+                <div class="input-group">
+                    <i class='bx bx-envelope'></i>
+                    <input type="email" id="reg-correo" placeholder="Tu Correo Electrónico" required>
+                </div>
+                <div class="input-group">
+                    <i class='bx bx-lock'></i>
+                    <input type="password" id="reg-clave" placeholder="Crea una Contraseña" required>
+                </div>
+                <div class="input-group">
+                    <i class='bx bx-user'></i>
+                    <input type="text" id="reg-nombre" placeholder="Nombre del Contacto (Tú)" required>
+                </div>
+
+                <button class="btn-ingresar" onclick="procesarRegistro()" style="margin-top: 10px;">
+                    Completar Registro
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/portal_login.js"></script>
+</body>
+</html>

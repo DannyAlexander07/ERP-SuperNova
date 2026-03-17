@@ -1,0 +1,122 @@
+<div class="modulo-container">
+    <div class="header-acciones">
+        <h2><i class='bx bx-cart-add'></i> Gestión de Órdenes de Compra</h2>
+        <button class="btn-primary" onclick="abrirModalCrearOC()">
+            <i class='bx bx-plus'></i> Emitir Nueva OC
+        </button>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table-custom">
+            <thead>
+                <tr>
+                    <th>Código OC</th>
+                    <th>Proveedor</th>
+                    <th>Emisión</th>
+                    <th>Moneda</th>
+                    <th>Total</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-oc-interna">
+                </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="modal-crear-oc" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 800px;">
+        <div class="modal-header">
+            <h3>Emitir Nueva Orden de Compra</h3>
+            <i class='bx bx-x' onclick="cerrarModalOC()"></i>
+        </div>
+        <form id="form-crear-oc" class="modal-body">
+            <div class="form-grid">
+                <div class="input-group" style="grid-column: span 2;">
+                    <label>Proveedor *</label>
+                    <select id="oc-proveedor" required>
+                        <option value="">Cargando proveedores...</option>
+                    </select>
+                </div>
+                
+                <div class="input-group">
+                    <label>Código de Orden *</label>
+                    <div style="display: flex; align-items: stretch; border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; background: #fff;">
+                        <span style="background: #f8fafc; padding: 12px 15px; border-right: 1px solid #cbd5e1; color: #475569; font-weight: 800; font-size: 0.8rem; width: 4rem;">OC - </span>
+                        <input type="text" id="oc-codigo" placeholder="2026-0001" required style="border: none; border-radius: 0; width: 100%; outline: none; padding: 12px 15px; font-weight: 600; color: #0ea5e9;">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Sede Destino *</label>
+                    <select id="oc-sede" required>
+                        <option value="">Cargando sedes...</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label>Fecha Emisión *</label>
+                    <input type="date" id="oc-emision" required>
+                </div>
+                <div class="input-group">
+                    <label>Fecha Entrega Esperada</label>
+                    <input type="date" id="oc-entrega">
+                </div>
+
+                <div class="input-group">
+                    <label>Moneda *</label>
+                    <select id="oc-moneda" required>
+                        <option value="PEN">Soles (PEN)</option>
+                        <option value="USD">Dólares (USD)</option>
+                    </select>
+                </div>
+                
+                <div class="input-group">
+                    <label>Condición de Pago</label>
+                    <input type="text" id="oc-condicion" placeholder="Ej: A 30 días">
+                </div>
+
+                <div class="input-group">
+                    <label>Subtotal (Valor Base) *</label>
+                    <input type="number" step="0.01" id="oc-subtotal" placeholder="0.00" required>
+                </div>
+
+                <div class="input-group">
+                    <label>Impuesto / Retención *</label>
+                    <select id="oc-tipo-impuesto" required>
+                        <option value="0.18">IGV (18%)</option>
+                        <option value="0.105">IGV (10.5%)</option>
+                        <option value="0">Exonerado / Inafecto (0%)</option>
+                        <option value="0.08">Retención RxH (8%)</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label>Monto Impuesto</label>
+                    <input type="number" step="0.01" id="oc-igv" required readonly style="background: #f8fafc; color: #64748b; cursor: not-allowed;" title="Cálculo Automático">
+                </div>
+
+                <div class="input-group">
+                    <label>Monto Total (Automático) *</label>
+                    <input type="number" step="0.01" id="oc-total" required readonly style="background: #ecfdf5; border-color: #a7f3d0; font-weight: 800; color: #059669; font-size: 16px; cursor: not-allowed;">
+                </div>
+
+                <div class="input-group" style="grid-column: span 2;">
+                    <label>Observaciones</label>
+                    <textarea id="oc-obs" rows="2" placeholder="Detalles del servicio o compra..."></textarea>
+                </div>
+
+                <div class="input-group" style="grid-column: span 2;">
+                    <label>Subir PDF de la Orden (Obligatorio) *</label>
+                    <input type="file" id="oc-pdf" accept=".pdf" required style="border: 2px dashed #cbd5e1; padding: 15px; cursor: pointer; background: #f8fafc;">
+                </div>
+            </div>
+            
+            <div class="form-actions" style="margin-top: 20px; text-align: right;">
+                <button type="button" class="btn-outline" onclick="cerrarModalOC()">Cancelar</button>
+                <button type="submit" class="btn-primary" id="btn-submit-oc"><i class='bx bx-save'></i> Guardar y Emitir</button>
+            </div>
+        </form>
+    </div>
+</div>

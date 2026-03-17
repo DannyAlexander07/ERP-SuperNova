@@ -73,6 +73,8 @@ app.use('/api/analitica', analiticaRoutes);
 app.use('/api/ecommerce', require('./routes/ecommerceRoutes'));
 app.use('/api/prestamos', require('./routes/prestamosRoutes')); // ⬆️ Movido aquí para orden
 
+// Agregar la nueva ruta de Órdenes de Compra
+app.use('/api/ordenes', require('./routes/ordenesRoutes'));
 
 // --- ARCHIVOS ESTÁTICOS (EVIDENCIAS Y FOTOS) ---
 const uploadsPath = path.join(__dirname, 'uploads');

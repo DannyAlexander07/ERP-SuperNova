@@ -1,0 +1,143 @@
+.ordenes-container {
+    background: #fff;
+    border-radius: 12px;
+    padding: 25px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+    border: 1px solid #e2e8f0;
+    animation: fadeIn 0.4s ease;
+}
+
+.header-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.header-actions h2 {
+    color: #1e1b4b;
+    font-size: 1.4rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.subtitle {
+    color: #64748b;
+    font-size: 0.9rem;
+    margin-top: 5px;
+}
+
+.search-box {
+    position: relative;
+    width: 320px;
+}
+
+.search-box i {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+    font-size: 1.2rem;
+}
+
+.search-box input {
+    width: 100%;
+    padding: 12px 15px 12px 45px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    outline: none;
+    transition: 0.3s;
+    background: #f8fafc;
+}
+
+.search-box input:focus {
+    border-color: #0ea5e9;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+}
+
+/* --- TABLA --- */
+.table-responsive {
+    overflow-x: auto;
+}
+
+.table-custom {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 900px;
+}
+
+.table-custom th {
+    background: #f8fafc;
+    color: #475569;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    padding: 16px;
+    text-align: left;
+    border-bottom: 2px solid #e2e8f0;
+    letter-spacing: 0.5px;
+}
+
+.table-custom td {
+    padding: 16px;
+    color: #334155;
+    font-size: 0.9rem;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+}
+
+.table-custom tbody tr:hover {
+    background: #f0f9ff;
+}
+
+.oc-id {
+    font-weight: 700;
+    color: #0ea5e9;
+}
+
+.condicion-pago {
+    font-size: 0.8rem;
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+}
+
+/* ETIQUETAS DE ESTADO */
+.status {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    display: inline-block;
+}
+
+.status.emitida { background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; }
+.status.facturada { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+.status.anulada { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+
+/* BOTÓN PDF */
+.btn-pdf {
+    background: transparent;
+    color: #ef4444;
+    border: 1px solid #ef4444;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.btn-pdf:hover {
+    background: #ef4444;
+    color: white;
+}

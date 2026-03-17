@@ -133,4 +133,16 @@ router.post('/:id/documentos', checkAuth, upload.single('archivo'), facturasCont
 // Eliminar un documento específico
 router.delete('/documentos/:docId', checkAuth, facturasController.eliminarDocumento);
 
+router.post('/b2b/recepcion', checkAuth, 
+    upload.fields([
+        { name: 'pdf', maxCount: 1 }, 
+        { name: 'xml', maxCount: 1 }
+    ]), 
+    facturasController.recepcionarFacturaB2B
+);
+
+router.get('/b2b/mis-comprobantes', checkAuth, facturasController.obtenerMisComprobantesB2B);
+
+router.get('/b2b/dashboard', checkAuth, facturasController.obtenerDashboardB2B);
+
 module.exports = router;

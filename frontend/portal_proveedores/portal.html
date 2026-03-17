@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal de Proveedores | SuperNova</title>
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    <link rel="stylesheet" href="css/portal_layout.css">
+</head>
+<body>
+
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo-text">
+                <h2>SUPERNOVA</h2>
+                <span>B2B Portal</span>
+            </div>
+            <div class="proveedor-info" id="sidebar-proveedor-nombre">
+                Cargando proveedor...
+            </div>
+        </div>
+
+        <ul class="nav-links">
+            <li class="active" onclick="cargarModulo('inicio')">
+                <i class='bx bx-home-alt'></i>
+                <span class="link-name">Inicio</span>
+            </li>
+            
+            <li class="nav-section">RECEPCIÓN DE FACTURAS</li>
+            
+            <li onclick="cargarModulo('recepcion')">
+                <i class='bx bx-upload'></i>
+                <span class="link-name">Subir Factura</span>
+            </li>
+            <li onclick="cargarModulo('comprobantes')">
+                <i class='bx bx-table'></i>
+                <span class="link-name">Mis Comprobantes</span>
+            </li>
+            <li onclick="cargarModulo('calendario')">
+                <i class='bx bx-calendar'></i>
+                <span class="link-name">Calendario de Pagos</span>
+            </li>
+
+            <li class="nav-section">MÓDULO DE COMPRAS</li>
+            
+            <li onclick="cargarModulo('ordenes')">
+                <i class='bx bx-receipt'></i>
+                <span class="link-name">Órdenes de Compra</span>
+            </li>
+
+            <li class="nav-section">DATOS MAESTROS</li>
+            
+            <li onclick="cargarModulo('mis_datos')">
+                <i class='bx bx-id-card'></i>
+                <span class="link-name">Mis Datos y Cuentas</span>
+            </li>
+        </ul>
+    </aside>
+
+    <main class="main-content">
+        <header class="topbar">
+            <div class="topbar-left">
+                <i class='bx bx-menu' id="btn-toggle-menu"></i>
+                <h3 id="topbar-titulo">Panel de Inicio</h3>
+            </div>
+            
+            <div class="topbar-right">
+                <div class="notification-box">
+                    <i class='bx bx-bell'></i>
+                    <span class="badge" id="noti-badge">0</span>
+                </div>
+                <div class="user-profile">
+                    <i class='bx bxs-user-circle'></i>
+                    <span id="topbar-usuario-nombre">Usuario</span>
+                    <i class='bx bx-log-out cursor-pointer' title="Cerrar Sesión" onclick="cerrarSesion()"></i>
+                </div>
+            </div>
+        </header>
+
+        <div id="contenedor-dinamico" class="content-wrapper">
+            <div style="text-align: center; margin-top: 50px; color: #666;">
+                <i class='bx bx-loader-alt bx-spin' style="font-size: 3rem;"></i>
+                <p>Cargando módulo...</p>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/portal_layout.js"></script>
+</body>
+</html>

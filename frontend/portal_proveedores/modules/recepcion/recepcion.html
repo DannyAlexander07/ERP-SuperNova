@@ -1,0 +1,103 @@
+<link rel="stylesheet" href="modules/recepcion/recepcion.css">
+
+<div class="recepcion-container">
+    <div class="recepcion-header">
+        <h2><i class='bx bx-cloud-upload'></i> Recepción de Comprobantes</h2>
+        <p>Por favor, ingrese los datos exactos de su comprobante electrónico y adjunte los archivos obligatorios (PDF y XML).</p>
+    </div>
+
+    <form id="form-subir-factura" class="recepcion-form">
+        
+        <div class="form-section">
+            <h3 class="section-title">1. Datos del Comprobante</h3>
+            <div class="form-grid">
+                <div class="input-group">
+                    <label>Tipo de Documento *</label>
+                    <select id="rec-tipo" required>
+                        <option value="Factura">Factura (01)</option>
+                        <option value="Recibo">Recibo por Honorarios (02)</option>
+                        <option value="NotaCredito">Nota de Crédito (07)</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>Serie *</label>
+                    <input type="text" id="rec-serie" placeholder="Ej: F001" required maxlength="4" style="text-transform: uppercase;">
+                </div>
+                <div class="input-group">
+                    <label>Número Correlativo *</label>
+                    <input type="number" id="rec-numero" placeholder="Ej: 0001234" required>
+                </div>
+                <div class="input-group">
+                    <label>Fecha de Emisión *</label>
+                    <input type="date" id="rec-fecha" required>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h3 class="section-title">2. Relación Comercial</h3>
+            <div class="form-grid-single">
+                <div class="input-group">
+                    <label>Orden de Compra Asociada (Opcional)</label>
+                    <input type="text" id="rec-oc" placeholder="Si SuperNova le generó una OC, ingrese el código aquí (Ej: OC-2026-0015)">
+                    <small class="help-text"><i class='bx bx-info-circle'></i> Si es un servicio recurrente sin OC, deje este campo en blanco.</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h3 class="section-title">3. Importes</h3>
+            <div class="form-grid">
+                <div class="input-group">
+                    <label>Moneda *</label>
+                    <select id="rec-moneda" required>
+                        <option value="PEN">Soles (PEN)</option>
+                        <option value="USD">Dólares (USD)</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>Subtotal (Valor Venta) *</label>
+                    <input type="number" step="0.01" id="rec-subtotal" placeholder="0.00" required>
+                </div>
+                <div class="input-group">
+                    <label>IGV (18%) *</label>
+                    <input type="number" step="0.01" id="rec-igv" placeholder="0.00" required readonly class="readonly-input">
+                </div>
+                <div class="input-group">
+                    <label>Importe Total *</label>
+                    <input type="number" step="0.01" id="rec-total" placeholder="0.00" required readonly class="readonly-input total-highlight">
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h3 class="section-title">4. Archivos Digitales</h3>
+            <div class="files-grid">
+                
+                <div class="file-drop-zone" id="drop-pdf" onclick="document.getElementById('file-pdf').click()">
+                    <input type="file" id="file-pdf" accept=".pdf" hidden>
+                    <i class='bx bxs-file-pdf icon-pdf'></i>
+                    <h4>Subir representación impresa (PDF)</h4>
+                    <p id="text-pdf">Arrastre el archivo aquí o haga clic para explorar</p>
+                </div>
+
+                <div class="file-drop-zone" id="drop-xml" onclick="document.getElementById('file-xml').click()">
+                    <input type="file" id="file-xml" accept=".xml" hidden>
+                    <i class='bx bx-code-block icon-xml'></i>
+                    <h4>Subir archivo SUNAT (XML)</h4>
+                    <p id="text-xml">Arrastre el archivo aquí o haga clic para explorar</p>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn-submit">
+                <i class='bx bx-send'></i> Enviar Comprobante a SuperNova
+            </button>
+        </div>
+
+    </form>
+</div>
+
+<script src="modules/recepcion/recepcion.js"></script>

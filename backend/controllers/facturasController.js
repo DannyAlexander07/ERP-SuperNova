@@ -986,3 +986,197 @@ exports.notificarPlanPagos = async (req, res) => {
         res.status(500).json({ msg: 'Error al enviar el correo informativo.' });
     }
 };
+
+// =======================================================
+// 9. FUNCIONES EXCLUSIVAS DEL PORTAL PROVEEDORES (B2B)
+// =======================================================
+
+exports.recepcionarFacturaB2B = async (req, res) => {
+    // 1. 🛡️ SEGURIDAD ABSOLUTA: Extraemos quién es desde el Token, NO desde el formulario
+    const proveedorId = req.usuario.proveedor_id;
+    const usuarioId = req.usuario.id;
+
+    if (!proveedorId) {
+        return res.status(403).json({ msg: 'Acceso denegado. Esta acción es exclusiva para Proveedores.' });
+    }
+
+    // 2. Capturamos los datos del formulario (FormData)
+    const {
+        tipo_documento, serie, numero_documento, fecha_emision, 
+        orden_compra, moneda, base_imponible, monto_igv, monto_total
+    } = req.body;
+
+    // 3. Capturamos los archivos (Multer .fields)
+    const pdfFile = req.files && req.files['pdf'] ? req.files['pdf'][0] : null;
+    const xmlFile = req.files && req.files['xml'] ? req.files['xml'][0] : null;
+
+    if (!pdfFile || !xmlFile) {
+        return res.status(400).json({ msg: 'Es obligatorio adjuntar tanto el PDF como el XML de SUNAT.' });
+    }
+
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+
+        // 4. Insertar la Cabecera en la tabla Facturas
+        // Por defecto: Sin sede asignada, estado 'pendiente' y aprobación 'registrado'
+        const insertFac = await client.query(`
+            INSERT INTO facturas (
+                proveedor_id, usuario_id, tipo_documento, numero_documento,
+                fecha_emision, moneda, base_imponible, monto_igv, monto_total,
+                orden_compra, evidencia_url, estado_pago, estado_aprobacion,
+                categoria_gasto, clasificacion, descripcion
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 
+                'pendiente', 'registrado', 'POR_CLASIFICAR', 'Operativo', $12
+            ) RETURNING id
+        `, [
+            proveedorId, 
+            usuarioId, 
+            tipo_documento, 
+            `${serie.toUpperCase()}-${numero_documento}`,
+            fecha_emision, 
+            moneda, 
+            base_imponible, 
+            monto_igv, 
+            monto_total,
+            orden_compra || null, 
+            pdfFile.path, // La URL de Cloudinary del PDF
+            `Recepción B2B: ${tipo_documento} de Proveedor`
+        ]);
+
+        const facturaId = insertFac.rows[0].id;
+
+        // 5. Insertar el XML en la tabla de Documentos Extra
+        await client.query(`
+            INSERT INTO facturas_documentos (factura_id, nombre_archivo, ruta_archivo, tipo_documento)
+            VALUES ($1, $2, $3, 'XML SUNAT')
+        `, [facturaId, xmlFile.originalname, xmlFile.path]);
+
+        // 6. Rastro de Auditoría
+        await client.query(`
+            INSERT INTO auditoria (usuario_id, modulo, accion, registro_id, detalle)
+            VALUES ($1, 'PORTAL_B2B', 'RECEPCION_FACTURA', $2, $3)
+        `, [usuarioId, facturaId, `El proveedor subió la factura ${serie}-${numero_documento}`]);
+
+        await client.query('COMMIT');
+        res.status(201).json({ msg: '¡Comprobante recepcionado con éxito en SuperNova!' });
+
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error("❌ Error en Recepción B2B:", err);
+        res.status(500).json({ msg: 'Error interno al guardar la factura.' });
+    } finally {
+        client.release();
+    }
+};
+
+// Obtener el historial de comprobantes de un proveedor específico
+exports.obtenerMisComprobantesB2B = async (req, res) => {
+    const proveedorId = req.usuario.proveedor_id;
+    
+    if (!proveedorId) {
+        return res.status(403).json({ msg: 'Acceso denegado. Exclusivo para proveedores.' });
+    }
+
+    try {
+        // 🚀 MEJORA: Hacemos una subconsulta para traer también el XML de la tabla facturas_documentos
+        const result = await pool.query(`
+            SELECT 
+                f.id, 
+                f.numero_documento, 
+                f.tipo_documento, 
+                TO_CHAR(f.fecha_emision, 'DD/MM/YYYY') as fecha_emision, 
+                f.monto_total, 
+                f.moneda, 
+                f.forma_pago, 
+                f.estado_pago,
+                f.evidencia_url,
+                (SELECT ruta_archivo FROM facturas_documentos fd WHERE fd.factura_id = f.id AND fd.tipo_documento = 'XML SUNAT' LIMIT 1) as xml_url
+            FROM facturas f
+            WHERE f.proveedor_id = $1
+            ORDER BY f.id DESC
+        `, [proveedorId]);
+
+        res.json(result.rows);
+    } catch (err) {
+        console.error("❌ Error al obtener comprobantes B2B:", err);
+        res.status(500).json({ msg: 'Error al obtener el historial de comprobantes.' });
+    }
+};
+
+// Obtener las métricas y gráficos para el Dashboard B2B
+exports.obtenerDashboardB2B = async (req, res) => {
+    const proveedorId = req.usuario.proveedor_id;
+    
+    if (!proveedorId) {
+        return res.status(403).json({ msg: 'Acceso denegado.' });
+    }
+
+    try {
+        // 1. Consulta maestra para los KPIs y Gráfico 1 (Corregida la lógica contable)
+        const kpisResult = await pool.query(`
+            SELECT 
+                -- Si es pendiente o parcial, y no está programado para hoy, es PENDIENTE DE PAGO
+                SUM(CASE WHEN (estado_pago = 'pendiente' OR estado_pago = 'parcial') AND programado_hoy = false THEN 1 ELSE 0 END) as pendientes,
+                
+                -- Si está programado para hoy (sea parcial o pendiente), es PROGRAMADO
+                SUM(CASE WHEN programado_hoy = true AND estado_pago != 'pagado' THEN 1 ELSE 0 END) as programados,
+                
+                -- SOLO las facturas pagadas al 100% van aquí
+                SUM(CASE WHEN estado_pago = 'pagado' THEN 1 ELSE 0 END) as pagados,
+                
+                SUM(CASE WHEN estado_pago = 'anulado' OR estado_pago = 'rechazado' THEN 1 ELSE 0 END) as rechazados
+            FROM facturas
+            WHERE proveedor_id = $1
+        `, [proveedorId]);
+
+        const datosKpis = kpisResult.rows[0];
+
+        // 2. Consulta para el Gráfico 2 (Tipos de Gasto / Servicios)
+        const tiposResult = await pool.query(`
+            SELECT categoria_gasto, COUNT(*) as cantidad
+            FROM facturas
+            WHERE proveedor_id = $1
+            GROUP BY categoria_gasto
+        `, [proveedorId]);
+
+        // Procesar las categorías (Mapeamos a los 3 colores del gráfico: Servicios, Activos, Mercadería)
+        let categorias = { servicios: 0, activos: 0, mercaderia: 0 };
+        
+        tiposResult.rows.forEach(row => {
+            const cat = (row.categoria_gasto || '').toLowerCase();
+            const cant = parseInt(row.cantidad);
+            
+            if (cat.includes('servicio')) {
+                categorias.servicios += cant;
+            } else if (cat.includes('activo') || cat.includes('fijo')) {
+                categorias.activos += cant;
+            } else {
+                categorias.mercaderia += cant; // Todo lo demás cae aquí
+            }
+        });
+
+        // 3. Empaquetamos todo y lo enviamos al Frontend
+        res.json({
+            kpis: {
+                pendientes: parseInt(datosKpis.pendientes || 0),
+                programados: parseInt(datosKpis.programados || 0),
+                pagados: parseInt(datosKpis.pagados || 0),
+                rechazados: parseInt(datosKpis.rechazados || 0)
+            },
+            graficoEstados: [
+                parseInt(datosKpis.pendientes || 0),
+                parseInt(datosKpis.programados || 0),
+                parseInt(datosKpis.pagados || 0),
+                parseInt(datosKpis.rechazados || 0)
+            ],
+            graficoTipos: [categorias.servicios, categorias.activos, categorias.mercaderia]
+        });
+
+    } catch (err) {
+        console.error("❌ Error al cargar Dashboard B2B:", err);
+        res.status(500).json({ msg: 'Error al calcular las métricas del dashboard.' });
+    }
+};

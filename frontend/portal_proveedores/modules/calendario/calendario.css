@@ -1,0 +1,63 @@
+.calendario-container {
+    background: #fff;
+    border-radius: 12px;
+    padding: 25px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+    border: 1px solid #e2e8f0;
+    animation: fadeIn 0.4s ease;
+}
+
+.calendario-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.calendario-header h2 { color: #1e1b4b; font-size: 1.4rem; display: flex; align-items: center; gap: 8px; }
+
+.btn-outline {
+    background: transparent; border: 1px solid #cbd5e1; padding: 8px 15px;
+    border-radius: 6px; color: #475569; font-weight: 600; cursor: pointer;
+    transition: 0.3s; display: inline-flex; align-items: center; gap: 5px;
+}
+.btn-outline:hover { background: #f8fafc; border-color: #94a3b8; color: #0f172a; }
+
+.alert-info {
+    background: #fefce8; border: 1px solid #fef08a; border-left: 4px solid #eab308;
+    padding: 15px 20px; border-radius: 8px; display: flex; gap: 15px; margin-bottom: 30px;
+}
+.alert-info i { font-size: 1.8rem; color: #eab308; }
+.alert-info strong { color: #854d0e; font-size: 0.95rem; }
+.alert-info p { color: #a16207; font-size: 0.85rem; margin-top: 5px; }
+
+.meses-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px;
+}
+
+.mes-card {
+    border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+}
+
+.mes-header {
+    background: #334155; color: white; text-align: center; padding: 12px;
+    font-weight: 700; font-size: 1rem; letter-spacing: 1px;
+}
+
+.mes-body {
+    padding: 15px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;
+    background: #f8fafc;
+}
+
+.dia-badge {
+    background: #fff; border: 1px solid #cbd5e1; color: #334155;
+    width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; font-weight: 700; font-size: 1.1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: 0.2s;
+}
+
+.dia-badge:hover { border-color: #06b6d4; color: #06b6d4; transform: scale(1.1); }
+.dia-badge.hoy { background: #06b6d4; color: white; border-color: #06b6d4; }

@@ -1,0 +1,46 @@
+<link rel="stylesheet" href="modules/comprobantes/comprobantes.css">
+
+<div class="comprobantes-container">
+    <div class="header-actions">
+        <h2>Historial de Comprobantes</h2>
+        <div class="search-box">
+            <i class='bx bx-search'></i>
+            <input type="text" id="buscar-comprobante" placeholder="Buscar por serie o número...">
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table-custom">
+            <thead>
+                <tr>
+                    <th>Comprobante</th>
+                    <th>Tipo</th>
+                    <th>Emisión</th>
+                    <th>Total</th>
+                    <th>Forma Pago</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-comprobantes-body">
+                </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="modal-cuotas" class="modal-overlay hidden">
+    <div class="modal-content cuotas-modal">
+        <div class="modal-header">
+            <h3><i class='bx bx-calendar'></i> Cronograma de Pagos</h3>
+            <i class='bx bx-x' onclick="cerrarModalCuotas()"></i>
+        </div>
+        <div class="modal-body">
+            <p class="cuotas-subtitle" id="cuotas-factura-titulo">Factura F001-00234</p>
+            
+            <div class="timeline" id="timeline-cuotas">
+                </div>
+        </div>
+    </div>
+</div>
+
+<script src="modules/comprobantes/comprobantes.js"></script>

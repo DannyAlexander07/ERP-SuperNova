@@ -1,0 +1,35 @@
+<link rel="stylesheet" href="modules/ordenes/ordenes.css">
+
+<div class="ordenes-container">
+    <div class="header-actions">
+        <div>
+            <h2><i class='bx bx-receipt'></i> Monitor de Órdenes de Compra</h2>
+            <p class="subtitle">Revise las órdenes de servicio o mercadería emitidas por SuperNova.</p>
+        </div>
+        <div class="search-box">
+            <i class='bx bx-search'></i>
+            <input type="text" id="buscar-oc" placeholder="Buscar por N° de Orden...">
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table-custom">
+            <thead>
+                <tr>
+                    <th>Número OC</th>
+                    <th>Fecha Doc.</th>
+                    <th>Condición Pago</th>
+                    <th>Moneda</th>
+                    <th>Monto Total</th>
+                    <th>Descripción Breve</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-ordenes-body">
+                </tbody>
+        </table>
+    </div>
+</div>
+
+<script src="modules/ordenes/ordenes.js"></script>

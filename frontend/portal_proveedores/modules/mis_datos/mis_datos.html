@@ -1,0 +1,139 @@
+<link rel="stylesheet" href="modules/mis_datos/mis_datos.css">
+
+<div class="datos-container">
+    <div class="header-actions">
+        <h2><i class='bx bx-id-card'></i> Datos Maestros del Proveedor</h2>
+        <button type="submit" form="form-datos-maestros" class="btn-guardar"><i class='bx bx-save'></i> Guardar Cambios</button>
+    </div>
+
+    <form id="form-datos-maestros">
+        
+        <div class="form-section" style="background-color: #f8fafc; border-left: 4px solid #4f46e5;">
+            <h3 class="section-title"><i class='bx bx-building-house'></i> Datos de su Cliente (SuperNova)</h3>
+            <div class="form-grid">
+                <div class="input-group">
+                    <label>RUC de SuperNova</label>
+                    <input type="text" value="20123456789" readonly class="readonly-input" style="background: transparent;">
+                </div>
+                <div class="input-group" style="grid-column: span 2;">
+                    <label>Razón Social</label>
+                    <input type="text" value="SUPERNOVA ERP S.A.C." readonly class="readonly-input" style="background: transparent;">
+                </div>
+                <div class="input-group">
+                    <label>Contacto Principal</label>
+                    <input type="text" value="Área de Logística y Pagos" readonly class="readonly-input" style="background: transparent;">
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h3 class="section-title"><i class='bx bx-store-alt'></i> Mis Datos Principales (No editables)</h3>
+            <div class="form-grid">
+                <div class="input-group">
+                    <label>RUC / ID</label>
+                    <input type="text" id="perfil-ruc" value="" readonly class="readonly-input">
+                </div>
+                <div class="input-group" style="grid-column: span 2;">
+                    <label>Razón Social</label>
+                    <input type="text" id="perfil-razon" value="" readonly class="readonly-input">
+                </div>
+                <div class="input-group">
+                    <label>Representante Legal</label>
+                    <input type="text" id="perfil-rep" value="" readonly class="readonly-input">
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="section-header-flex">
+                <h3 class="section-title" style="margin:0; border:none;">📞 Teléfonos de Contacto</h3>
+                <button type="button" class="btn-add" onclick="agregarTelefono()"><i class='bx bx-plus'></i> Agregar Teléfono</button>
+            </div>
+            <div class="table-responsive">
+                <table class="table-custom">
+                    <thead>
+                        <tr>
+                            <th style="width: 120px;">País</th>
+                            <th>N° Teléfono</th>
+                            <th style="width: 100px;">Anexo</th>
+                            <th>Persona de Contacto</th>
+                            <th style="width: 100px;">¿Principal?</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-telefonos">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="section-header-flex">
+                <h3 class="section-title" style="margin:0; border:none;">📧 Correos Electrónicos</h3>
+                <button type="button" class="btn-add" onclick="agregarCorreo()"><i class='bx bx-plus'></i> Agregar Correo</button>
+            </div>
+            <div class="table-responsive">
+                <table class="table-custom" style="min-width: 500px;">
+                    <thead>
+                        <tr>
+                            <th>Correo Electrónico</th>
+                            <th>Tipo de Correo (Área)</th>
+                            <th style="width: 100px;">¿Principal?</th>
+                            <th style="width: 80px;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-correos">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="section-header-flex">
+                <h3 class="section-title" style="margin:0; border:none;">📍 Direcciones y Sedes</h3>
+                <button type="button" class="btn-add" onclick="agregarDireccion()"><i class='bx bx-plus'></i> Agregar Dirección</button>
+            </div>
+            <div class="table-responsive">
+                <table class="table-custom" style="min-width: 700px;">
+                    <thead>
+                        <tr>
+                            <th>Departamento</th>
+                            <th>Provincia</th>
+                            <th>Distrito</th>
+                            <th>Dirección Exacta</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-direcciones">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="section-header-flex">
+                <h3 class="section-title" style="margin:0; border:none;">💳 Cuentas Bancarias Registradas</h3>
+                <button type="button" class="btn-add" onclick="agregarCuentaBancaria()"><i class='bx bx-plus'></i> Agregar Cuenta</button>
+            </div>
+            <div class="table-responsive">
+                <table class="table-custom">
+                    <thead>
+                        <tr>
+                            <th>Banco Asociado</th>
+                            <th>Tipo de Cuenta</th>
+                            <th>Moneda</th>
+                            <th>N° de Cuenta</th>
+                            <th>CCI</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-bancos">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+
+    </form>
+</div>
+
+<script src="modules/mis_datos/mis_datos.js"></script>

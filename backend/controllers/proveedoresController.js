@@ -121,3 +121,84 @@ exports.eliminarProveedor = async (req, res) => {
         res.status(500).json({ msg: 'Error del servidor al procesar la eliminación' });
     }
 };
+
+// Obtener los datos actuales del proveedor logueado
+exports.obtenerMiPerfilB2B = async (req, res) => {
+    // Leemos el ID desde el token del proveedor
+    const proveedorId = req.usuario.proveedor_id;
+    
+    if (!proveedorId) return res.status(403).json({ msg: 'Acceso denegado.' });
+
+    try {
+        const result = await pool.query(`
+            SELECT 
+                ruc, razon_social, nombre_contacto, correo_contacto, 
+                telefono, direccion, cuenta_bancaria, representante_legal
+            FROM proveedores
+            WHERE id = $1
+        `, [proveedorId]);
+
+        if (result.rows.length === 0) return res.status(404).json({ msg: 'Proveedor no encontrado.' });
+        
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error("❌ Error al obtener perfil B2B:", err);
+        res.status(500).json({ msg: 'Error al cargar sus datos.' });
+    }
+};
+
+// Actualizar datos de contacto y cuenta bancaria
+exports.actualizarMiPerfilB2B = async (req, res) => {
+    const proveedorId = req.usuario.proveedor_id;
+    const { nombre_contacto, correo_contacto, telefono, direccion, cuenta_bancaria } = req.body;
+
+    if (!proveedorId) return res.status(403).json({ msg: 'Acceso denegado.' });
+
+    try {
+        await pool.query(`
+            UPDATE proveedores 
+            SET 
+                nombre_contacto = $1, 
+                correo_contacto = $2, 
+                telefono = $3, 
+                direccion = $4, 
+                cuenta_bancaria = $5
+            WHERE id = $6
+        `, [nombre_contacto, correo_contacto, telefono, direccion, cuenta_bancaria, proveedorId]);
+
+        res.json({ msg: 'Sus datos han sido actualizados con éxito.' });
+    } catch (err) {
+        console.error("❌ Error al actualizar perfil B2B:", err);
+        res.status(500).json({ msg: 'Error al guardar los cambios.' });
+    }
+};
+
+// Generar Código de Acceso Único para el Proveedor
+exports.generarCodigoAcceso = async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        // Generar un código aleatorio de 6 caracteres (letras y números) con prefijo SPN (SuperNova)
+        // Ejemplo: SPN-A8X9F2
+        const codigoGenerado = 'SPN-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+        const result = await pool.query(
+            'UPDATE proveedores SET codigo_acceso = $1 WHERE id = $2 RETURNING codigo_acceso, razon_social, ruc',
+            [codigoGenerado, id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ msg: 'Proveedor no encontrado.' });
+        }
+
+        res.json({
+            msg: 'Código generado con éxito',
+            codigo: result.rows[0].codigo_acceso,
+            proveedor: result.rows[0].razon_social
+        });
+
+    } catch (err) {
+        console.error("❌ Error al generar código de acceso:", err.message);
+        res.status(500).json({ msg: 'Error del servidor al generar el código.' });
+    }
+};

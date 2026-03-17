@@ -1,0 +1,439 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Inter', sans-serif;
+}
+
+body {
+    display: flex;
+    height: 100vh;
+    background-color: #f1f5f9; /* Gris azulado súper elegante */
+    overflow: hidden;
+}
+
+/* =========================================
+   MENÚ LATERAL (SIDEBAR PREMIUM)
+   ========================================= */
+.sidebar {
+    width: 270px;
+    background: linear-gradient(180deg, #1e1b4b 0%, #0f172a 100%); /* Azul Espacial / Índigo oscuro */
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.3s ease;
+    z-index: 100;
+    box-shadow: 4px 0 15px rgba(0,0,0,0.1);
+}
+
+.sidebar-header {
+    padding: 25px 20px;
+    background-color: rgba(0,0,0,0.2);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.logo-text h2 {
+    font-weight: 800;
+    font-size: 1.6rem;
+    letter-spacing: 2px;
+    background: linear-gradient(90deg, #fff, #cbd5e1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.logo-text span {
+    font-size: 0.8rem;
+    color: #06b6d4; /* Cian corporativo */
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.proveedor-info {
+    margin-top: 15px;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    background: rgba(255,255,255,0.05);
+    padding: 10px 15px;
+    border-radius: 8px;
+    word-wrap: break-word;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.nav-links {
+    list-style: none;
+    padding: 15px 0;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.nav-links::-webkit-scrollbar { width: 5px; }
+.nav-links::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 5px; }
+
+.nav-section {
+    padding: 20px 20px 8px 20px;
+    font-size: 0.75rem;
+    color: #64748b;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+}
+
+.nav-links li:not(.nav-section) {
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    color: #cbd5e1;
+    border-left: 4px solid transparent;
+    margin: 4px 10px;
+    border-radius: 6px;
+}
+
+.nav-links li i {
+    font-size: 1.3rem;
+    margin-right: 15px;
+    color: #94a3b8;
+    transition: all 0.3s;
+}
+
+.nav-links li:not(.nav-section):hover {
+    background-color: rgba(255,255,255,0.05);
+    color: #fff;
+    transform: translateX(3px);
+}
+
+.nav-links li:not(.nav-section):hover i {
+    color: #fff;
+}
+
+.nav-links li.active {
+    background: linear-gradient(90deg, rgba(6, 182, 212, 0.15) 0%, transparent 100%);
+    color: #fff;
+    border-left-color: #06b6d4; /* Indicador cian */
+}
+
+.nav-links li.active i {
+    color: #06b6d4;
+}
+
+/* =========================================
+   ÁREA PRINCIPAL Y CABECERA (TOPBAR)
+   ========================================= */
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.topbar {
+    height: 70px;
+    background-color: #ffffff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 30px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+    z-index: 10;
+}
+
+.topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+#btn-toggle-menu {
+    font-size: 1.6rem;
+    cursor: pointer;
+    color: #64748b;
+    transition: color 0.3s;
+}
+
+#btn-toggle-menu:hover { color: #06b6d4; }
+
+#topbar-titulo {
+    font-size: 1.2rem;
+    color: #1e293b;
+    font-weight: 700;
+}
+
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 25px;
+}
+
+.notification-box {
+    position: relative;
+    cursor: pointer;
+    color: #64748b;
+    transition: color 0.3s;
+}
+
+.notification-box:hover { color: #1e293b; }
+.notification-box i { font-size: 1.5rem; }
+
+.badge {
+    position: absolute;
+    top: -4px; right: -4px;
+    background-color: #ef4444; /* Rojo alerta */
+    color: white;
+    font-size: 0.65rem;
+    padding: 3px 6px;
+    border-radius: 20px;
+    font-weight: bold;
+    border: 2px solid #fff;
+}
+
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #334155;
+    font-weight: 600;
+    font-size: 0.95rem;
+    padding-left: 20px;
+    border-left: 2px solid #e2e8f0;
+}
+
+.user-profile i.bxs-user-circle { font-size: 2rem; color: #0ea5e9; }
+.user-profile i.bx-log-out { 
+    font-size: 1.5rem; 
+    cursor: pointer; 
+    color: #94a3b8;
+    transition: all 0.2s; 
+    margin-left: 10px;
+}
+.user-profile i.bx-log-out:hover { color: #ef4444; transform: scale(1.1); }
+
+/* Contenedor dinámico */
+.content-wrapper {
+    flex: 1;
+    padding: 30px;
+    overflow-y: auto;
+}
+
+/* =========================================
+   MODAL DE COMUNICADOS / NOTICIAS
+   ========================================= */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(15, 23, 42, 0.8);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+.modal-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.modal-comunicado-content {
+    background: #fff;
+    width: 90%;
+    max-width: 600px;
+    border-radius: 12px;
+    box-shadow: 0 25px 50px rgba(0,0,0,0.3);
+    overflow: hidden;
+    transform: translateY(0);
+    transition: transform 0.3s ease;
+}
+
+.modal-overlay.hidden .modal-comunicado-content {
+    transform: translateY(-20px);
+}
+
+.modal-comunicado-header {
+    background: #06b6d4; /* Cian brillante */
+    color: white;
+    padding: 20px 25px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-comunicado-header h3 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+.modal-comunicado-header i.bx-x {
+    font-size: 1.8rem;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.modal-comunicado-header i.bx-x:hover {
+    transform: rotate(90deg);
+}
+
+.modal-comunicado-body {
+    padding: 30px;
+    color: #334155;
+}
+
+.modal-comunicado-body h2 {
+    color: #1e1b4b;
+    margin-bottom: 15px;
+    font-size: 1.4rem;
+}
+
+.modal-comunicado-body p {
+    line-height: 1.6;
+    margin-bottom: 25px;
+    font-size: 0.95rem;
+}
+
+.btn-entendido {
+    background: #1e293b;
+    color: white;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.btn-entendido:hover {
+    background: #0f172a;
+}
+
+/* =========================================
+   FIX: MENÚ DESLIZABLE Y CAPA OSCURA (MÓVILES)
+   ========================================= */
+
+/* Capa oscura invisible por defecto */
+.sidebar-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(2px);
+    z-index: 90; /* Por debajo del menú (100) pero encima del contenido */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+/* Cuando se activa la capa oscura */
+.sidebar-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+@media screen and (max-width: 768px) {
+    .sidebar {
+        position: fixed;
+        left: -280px; /* Escondido a la izquierda */
+        top: 0;
+        height: 100vh;
+        box-shadow: none;
+    }
+
+    #topbar-titulo {
+        font-size: 0.95rem;
+        color: #1e293b;
+        font-weight: 700;
+    }
+        
+    .sidebar.active {
+        left: 0; /* Aparece en pantalla */
+        box-shadow: 5px 0 25px rgba(0,0,0,0.5);
+    }
+}
+
+/* =========================================
+   FIX: CABECERA (TOPBAR) PERFECTA EN MÓVILES
+   ========================================= */
+@media screen and (max-width: 768px) {
+    .topbar {
+        padding: 0 15px; /* Reducimos el padding lateral para ganar espacio */
+    }
+
+    .topbar-left {
+        gap: 10px; /* Acercamos el menú al título */
+        width: 60%; /* Evita que empuje a los íconos de la derecha */
+    }
+
+    #topbar-titulo {
+        font-size: 0.88rem; /* Letra un poco más pequeña */
+        white-space: nowrap; /* Evita que el texto se rompa en dos líneas */
+        overflow: hidden; /* Oculta lo que no cabe */
+        text-overflow: ellipsis; /* Pone "..." si el título es muy largo */
+    }
+
+    .topbar-right {
+        gap: 15px; /* Reducimos el espacio entre campanita y usuario */
+    }
+
+    .user-profile {
+        padding-left: 12px;
+        gap: 8px;
+    }
+
+    /* 🔥 EL TRUCO MAGISTRAL: Ocultamos el nombre escrito en móviles, dejamos solo el avatar */
+    #topbar-usuario-nombre {
+        display: none; 
+    }
+    
+    .user-profile i.bxs-user-circle {
+        font-size: 1.8rem; /* Ajustamos tamaño del avatar */
+    }
+}
+
+/* Ajuste extra para celulares muy pequeños (ej: iPhone SE) */
+@media screen and (max-width: 380px) {
+    .topbar-left { width: 50%; }
+    .user-profile { padding-left: 8px; border-left: 1px solid #e2e8f0; }
+}
+
+/* =========================================
+   FIX: MENÚ DESLIZABLE TAMBIÉN EN TABLETS (Hasta 1024px)
+   ========================================= */
+@media screen and (max-width: 1024px) {
+    .sidebar {
+        position: fixed;
+        left: -280px; /* Escondido a la izquierda por defecto */
+        top: 0;
+        height: 100vh;
+        box-shadow: none;
+    }
+    
+    .sidebar.active {
+        left: 0; /* Aparece al tocar el menú */
+        box-shadow: 5px 0 25px rgba(0,0,0,0.5);
+    }
+    
+    .topbar {
+        padding: 0 20px;
+    }
+}
+
+/* =========================================
+   FIX: OCULTAR BOTÓN DE MENÚ Y OVERLAY EN PC
+   ========================================= */
+@media screen and (min-width: 1025px) {
+    /* Oculta el ícono de menú de la cabecera en pantallas grandes */
+    .topbar-left .bx-menu {
+        display: none !important;
+    }
+    
+    /* Previene que la capa oscura aparezca por error en PC */
+    .sidebar-overlay {
+        display: none !important;
+    }
+}

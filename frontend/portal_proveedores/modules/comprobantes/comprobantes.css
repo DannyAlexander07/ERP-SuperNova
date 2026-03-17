@@ -1,0 +1,178 @@
+.comprobantes-container {
+    background: #fff;
+    border-radius: 12px;
+    padding: 25px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+    border: 1px solid #e2e8f0;
+    animation: fadeIn 0.4s ease;
+}
+
+.header-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.header-actions h2 {
+    color: #1e293b;
+    font-size: 1.3rem;
+}
+
+.search-box {
+    position: relative;
+    width: 300px;
+}
+
+.search-box i {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+}
+
+.search-box input {
+    width: 100%;
+    padding: 10px 15px 10px 40px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    outline: none;
+    transition: 0.3s;
+}
+
+.search-box input:focus {
+    border-color: #06b6d4;
+    box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
+}
+
+/* --- TABLA --- */
+.table-responsive {
+    overflow-x: auto;
+}
+
+.table-custom {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 800px;
+}
+
+.table-custom th {
+    background: #f8fafc;
+    color: #64748b;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    padding: 15px;
+    text-align: left;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.table-custom td {
+    padding: 15px;
+    color: #334155;
+    font-size: 0.9rem;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+}
+
+.table-custom tbody tr:hover {
+    background: #f8fafc;
+}
+
+.comprobante-id {
+    font-weight: 700;
+    color: #1e1b4b;
+}
+
+/* ETIQUETAS (BADGES) */
+.badge-pago {
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.badge-credito { background: #e0e7ff; color: #4f46e5; border: 1px solid #c7d2fe; }
+.badge-credito:hover { background: #c7d2fe; }
+
+.badge-contado { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+
+.status {
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+.status.pagado { background: #dcfce7; color: #166534; }
+.status.pendiente { background: #fef3c7; color: #b45309; }
+.status.rechazado { background: #fee2e2; color: #b91c1c; }
+
+.btn-pdf {
+    background: #ef4444;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+/* --- LÍNEA DE TIEMPO (TIMELINE) --- */
+.cuotas-modal { max-width: 500px; }
+.cuotas-subtitle { color: #64748b; font-weight: 600; margin-bottom: 20px; }
+
+.timeline {
+    position: relative;
+    padding-left: 30px;
+    margin-top: 20px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e2e8f0;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 25px;
+}
+
+.timeline-icon {
+    position: absolute;
+    left: -30px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    border: 3px solid #cbd5e1;
+    top: 4px;
+}
+
+.timeline-item.pagado .timeline-icon { border-color: #10b981; background: #10b981; }
+.timeline-item.pendiente .timeline-icon { border-color: #f59e0b; }
+
+.timeline-content {
+    background: #f8fafc;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.timeline-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+}
+
+.timeline-header h4 { color: #1e293b; font-size: 0.95rem; }
+.timeline-header span { font-weight: 700; color: #0ea5e9; }
+.timeline-date { font-size: 0.8rem; color: #64748b; }

@@ -48,6 +48,7 @@ const menuItems = [
     { id: 'caja_chica', icon: 'bx-wallet-alt', text: 'Caja Chica', roles: ['superadmin', 'admin', 'gerente', 'cajero', 'finanzas', 'contabilidad'] },
     { id: 'inventario', icon: 'bx-box', text: 'Inventario', roles: ['superadmin', 'admin', 'cajero', 'logistica', 'gerente'] },
     { id: 'proveedores', icon: 'bx-store-alt', text: 'Proveedores', roles: ['superadmin', 'admin', 'logistica', 'gerente', 'finanzas', 'contabilidad'] },
+    { id: 'ordenes_compra', icon: 'bx-cart-add', text: 'Órdenes de Compra', roles: ['superadmin', 'admin', 'logistica', 'gerente', 'finanzas'] },
     { id: 'facturas', icon: 'bx-receipt', text: 'Facturas', roles: ['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad'] },
     { id: 'prestamos', icon: 'bx-credit-card', text: 'Créditos', roles: ['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad'] },
     { id: 'clientes', icon: 'bx-user-pin', text: 'Clientes', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'finanzas', 'contabilidad'] },
@@ -203,6 +204,7 @@ async function loadModule(moduleId) {
                 'caja_chica': 'initCajaChica',
                 'caja': 'initCaja', // Flujo de caja
                 'proveedores': 'initProveedores',
+                'ordenes_compra': 'initOrdenesCompra',
                 'configuracion': 'initConfiguracion',
                 'perfil': 'initPerfil',
                 'calendario': 'initCalendario',

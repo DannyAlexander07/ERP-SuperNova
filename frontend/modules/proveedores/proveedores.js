@@ -66,6 +66,9 @@
                 <td>
                     <div class="action-buttons">
                         <button class="btn-action edit" onclick="window.editarProveedor(${prov.id})" title="Editar"><i class='bx bx-edit-alt'></i></button>
+                        
+                        <button class="btn-action" onclick="window.generarCodigoAcceso(${prov.id})" title="Generar Código para Portal B2B" style="color: #6366f1; background: #e0e7ff;"><i class='bx bx-key'></i></button>
+
                         <button class="btn-action delete" onclick="window.eliminarProveedor(${prov.id})" title="Eliminar"><i class='bx bx-trash'></i></button>
                     </div>
                 </td>
@@ -313,6 +316,36 @@
             renderTabla();
         };
     }
+
+    // Función para generar y mostrar el código de acceso del proveedor
+    window.generarCodigoAcceso = async function(proveedorId) {
+        // Confirmación de seguridad
+        if(!confirm('¿Desea generar un nuevo código de acceso para este proveedor?\n\nNota: Si ya tenía uno, el anterior quedará invalidado.')) return;
+
+        const token = localStorage.getItem('token');
+        
+        try {
+            const res = await fetch(`http://localhost:3000/api/proveedores/${proveedorId}/generar-codigo`, {
+                method: 'PUT',
+                headers: { 'x-auth-token': token }
+            });
+            
+            const data = await res.json();
+
+            if (res.ok) {
+                // Usamos un 'prompt' para que tu equipo pueda copiar el código fácilmente con Ctrl+C
+                prompt(`✅ CÓDIGO GENERADO EXITOSAMENTE\n\nProveedor: ${data.proveedor}\n\nCópielo y envíeselo por WhatsApp o Correo:`, data.codigo);
+                
+                // Si tienes una función que recarga tu tabla, llámala aquí (ejemplo: cargarTablaProveedores())
+                // cargarTablaProveedores(); 
+            } else {
+                alert('❌ Error: ' + data.msg);
+            }
+        } catch (err) {
+            console.error('Error al generar código:', err);
+            alert('Error de conexión con el servidor.');
+        }
+    };
 
     window.initProveedores();
 
