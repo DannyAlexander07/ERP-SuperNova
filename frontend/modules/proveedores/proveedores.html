@@ -5,9 +5,14 @@
             <h2>Gestión de Proveedores</h2>
             <p>Administra la cartera de socios comerciales y sus condiciones de crédito.</p>
         </div>
-        <button class="btn-primary" onclick="abrirModalProveedor()">
-            <i class='bx bx-plus'></i> Nuevo Proveedor
-        </button>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn-secondary" onclick="generarInvitacionProveedor()" style="background-color: #4f46e5; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 5px; font-weight: 500;">
+                <i class='bx bx-key'></i> Generar Invitación
+            </button>
+            <button class="btn-primary" onclick="abrirModalProveedor()">
+                <i class='bx bx-plus'></i> Nuevo Proveedor
+            </button>
+        </div>
     </div>
 
     <div class="table-toolbar">
@@ -49,10 +54,10 @@
         </div>
     </div>
 
-    <div id="modal-proveedor" class="modal-overlay">
-        <div class="modal-content slide-in-right">
+    <div id="modal-proveedor" class="modal-overlay hidden">
+        <div class="modal-content slide-in-right" style="max-width: 800px; width: 90%; max-height: 95vh; overflow-y: auto;">
             <div class="modal-header">
-                <h3>Nuevo Socio Comercial</h3>
+                <h3>Socio Comercial</h3>
                 <button class="btn-close" onclick="cerrarModalProveedor()"><i class='bx bx-x'></i></button>
             </div>
             
@@ -61,40 +66,44 @@
                     
                     <input type="hidden" id="prov-id">
 
-                    <h4 class="form-subtitle">Datos Fiscales</h4>
+                    <h4 class="form-subtitle" style="color: #4f46e5; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px;">Datos Fiscales y Legales</h4>
                     
-                    <div class="input-group">
-                        <div style="position: relative;">
-                            <input type="text" id="prov-ruc" required placeholder=" " maxlength="11" pattern="[0-9]*" 
-                                style="padding-right: 40px; font-weight: 600;"> 
-                            
-                            <label>RUC / DNI</label>
-                            
-                            <i class='bx bx-search-alt' 
-                            onclick="buscarDatosSunat('prov-ruc', 'prov-razon', 'prov-direccion')" 
-                            title="Consultar en SUNAT/RENIEC"
-                            style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); 
-                                    cursor: pointer; color: #4f46e5; font-size: 22px; z-index: 10; padding: 4px;">
-                            </i>
+                    <div class="row-grid" style="display: grid; grid-template-columns: 1fr 2fr; gap: 15px;">
+                        <div class="input-group">
+                            <div style="position: relative;">
+                                <input type="text" id="prov-ruc" required placeholder=" " maxlength="11" pattern="[0-9]*" 
+                                    style="padding-right: 40px; font-weight: 600;"> 
+                                <label>RUC / DNI</label>
+                                <i class='bx bx-search-alt' 
+                                onclick="buscarDatosSunat('prov-ruc', 'prov-razon', 'prov-direccion')" 
+                                title="Consultar en SUNAT"
+                                style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); 
+                                        cursor: pointer; color: #4f46e5; font-size: 22px; z-index: 10; padding: 4px;">
+                                </i>
+                            </div>
                         </div>
-                        <small style="color: #64748b; font-size: 11px; margin-top: 4px; display: block;">
-                            <i class='bx bx-info-circle'></i> Clic en la lupa para autocompletar datos.
-                        </small>
+                        <div class="input-group">
+                            <input type="text" id="prov-razon" required placeholder=" ">
+                            <label>Razón Social / Nombre Completo</label>
+                        </div>
                     </div>
 
                     <div class="input-group">
-                        <input type="text" id="prov-razon" required placeholder=" ">
-                        <label>Razón Social / Nombre Completo</label>
+                        <input type="text" id="prov-rep-legal" placeholder=" ">
+                        <label>Representante Legal (Nuevo)</label>
                     </div>
 
-                    <div class="input-group">
-                        <input type="text" id="prov-direccion" placeholder=" ">
-                        <label>Dirección Fiscal</label>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+                        <h4 class="form-subtitle" style="margin: 0; color: #4f46e5;">📍 Direcciones</h4>
+                        <button type="button" onclick="agregarDirERP()" style="background: #e0e7ff; color: #4f46e5; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;"><i class='bx bx-plus'></i> Añadir</button>
                     </div>
+                    <table class="premium-table" style="font-size: 12px; margin-bottom: 15px;">
+                        <tbody id="lista-dir-erp"></tbody>
+                    </table>
 
-                    <h4 class="form-subtitle">Condiciones Comerciales</h4>
+                    <h4 class="form-subtitle" style="color: #4f46e5; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px;">Condiciones Comerciales</h4>
                     
-                    <div class="row-grid">
+                    <div class="row-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                         <div class="input-group">
                             <select id="prov-categoria" required>
                                 <option value="" disabled selected>Seleccionar...</option>
@@ -114,28 +123,29 @@
                         </div>
                     </div>
 
-                    <h4 class="form-subtitle">Contacto y Pagos</h4>
-                    
-                    <div class="input-group">
-                        <input type="text" id="prov-contacto" placeholder=" ">
-                        <label>Nombre de la Persona de Contacto</label>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+                        <h4 class="form-subtitle" style="margin: 0; color: #4f46e5;">📞 Teléfonos de Contacto</h4>
+                        <button type="button" onclick="agregarTelERP()" style="background: #e0e7ff; color: #4f46e5; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;"><i class='bx bx-plus'></i> Añadir</button>
                     </div>
+                    <table class="premium-table" style="font-size: 12px; margin-bottom: 15px;">
+                        <tbody id="lista-tel-erp"></tbody>
+                    </table>
 
-                    <div class="row-grid">
-                        <div class="input-group">
-                            <input type="email" id="prov-email" placeholder=" ">
-                            <label>Correo Pedidos</label>
-                        </div>
-                        <div class="input-group">
-                            <input type="tel" id="prov-telefono" placeholder=" ">
-                            <label>Teléfono / Celular</label>
-                        </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+                        <h4 class="form-subtitle" style="margin: 0; color: #4f46e5;">📧 Correos</h4>
+                        <button type="button" onclick="agregarCorreoERP()" style="background: #e0e7ff; color: #4f46e5; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;"><i class='bx bx-plus'></i> Añadir</button>
                     </div>
+                    <table class="premium-table" style="font-size: 12px; margin-bottom: 15px;">
+                        <tbody id="lista-correo-erp"></tbody>
+                    </table>
 
-                    <div class="input-group">
-                        <input type="text" id="prov-banco" placeholder=" ">
-                        <label>Cuenta Bancaria (Banco - N°)</label>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+                        <h4 class="form-subtitle" style="margin: 0; color: #4f46e5;">💳 Cuentas Bancarias</h4>
+                        <button type="button" onclick="agregarBancoERP()" style="background: #e0e7ff; color: #4f46e5; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;"><i class='bx bx-plus'></i> Añadir</button>
                     </div>
+                    <table class="premium-table" style="font-size: 12px; margin-bottom: 15px;">
+                        <tbody id="lista-banco-erp"></tbody>
+                    </table>
 
                 </form>
             </div>
@@ -144,6 +154,39 @@
                 <button class="btn-cancel" onclick="cerrarModalProveedor()">Cancelar</button>
                 <button class="btn-primary" id="btn-guardar-proveedor" onclick="guardarProveedor()">Guardar Proveedor</button>
             </div>
+        </div>
+    </div>
+
+    <div id="modal-acceso-b2b" class="modal-overlay hidden">
+        <div class="modal-content slide-in-bottom" style="max-width: 420px; padding: 30px; border-radius: 16px; text-align: center; height: auto !important; position: relative;">
+            <i class='bx bx-lock-alt' style="font-size: 50px; color: #4f46e5; margin-bottom: 15px;"></i>
+            <h3 style="margin-bottom: 5px; color: #1e293b; font-size: 22px;">Acceso al Portal B2B</h3>
+            <p id="b2b-proveedor-nombre" style="font-size: 14px; color: #64748b; margin-bottom: 25px; font-weight: 500;">Cargando...</p>
+            
+            <form id="form-acceso-b2b">
+                <input type="hidden" id="b2b-prov-id">
+                
+                <div style="display: flex; flex-direction: column; text-align: left; margin-bottom: 20px;">
+                    <label style="font-size: 13px; color: #475569; font-weight: 700; margin-bottom: 8px;">Correo de Acceso Registrado</label>
+                    <input type="email" id="b2b-correo" readonly 
+                           style="width: 100%; padding: 12px 15px; border-radius: 8px; background-color: #f1f5f9; border: 1px dashed #cbd5e1; color: #334155; font-weight: 600; cursor: not-allowed; text-align: center; font-size: 14px; outline: none; box-sizing: border-box;">
+                    <small style="font-size: 11px; color: #94a3b8; display: block; margin-top: 6px;">* Este es el correo principal con el que ingresa el proveedor.</small>
+                </div>
+
+                <div style="display: flex; flex-direction: column; text-align: left; margin-bottom: 25px;">
+                    <label style="font-size: 13px; color: #ef4444; font-weight: 700; margin-bottom: 8px;">🔑 Forzar Nueva Contraseña</label>
+                    <input type="text" id="b2b-nueva-pass" placeholder="Escriba la nueva contraseña..." required
+                           style="width: 100%; padding: 12px 15px; border-radius: 8px; border: 1px solid #fca5a5; background: #fff; box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1); font-size: 14px; outline: none; transition: 0.2s; box-sizing: border-box;">
+                </div>
+
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button type="button" class="btn-cancel" onclick="cerrarModalB2B()" style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; font-weight: 600; color: #475569;">Cancelar</button>
+                    
+                    <button type="submit" class="btn-primary" id="btn-guardar-b2b" style="flex: 1; padding: 12px; border-radius: 8px; background-color: #ef4444; border: none; cursor: pointer; font-weight: 600; color: #fff; display: flex; align-items: center; justify-content: center; gap: 5px;">
+                        <i class='bx bx-check-shield'></i> Sobrescribir
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

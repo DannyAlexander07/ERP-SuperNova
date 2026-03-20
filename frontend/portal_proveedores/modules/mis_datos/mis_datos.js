@@ -59,18 +59,119 @@
         tablaCorreos.appendChild(tr);
     };
 
-    // --- AGREGAR DIRECCIÓN ---
+    // ==========================================
+    // 🗺️ MEGA DICCIONARIO UBIGEO INCORPORADO B2B
+    // ==========================================
+    const UBIGEO = {
+        "Amazonas": { "Chachapoyas": ["Chachapoyas"], "Bagua": ["Bagua", "Aramango"], "Utcubamba": ["Bagua Grande", "Cajaruro"] },
+        "Áncash": { "Huaraz": ["Huaraz", "Independencia"], "Santa": ["Chimbote", "Nuevo Chimbote", "Casma", "Huarmey"] },
+        "Apurímac": { "Abancay": ["Abancay", "Tamburco"], "Andahuaylas": ["Andahuaylas", "Talavera", "San Jerónimo"] },
+        "Arequipa": { "Arequipa": ["Arequipa", "Cayma", "Cerro Colorado", "Yanahuara", "Paucarpata", "Socabaya", "Sachaca", "Tiabaya", "Hunter", "Miraflores", "Selva Alegre", "Mariano Melgar"], "Caylloma": ["Chivay", "Majes"], "Islay": ["Mollendo", "Cocachacra"], "Camaná": ["Camaná", "Samuel Pastor"] },
+        "Ayacucho": { "Huamanga": ["Ayacucho", "Carmen Alto", "San Juan Bautista", "Jesús Nazareno"], "Huanta": ["Huanta"] },
+        "Cajamarca": { "Cajamarca": ["Cajamarca", "Baños del Inca"], "Jaén": ["Jaén", "Bellavista"], "Chota": ["Chota"] },
+        "Callao": { "Callao": ["Callao", "Bellavista", "Carmen de la Legua", "La Perla", "La Punta", "Ventanilla", "Mi Perú"] },
+        "Cusco": { "Cusco": ["Cusco", "Wanchaq", "San Sebastián", "San Jerónimo", "Santiago"], "Urubamba": ["Urubamba", "Ollantaytambo", "Machupicchu"], "La Convención": ["Santa Ana", "Pichari"], "Canchis": ["Sicuani"] },
+        "Huancavelica": { "Huancavelica": ["Huancavelica", "Ascensión"], "Tayacaja": ["Pampas"] },
+        "Huánuco": { "Huánuco": ["Huánuco", "Amarilis", "Pillco Marca"], "Leoncio Prado": ["Rupa-Rupa", "Castillo Grande"] },
+        "Ica": { "Ica": ["Ica", "La Tinguiña", "Parcona", "Subtanjalla"], "Chincha": ["Chincha Alta", "Pueblo Nuevo", "Grocio Prado"], "Pisco": ["Pisco", "San Clemente", "Túpac Amaru Inca"], "Nazca": ["Nazca", "Vista Alegre"], "Palpa": ["Palpa"] },
+        "Junín": { "Huancayo": ["Huancayo", "El Tambo", "Chilca"], "Chanchamayo": ["Chanchamayo", "Pichanaqui"], "Satipo": ["Satipo", "Pangoa"], "Tarma": ["Tarma"], "Yauli": ["La Oroya"] },
+        "La Libertad": { "Trujillo": ["Trujillo", "Víctor Larco", "El Porvenir", "La Esperanza", "Florencia de Mora", "Huanchaco", "Laredo", "Moche", "Salaverry"], "Ascope": ["Ascope", "Chicama", "Casa Grande"], "Pacasmayo": ["San Pedro de Lloc", "Pacasmayo", "Guadalupe"], "Chepén": ["Chepén"] },
+        "Lambayeque": { "Chiclayo": ["Chiclayo", "José Leonardo Ortiz", "La Victoria", "Pimentel", "Monsefú", "Tumán"], "Lambayeque": ["Lambayeque", "Olmos", "Mochumi", "Motupe"], "Ferreñafe": ["Ferreñafe"] },
+        "Lima": { 
+            "Lima": ["Lima","Ancón","Ate","Barranco","Breña","Carabayllo","Chaclacayo","Chorrillos","Cieneguilla","Comas","El Agustino","Independencia","Jesús María","La Molina","La Victoria","Lince","Los Olivos","Lurigancho-Chosica","Lurín","Magdalena del Mar","Pueblo Libre","Miraflores","Pachacámac","Pucusana","Puente Piedra","Punta Hermosa","Punta Negra","Rímac","San Bartolo","San Borja","San Isidro","San Juan de Lurigancho","San Juan de Miraflores","San Luis","San Martín de Porres","San Miguel","Santa Anita","Santa María del Mar","Santa Rosa","Santiago de Surco","Surquillo","Villa El Salvador","Villa María del Triunfo"], 
+            "Cañete": ["San Vicente de Cañete", "Asia", "Chilca", "Mala", "Cerro Azul", "Lunahuaná"], 
+            "Huaral": ["Huaral", "Chancay", "Aucallama"], 
+            "Huaura": ["Huacho", "Santa María", "Huaura", "Végueta"], 
+            "Barranca": ["Barranca", "Paramonga", "Supe", "Supe Puerto"] 
+        },
+        "Loreto": { "Maynas": ["Iquitos", "Punchana", "Belén", "San Juan Bautista"], "Alto Amazonas": ["Yurimaguas"] },
+        "Madre de Dios": { "Tambopata": ["Puerto Maldonado", "Inambari", "Laberinto"] },
+        "Moquegua": { "Mariscal Nieto": ["Moquegua", "Samegua", "Torata"], "Ilo": ["Ilo", "Pacocha", "El Algarrobal"] },
+        "Pasco": { "Pasco": ["Chaupimarca", "Yanacancha", "Simón Bolívar"], "Oxapampa": ["Oxapampa", "Villa Rica"] },
+        "Piura": { "Piura": ["Piura", "Castilla", "Catacaos", "Tambogrande", "Veintiséis de Octubre"], "Sullana": ["Sullana", "Bellavista", "Marcavelica"], "Talara": ["Pariñas", "La Brea", "Máncora"], "Paita": ["Paita", "Colán"], "Sechura": ["Sechura"] },
+        "Puno": { "Puno": ["Puno", "Ácora"], "San Román": ["Juliaca", "San Miguel"], "El Collao": ["Ilave"] },
+        "San Martín": { "San Martín": ["Tarapoto", "Morales", "La Banda de Shilcayo"], "Moyobamba": ["Moyobamba", "Yantaló"], "Rioja": ["Rioja", "Nueva Cajamarca"], "Tocache": ["Tocache"] },
+        "Tacna": { "Tacna": ["Tacna", "Alto de la Alianza", "Ciudad Nueva", "Gregorio Albarracín Lanchipa", "Pocollay"] },
+        "Tumbes": { "Tumbes": ["Tumbes", "Corrales", "La Cruz"], "Zarumilla": ["Zarumilla", "Aguas Verdes"], "Contralmirante Villar": ["Zorritos"] },
+        "Ucayali": { "Coronel Portillo": ["Callería", "Yarinacocha", "Manantay", "Campoverde"], "Padre Abad": ["Padre Abad", "Irazola"] }
+    };
+
+    // ==========================================
+    // FUNCIONES DE CASCADA Y CREACIÓN DE FILAS
+    // ==========================================
+    window.cambiarDepB2B = function(selectDep, provSeleccionada = '') {
+        const tr = selectDep.closest('tr');
+        const selectProv = tr.querySelector('[data-field="prov"]');
+        const selectDist = tr.querySelector('[data-field="dist"]');
+        const dep = selectDep.value;
+
+        selectProv.innerHTML = '<option value="" disabled selected>Provincia</option>';
+        selectDist.innerHTML = '<option value="" disabled selected>Distrito</option>';
+
+        if (dep && UBIGEO[dep]) {
+            for (let prov in UBIGEO[dep]) {
+                selectProv.innerHTML += `<option value="${prov}" ${prov === provSeleccionada ? 'selected' : ''}>${prov}</option>`;
+            }
+        }
+    };
+
+    window.cambiarProvB2B = function(selectProv, distSeleccionado = '') {
+        const tr = selectProv.closest('tr');
+        const selectDep = tr.querySelector('[data-field="dep"]');
+        const selectDist = tr.querySelector('[data-field="dist"]');
+        const dep = selectDep.value;
+        const prov = selectProv.value;
+
+        selectDist.innerHTML = '<option value="" disabled selected>Distrito</option>';
+
+        if (dep && prov && UBIGEO[dep] && UBIGEO[dep][prov]) {
+            UBIGEO[dep][prov].forEach(dist => {
+                selectDist.innerHTML += `<option value="${dist}" ${dist === distSeleccionado ? 'selected' : ''}>${dist}</option>`;
+            });
+        }
+    };
+
     window.agregarDireccion = function(dep = '', prov = '', dist = '', exacta = '') {
+        const tablaDirecciones = document.getElementById('tabla-direcciones');
         if(!tablaDirecciones) return;
         const tr = document.createElement('tr');
+
+        // Construimos las opciones de Departamento al vuelo
+        let depOptions = `<option value="" disabled ${!dep ? 'selected' : ''}>Departamento</option>`;
+        for (let d in UBIGEO) {
+            depOptions += `<option value="${d}" ${d === dep ? 'selected' : ''}>${d}</option>`;
+        }
+
         tr.innerHTML = `
-            <td><input type="text" class="form-control" data-field="dep" value="${dep}" placeholder="Departamento"></td>
-            <td><input type="text" class="form-control" data-field="prov" value="${prov}" placeholder="Provincia"></td>
-            <td><input type="text" class="form-control" data-field="dist" value="${dist}" placeholder="Distrito"></td>
+            <td>
+                <select class="form-control" data-field="dep" onchange="cambiarDepB2B(this)">
+                    ${depOptions}
+                </select>
+            </td>
+            <td>
+                <select class="form-control" data-field="prov" onchange="cambiarProvB2B(this)">
+                    <option value="" disabled selected>Provincia</option>
+                </select>
+            </td>
+            <td>
+                <select class="form-control" data-field="dist">
+                    <option value="" disabled selected>Distrito</option>
+                </select>
+            </td>
             <td><input type="text" class="form-control" data-field="exacta" value="${exacta}" placeholder="Av. / Calle / Mz." required></td>
             <td><button type="button" class="btn-delete" onclick="eliminarFila(this)"><i class='bx bx-trash'></i></button></td>
         `;
         tablaDirecciones.appendChild(tr);
+
+        // Desempaquetado inteligente (Si el proveedor ya tenía datos guardados, activamos la cascada para mostrar su info)
+        if (dep) {
+            const selectDep = tr.querySelector('[data-field="dep"]');
+            window.cambiarDepB2B(selectDep, prov);
+            if (prov) {
+                const selectProv = tr.querySelector('[data-field="prov"]');
+                window.cambiarProvB2B(selectProv, dist);
+            }
+        }
     };
 
     // --- AGREGAR CUENTA BANCARIA ---
@@ -196,10 +297,15 @@
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const btnGuardar = form.querySelector('.btn-guardar');
-            const originalText = btnGuardar.innerHTML;
-            btnGuardar.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Guardando...";
-            btnGuardar.disabled = true;
+            // 🔥 EL ARREGLO: Atrapa cualquier botón de tipo submit o el primer botón del form
+            const btnGuardar = form.querySelector('button[type="submit"]') || form.querySelector('button');
+            let originalText = "Guardar Datos";
+            
+            if (btnGuardar) {
+                originalText = btnGuardar.innerHTML;
+                btnGuardar.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Guardando...";
+                btnGuardar.disabled = true;
+            }
 
             try {
                 // 📦 Empaquetar TELÉFONOS
@@ -284,8 +390,11 @@
                 console.error(err);
                 alert("Error de conexión al guardar los datos.");
             } finally {
-                btnGuardar.innerHTML = originalText;
-                btnGuardar.disabled = false;
+                // 🔥 EL ARREGLO (Restaurar el botón solo si existe)
+                if (btnGuardar) {
+                    btnGuardar.innerHTML = originalText;
+                    btnGuardar.disabled = false;
+                }
             }
         });
     }

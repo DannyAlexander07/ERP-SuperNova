@@ -174,5 +174,71 @@ const enviarPlanPagosAprobado = async (facturasAprobadas) => {
     }
 };
 
-// Actualizamos las exportaciones
-module.exports = { enviarCorreoComprobante, enviarPlanPagosAprobado };
+/**
+ * Envía la contraseña temporal al proveedor
+ * @param {String} destinatario - Correo del proveedor
+ * @param {String} nombre - Nombre del usuario o contacto
+ * @param {String} claveTemporal - La contraseña generada
+ */
+const enviarCorreoRecuperacion = async (destinatario, nombre, claveTemporal) => {
+    try {
+        const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f3f4f6; }
+                .container { max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+                .header { background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%); padding: 40px 20px; text-align: center; }
+                .header h1 { color: white; margin: 0; font-size: 24px; font-weight: 600; letter-spacing: 0.5px; }
+                .content { padding: 40px 30px; color: #334155; text-align: center; }
+                .greeting { font-size: 18px; margin-bottom: 20px; color: #1e293b; text-align: left; }
+                .warning-box { background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; text-align: left; font-size: 14px; color: #b45309; }
+                .password-display { font-size: 32px; font-family: monospace; color: #ea580c; font-weight: 800; background: #f8fafc; padding: 20px; border-radius: 12px; border: 2px dashed #cbd5e1; letter-spacing: 2px; margin: 25px 0; display: inline-block;}
+                .footer { background-color: #f1f5f9; padding: 20px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>Recuperación de Acceso</h1>
+                </div>
+                <div class="content">
+                    <p class="greeting">Hola, <strong>${nombre}</strong></p>
+                    <p style="text-align: left; line-height: 1.6;">Has solicitado recuperar tu acceso al Portal B2B de SuperNova. Se ha generado la siguiente contraseña temporal para tu cuenta:</p>
+                    
+                    <div class="password-display">
+                        ${claveTemporal}
+                    </div>
+
+                    <div class="warning-box">
+                        <strong>⚠️ Importante:</strong> Por medidas de seguridad, el sistema te solicitará cambiar esta contraseña inmediatamente después de iniciar sesión.
+                    </div>
+                </div>
+                <div class="footer">
+                    <p>© ${new Date().getFullYear()} SuperNova Portal B2B</p>
+                    <p>Si no solicitaste este cambio, por favor contacta a soporte inmediatamente.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        `;
+
+        const info = await transporter.sendMail({
+            from: '"Portal B2B SuperNova" <' + process.env.SMTP_USER + '>',
+            to: destinatario,
+            subject: '🔒 Recuperación de Contraseña - Portal B2B',
+            html: htmlContent
+        });
+
+        console.log("✅ Correo de recuperación enviado ID:", info.messageId);
+        return { success: true };
+
+    } catch (error) {
+        console.error("❌ Error enviando correo de recuperación:", error);
+        return { success: false, error: error.message };
+    }
+};
+
+// ACUÉRDATE DE EXPORTAR LA NUEVA FUNCIÓN AQUÍ ABAJO:
+module.exports = { enviarCorreoComprobante, enviarPlanPagosAprobado, enviarCorreoRecuperacion };

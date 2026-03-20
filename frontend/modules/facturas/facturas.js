@@ -435,27 +435,34 @@
             // --- 🔍 PASO 1: DETECTAR ESTADO EN TESORERÍA ---
             const enTesoreria = c.programado_hoy === true;
 
-            // --- 📅 PASO 2: CÁLCULO DE SEMÁFORO (Sincronización Total) ---
-            // Parseo seguro de fecha YYYY-MM-DD
-            const parts = c.fecha_vencimiento.split('-');
-            const vence = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-            vence.setHours(0, 0, 0, 0);
-
-            // Diferencia exacta en días
-            const diffTime = vence.getTime() - hoy.getTime();
-            const diasRestantes = Math.round(diffTime / (1000 * 60 * 60 * 24));
-            
+            // --- 📅 PASO 2: CÁLCULO DE SEMÁFORO (Sincronización Total y Blindada) ---
             let semaforo = '';
-            if (diasRestantes < 0) {
-                // IGUAL QUE EN GASTOS: ROJO INTENSO SI ESTÁ VENCIDO
-                const diasVencidos = Math.abs(diasRestantes);
-                semaforo = `<span class="badge" style="font-weight:900; padding: 5px 10px; border-radius: 4px; font-size: 0.65rem; background-color: #fee2e2; color: #dc2626;">${diasVencidos} DÍAS VENC.</span>`;
-            } else if (diasRestantes <= 7) {
-                // AMARILLO SI VENCE PRONTO
-                semaforo = `<span class="badge" style="padding: 5px 10px; border-radius: 4px; font-size: 0.65rem; background-color: #fef9c3; color: #ca8a04;">⚠️ VENCE EN ${diasRestantes} DÍAS</span>`;
+            
+            // 🛡️ BLINDAJE: Verificamos si realmente existe la fecha_vencimiento
+            if (c.fecha_vencimiento) {
+                // Parseo seguro de fecha YYYY-MM-DD
+                const parts = c.fecha_vencimiento.split('-');
+                const vence = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                vence.setHours(0, 0, 0, 0);
+
+                // Diferencia exacta en días
+                const diffTime = vence.getTime() - hoy.getTime();
+                const diasRestantes = Math.round(diffTime / (1000 * 60 * 60 * 24));
+                
+                if (diasRestantes < 0) {
+                    // ROJO INTENSO SI ESTÁ VENCIDO
+                    const diasVencidos = Math.abs(diasRestantes);
+                    semaforo = `<span class="badge" style="font-weight:900; padding: 5px 10px; border-radius: 4px; font-size: 0.65rem; background-color: #fee2e2; color: #dc2626;">${diasVencidos} DÍAS VENC.</span>`;
+                } else if (diasRestantes <= 7) {
+                    // AMARILLO SI VENCE PRONTO
+                    semaforo = `<span class="badge" style="padding: 5px 10px; border-radius: 4px; font-size: 0.65rem; background-color: #fef9c3; color: #ca8a04;">⚠️ VENCE EN ${diasRestantes} DÍAS</span>`;
+                } else {
+                    // VERDE SI ESTÁ AL DÍA
+                    semaforo = `<span class="badge" style="padding: 5px 10px; border-radius: 4px; font-size: 0.65rem; background-color: #dcfce7; color: #16a34a;">AL DÍA</span>`;
+                }
             } else {
-                // VERDE SI ESTÁ AL DÍA
-                semaforo = `<span class="badge" style="padding: 5px 10px; border-radius: 4px; font-size: 0.65rem; background-color: #dcfce7; color: #16a34a;">AL DÍA</span>`;
+                // 🛡️ Si la factura es antigua y no tiene fecha en la BD
+                semaforo = `<span class="badge" style="padding: 5px 10px; border-radius: 4px; font-size: 0.65rem; background-color: #f1f5f9; color: #64748b;">SIN FECHA</span>`;
             }
 
             // Cálculos financieros
@@ -494,7 +501,7 @@
 
             // Construcción de la fila
             tr.innerHTML = `
-                <td style="font-weight: 500;font-size: 0.65rem;">${c.fecha_vencimiento.slice(0, 10)}</td>
+                <td style="font-weight: 500;font-size: 0.65rem;">${c.fecha_vencimiento ? c.fecha_vencimiento.slice(0, 10) : '-'}</td>
                 <td style="text-align:center;font-size: 0.65rem;">${semaforo}</td>
                 <td style="color:#6366f1; font-weight:500;font-size: 0.65rem;">
                     ${c.fecha_programacion ? c.fecha_programacion.slice(0, 10) : '<small style="color:#cbd5e1">No prog.</small>'}

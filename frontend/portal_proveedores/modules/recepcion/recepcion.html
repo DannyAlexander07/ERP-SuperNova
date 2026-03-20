@@ -7,7 +7,7 @@
     </div>
 
     <form id="form-subir-factura" class="recepcion-form">
-        
+
         <div class="form-section">
             <h3 class="section-title">1. Datos del Comprobante</h3>
             <div class="form-grid">
@@ -27,9 +27,16 @@
                     <label>Número Correlativo *</label>
                     <input type="number" id="rec-numero" placeholder="Ej: 0001234" required>
                 </div>
-                <div class="input-group">
-                    <label>Fecha de Emisión *</label>
-                    <input type="date" id="rec-fecha" required>
+                
+                <div style="display: flex; gap: 15px; width: 100%;">
+                    <div class="input-group" style="flex: 1;">
+                        <label>Emisión *</label>
+                        <input type="date" id="rec-fecha" required>
+                    </div>
+                    <div class="input-group" style="flex: 1;">
+                        <label>Vencimiento *</label>
+                        <input type="date" id="rec-vencimiento" required>
+                    </div>
                 </div>
             </div>
         </div>
@@ -39,8 +46,14 @@
             <div class="form-grid-single">
                 <div class="input-group">
                     <label>Orden de Compra Asociada (Opcional)</label>
-                    <input type="text" id="rec-oc" placeholder="Si SuperNova le generó una OC, ingrese el código aquí (Ej: OC-2026-0015)">
-                    <small class="help-text"><i class='bx bx-info-circle'></i> Si es un servicio recurrente sin OC, deje este campo en blanco.</small>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="rec-oc" placeholder="Ej: OC-2026-0015" style="flex: 1;">
+                        <button type="button" class="btn-validar-oc" onclick="validarOrdenCompra()" style="background: #4f46e5; color: white; border: none; padding: 0 20px; border-radius: 5px; cursor: pointer; font-weight: bold; white-space: nowrap; transition: 0.3s;">
+                            <i class='bx bx-search-alt-2'></i> Validar OC
+                        </button>
+                    </div>
+                    <input type="hidden" id="rec-oc-id">
+                    <small class="help-text"><i class='bx bx-info-circle'></i> Dele clic a "Validar OC" para autocompletar y bloquear los importes exactos.</small>
                 </div>
             </div>
         </div>

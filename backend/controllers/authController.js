@@ -2,6 +2,7 @@
 const pool = require('../db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { enviarCorreoRecuperacion } = require('../utils/emailService');
 
 exports.login = async (req, res) => {
     const { email, password } = req.body;
@@ -182,45 +183,54 @@ exports.loginProveedor = async (req, res) => {
     }
 };
 
-// 🔥 NUEVO: REGISTRO DE PROVEEDOR CON CÓDIGO ÚNICO
+// 🔥 REGISTRO DE PROVEEDOR B2B (CON REP. LEGAL Y TELÉFONO)
 exports.registrarProveedor = async (req, res) => {
-    const { codigo_acceso, correo, clave, nombre } = req.body;
+    const { codigo_acceso, correo, clave, nombre, ruc, razon_social, rep_legal, telefono } = req.body;
 
-    if (!codigo_acceso || !correo || !clave || !nombre) {
+    if (!codigo_acceso || !correo || !clave || !nombre || !ruc || !razon_social || !rep_legal || !telefono) {
         return res.status(400).json({ msg: 'Todos los campos son obligatorios.' });
     }
 
     try {
-        // 1. Verificamos si el código de acceso existe en la tabla proveedores
-        // y si ese proveedor ya tiene un usuario enlazado (para evitar registros dobles)
         const proveedorResult = await pool.query(
-            'SELECT id, razon_social FROM proveedores WHERE codigo_acceso = $1',
-            [codigo_acceso]
+            'SELECT id FROM proveedores WHERE codigo_acceso = $1 AND estado = $2',
+            [codigo_acceso, 'PENDIENTE']
         );
 
         if (proveedorResult.rows.length === 0) {
-            return res.status(400).json({ msg: 'El Código de Acceso es inválido o ya fue utilizado.' });
+            return res.status(400).json({ msg: 'El Código de Acceso es inválido o caducó.' });
         }
 
         const proveedor = proveedorResult.rows[0];
 
-        // 2. Verificamos que el correo no esté en uso en todo el sistema
-        const correoExistente = await pool.query(
-            'SELECT id FROM usuarios WHERE correo = $1',
-            [correo]
-        );
-
+        const correoExistente = await pool.query('SELECT id FROM usuarios WHERE correo = $1', [correo]);
         if (correoExistente.rows.length > 0) {
             return res.status(400).json({ msg: 'El correo electrónico ya está registrado en el sistema.' });
         }
 
-        // 3. Encriptamos la contraseña
         const salt = await bcrypt.genSalt(10);
         const claveEncriptada = await bcrypt.hash(clave, salt);
 
-        // 4. Creamos el usuario y lo enlazamos al proveedor. 
-        // ¡TODO EN UNA TRANSACCIÓN PARA QUE SEA SEGURO!
-        await pool.query('BEGIN'); // Iniciar transacción
+        // Empaquetamos el teléfono y correo como JSON inicial para que las tablas no estén vacías
+        const telefonoJSON = JSON.stringify([{ pais: 'Perú (+51)', numero: telefono, anexo: '', persona: nombre, principal: true }]);
+        const correoJSON = JSON.stringify([{ correo: correo, tipo: 'Administrador del Portal', principal: true }]);
+
+        await pool.query('BEGIN'); 
+
+        // Actualizamos el proveedor con los nuevos campos
+        await pool.query(
+            `UPDATE proveedores 
+             SET ruc = $1, 
+                 razon_social = $2, 
+                 representante_legal = $3, 
+                 telefono = $4,
+                 correo_contacto = $5,
+                 nombre_contacto = $6,
+                 estado = 'activo', 
+                 codigo_acceso = NULL 
+             WHERE id = $7`,
+            [ruc, razon_social, rep_legal, telefonoJSON, correoJSON, nombre, proveedor.id]
+        );
 
         const nuevoUsuario = await pool.query(
             `INSERT INTO usuarios (nombres, correo, clave, rol, proveedor_id, estado) 
@@ -228,34 +238,60 @@ exports.registrarProveedor = async (req, res) => {
             [nombre, correo, claveEncriptada, proveedor.id]
         );
 
-        // 5. Borramos el código de acceso del proveedor para que no se vuelva a usar
-        await pool.query(
-            'UPDATE proveedores SET codigo_acceso = NULL WHERE id = $1',
-            [proveedor.id]
-        );
-
-        await pool.query('COMMIT'); // Confirmar transacción
-
-        const ip_origen = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'IP Desconocida';
-
-        // 6. Registro de Auditoría
-        try {
-            await pool.query(
-                `INSERT INTO auditoria (usuario_id, modulo, accion, detalle, ip_origen) 
-                VALUES ($1, 'PORTAL_B2B', 'REGISTRO', $2, $3)`,
-                [nuevoUsuario.rows[0].id, `Nuevo usuario registrado para el proveedor: ${proveedor.razon_social}`, ip_origen]
-            );
-        } catch (auditErr) {
-            console.error("⚠️ Error grabando auditoría de registro:", auditErr.message);
-        }
-
-        res.status(201).json({ 
-            msg: `Registro exitoso. Bienvenido(a) al Portal B2B de SuperNova. Proveedor: ${proveedor.razon_social}` 
-        });
+        await pool.query('COMMIT'); 
+        res.status(201).json({ msg: `Registro exitoso. Bienvenido(a) al Portal B2B.` });
 
     } catch (err) {
-        await pool.query('ROLLBACK'); // Deshacer cambios si algo falla
+        await pool.query('ROLLBACK');
         console.error("❌ Error en Registro Proveedor:", err.message);
-        res.status(500).json({ msg: 'Error interno del servidor al procesar el registro.' });
+        res.status(500).json({ msg: 'Error interno del servidor.' });
+    }
+};
+
+// =======================================================
+// RECUPERAR CONTRASEÑA (GENERAR CLAVE TEMPORAL)
+// =======================================================
+// =======================================================
+// RECUPERAR CONTRASEÑA (GENERAR CLAVE TEMPORAL Y ENVIAR EMAIL)
+// =======================================================
+exports.recuperarClave = async (req, res) => {
+    const { correo } = req.body;
+
+    if (!correo) return res.status(400).json({ msg: 'Debe proporcionar un correo electrónico.' });
+
+    try {
+        const usuarioResult = await pool.query('SELECT id, nombres FROM usuarios WHERE correo = $1', [correo]);
+        
+        if (usuarioResult.rows.length === 0) {
+            return res.status(404).json({ msg: 'No encontramos ninguna cuenta vinculada a este correo electrónico.' });
+        }
+
+        const usuario = usuarioResult.rows[0];
+
+        // Generar clave temporal
+        const claveTemporal = 'Temp-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+
+        // Encriptar y guardar (Activando la bandera de requiere_cambio)
+        const salt = await bcrypt.genSalt(10);
+        const claveEncriptada = await bcrypt.hash(claveTemporal, salt);
+
+        await pool.query(
+            'UPDATE usuarios SET clave = $1, requiere_cambio_clave = true WHERE id = $2', 
+            [claveEncriptada, usuario.id]
+        );
+
+        // 📨 USAMOS TU EMAIL SERVICE AQUÍ
+        const envio = await enviarCorreoRecuperacion(correo, usuario.nombres, claveTemporal);
+
+        if (envio.success) {
+            res.json({ msg: 'Hemos enviado una contraseña temporal a tu correo electrónico. Por favor, revisa tu bandeja de entrada o Spam.' });
+        } else {
+            // Si el correo falla (credenciales malas, sin internet, etc), avisamos pero sin romper el sistema
+            res.status(500).json({ msg: 'Se generó la clave, pero hubo un problema enviando el correo. Contacte a soporte.' });
+        }
+
+    } catch (err) {
+        console.error("❌ Error en Recuperar Clave:", err.message);
+        res.status(500).json({ msg: 'Error interno del servidor.' });
     }
 };

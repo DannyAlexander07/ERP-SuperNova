@@ -230,6 +230,7 @@
     .btn-primary, .btn-outline {
         width: 100%;
         justify-content: center;
+        color: #8aa6b4;
     }
 
     /* El grid del modal pasa de 2 columnas a 1 columna */
@@ -256,4 +257,21 @@
         flex-direction: column-reverse; /* El botón principal queda arriba en móvil */
         gap: 10px;
     }
+}
+
+.page-controls button {
+    padding: 5px 10px;
+    border: 1px solid #ddd;
+    background: white;
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+}
+.page-controls button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.page-controls button:hover:not(:disabled) {
+    background: #637279;
 }

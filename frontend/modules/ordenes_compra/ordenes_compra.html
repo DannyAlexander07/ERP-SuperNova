@@ -23,36 +23,42 @@
                 </tbody>
         </table>
     </div>
+    <div class="pagination" style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-top: 1px solid #edf2f9; margin-top: 10px;">
+        <span class="page-info" id="oc-page-info" style="color: #64748b; font-size: 13px; font-weight: 500;">Mostrando página 1</span>
+        <div class="page-controls" id="oc-page-controls" style="display: flex; gap: 5px;">
+            </div>
+    </div>
 </div>
 
 <div id="modal-crear-oc" class="modal-overlay hidden">
     <div class="modal-content" style="max-width: 800px;">
         <div class="modal-header">
-            <h3>Emitir Nueva Orden de Compra</h3>
-            <i class='bx bx-x' onclick="cerrarModalOC()"></i>
+            <h3><i class='bx bx-file-blank'></i> Emitir Nueva Orden de Compra</h3>
+            <i class='bx bx-x' onclick="cerrarModalOC()" style="cursor: pointer; font-size: 24px;"></i>
         </div>
         <form id="form-crear-oc" class="modal-body">
             <div class="form-grid">
+                
                 <div class="input-group" style="grid-column: span 2;">
                     <label>Proveedor *</label>
                     <select id="oc-proveedor" required>
-                        <option value="">Cargando proveedores...</option>
-                    </select>
+                        <option value="">Seleccione un proveedor...</option>
+                        </select>
                 </div>
                 
                 <div class="input-group">
-                    <label>Código de Orden *</label>
-                    <div style="display: flex; align-items: stretch; border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; background: #fff;">
-                        <span style="background: #f8fafc; padding: 12px 15px; border-right: 1px solid #cbd5e1; color: #475569; font-weight: 800; font-size: 0.8rem; width: 4rem;">OC - </span>
-                        <input type="text" id="oc-codigo" placeholder="2026-0001" required style="border: none; border-radius: 0; width: 100%; outline: none; padding: 12px 15px; font-weight: 600; color: #0ea5e9;">
+                    <label>Código de Orden</label>
+                    <div style="display: flex; align-items: stretch; border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; background: #f8fafc;">
+                        <span style="background: #e2e8f0; padding: 12px 15px; border-right: 1px solid #cbd5e1; color: #475569; font-weight: 800; font-size: 0.8rem; width: 4rem; display: flex; align-items: center; justify-content: center;">OC</span>
+                        <input type="text" id="oc-codigo" value="AUTOGENERADO" readonly style="border: none; border-radius: 0; width: 100%; outline: none; padding: 12px 15px; font-weight: 700; color: #64748b; background: transparent; text-align: center;">
                     </div>
                 </div>
 
                 <div class="input-group">
                     <label>Sede Destino *</label>
                     <select id="oc-sede" required>
-                        <option value="">Cargando sedes...</option>
-                    </select>
+                        <option value="">Seleccione una sede...</option>
+                        </select>
                 </div>
 
                 <div class="input-group">
@@ -73,8 +79,14 @@
                 </div>
                 
                 <div class="input-group">
-                    <label>Condición de Pago</label>
-                    <input type="text" id="oc-condicion" placeholder="Ej: A 30 días">
+                    <label>Condición de Pago *</label>
+                    <select id="oc-condicion" required>
+                        <option value="Al contado">Al contado</option>
+                        <option value="15 días">15 días</option>
+                        <option value="30 días">30 días</option>
+                        <option value="45 días">45 días</option>
+                        <option value="60 días">60 días</option>
+                    </select>
                 </div>
 
                 <div class="input-group">
@@ -85,10 +97,10 @@
                 <div class="input-group">
                     <label>Impuesto / Retención *</label>
                     <select id="oc-tipo-impuesto" required>
-                        <option value="0.18">IGV (18%)</option>
-                        <option value="0.105">IGV (10.5%)</option>
-                        <option value="0">Exonerado / Inafecto (0%)</option>
-                        <option value="0.08">Retención RxH (8%)</option>
+                        <option value="0.18" data-operacion="suma">IGV (18%)</option>
+                        <option value="0.105" data-operacion="suma">IGV (10.5%)</option>
+                        <option value="0" data-operacion="suma">Exonerado / Inafecto (0%)</option>
+                        <option value="0.08" data-operacion="resta">Retención RxH (8%)</option>
                     </select>
                 </div>
 
@@ -103,19 +115,19 @@
                 </div>
 
                 <div class="input-group" style="grid-column: span 2;">
-                    <label>Observaciones</label>
-                    <textarea id="oc-obs" rows="2" placeholder="Detalles del servicio o compra..."></textarea>
+                    <label>Observaciones (Concepto)</label>
+                    <textarea id="oc-obs" rows="2" placeholder="Detalles exactos del servicio o producto a comprar..."></textarea>
                 </div>
 
-                <div class="input-group" style="grid-column: span 2;">
-                    <label>Subir PDF de la Orden (Obligatorio) *</label>
-                    <input type="file" id="oc-pdf" accept=".pdf" required style="border: 2px dashed #cbd5e1; padding: 15px; cursor: pointer; background: #f8fafc;">
+                <div class="input-group" style="grid-column: span 2; background: #eff6ff; padding: 15px; border-radius: 8px; border: 1px dashed #3b82f6; text-align: center;">
+                    <i class='bx bxs-file-pdf' style="font-size: 28px; color: #3b82f6;"></i>
+                    <p style="margin: 5px 0 0 0; color: #1e3a8a; font-weight: 600; font-size: 0.9rem;">El PDF corporativo se generará automáticamente al emitir la orden.</p>
                 </div>
             </div>
             
             <div class="form-actions" style="margin-top: 20px; text-align: right;">
                 <button type="button" class="btn-outline" onclick="cerrarModalOC()">Cancelar</button>
-                <button type="submit" class="btn-primary" id="btn-submit-oc"><i class='bx bx-save'></i> Guardar y Emitir</button>
+                <button type="submit" class="btn-primary" id="btn-submit-oc"><i class='bx bx-check-shield'></i> Emitir Orden</button>
             </div>
         </form>
     </div>

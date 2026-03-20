@@ -3,11 +3,13 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 
-// Ruta: POST /api/auth/login
+// Ruta: POST /api/auth/login (Tu ERP Interno)
 router.post('/login', authController.login);
 
+// Rutas exclusivas del Portal B2B
 router.post('/login-proveedor', authController.loginProveedor);
-
-router.post('/proveedores/registro', authController.registrarProveedor);
+router.post('/registrar-proveedor', authController.registrarProveedor); 
+// Ruta para recuperar contraseña del portal B2B
+router.post('/recuperar-clave', authController.recuperarClave);
 
 module.exports = router;

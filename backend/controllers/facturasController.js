@@ -992,7 +992,7 @@ exports.notificarPlanPagos = async (req, res) => {
 // =======================================================
 
 exports.recepcionarFacturaB2B = async (req, res) => {
-    // 1. 🛡️ SEGURIDAD ABSOLUTA: Extraemos quién es desde el Token, NO desde el formulario
+    // 1. 🛡️ SEGURIDAD ABSOLUTA
     const proveedorId = req.usuario.proveedor_id;
     const usuarioId = req.usuario.id;
 
@@ -1000,13 +1000,12 @@ exports.recepcionarFacturaB2B = async (req, res) => {
         return res.status(403).json({ msg: 'Acceso denegado. Esta acción es exclusiva para Proveedores.' });
     }
 
-    // 2. Capturamos los datos del formulario (FormData)
+    // 2. Capturamos los datos del formulario (Ahora con Fecha Vencimiento y OC_ID)
     const {
-        tipo_documento, serie, numero_documento, fecha_emision, 
-        orden_compra, moneda, base_imponible, monto_igv, monto_total
+        tipo_documento, serie, numero_documento, fecha_emision, fecha_vencimiento,
+        orden_compra, orden_compra_id, moneda, base_imponible, monto_igv, monto_total
     } = req.body;
 
-    // 3. Capturamos los archivos (Multer .fields)
     const pdfFile = req.files && req.files['pdf'] ? req.files['pdf'][0] : null;
     const xmlFile = req.files && req.files['xml'] ? req.files['xml'][0] : null;
 
@@ -1020,16 +1019,15 @@ exports.recepcionarFacturaB2B = async (req, res) => {
         await client.query('BEGIN');
 
         // 4. Insertar la Cabecera en la tabla Facturas
-        // Por defecto: Sin sede asignada, estado 'pendiente' y aprobación 'registrado'
         const insertFac = await client.query(`
             INSERT INTO facturas (
                 proveedor_id, usuario_id, tipo_documento, numero_documento,
-                fecha_emision, moneda, base_imponible, monto_igv, monto_total,
-                orden_compra, evidencia_url, estado_pago, estado_aprobacion,
+                fecha_emision, fecha_vencimiento, moneda, base_imponible, monto_igv, monto_total,
+                orden_compra, orden_compra_id, evidencia_url, estado_pago, estado_aprobacion,
                 categoria_gasto, clasificacion, descripcion
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 
-                'pendiente', 'registrado', 'POR_CLASIFICAR', 'Operativo', $12
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 
+                'pendiente', 'registrado', 'POR_CLASIFICAR', 'Operativo', $14
             ) RETURNING id
         `, [
             proveedorId, 
@@ -1037,12 +1035,14 @@ exports.recepcionarFacturaB2B = async (req, res) => {
             tipo_documento, 
             `${serie.toUpperCase()}-${numero_documento}`,
             fecha_emision, 
+            fecha_vencimiento || null, // 🔥 NUEVO
             moneda, 
             base_imponible, 
             monto_igv, 
             monto_total,
             orden_compra || null, 
-            pdfFile.path, // La URL de Cloudinary del PDF
+            orden_compra_id ? parseInt(orden_compra_id) : null, // 🔥 NUEVO (ID exacto)
+            pdfFile.path, 
             `Recepción B2B: ${tipo_documento} de Proveedor`
         ]);
 
@@ -1053,6 +1053,16 @@ exports.recepcionarFacturaB2B = async (req, res) => {
             INSERT INTO facturas_documentos (factura_id, nombre_archivo, ruta_archivo, tipo_documento)
             VALUES ($1, $2, $3, 'XML SUNAT')
         `, [facturaId, xmlFile.originalname, xmlFile.path]);
+
+        // 🔥🔥🔥 EL CANDADO DE SEGURIDAD 🔥🔥🔥
+        // Si el proveedor usó una Orden de Compra, la marcamos como "USADA" inmediatamente.
+        if (orden_compra_id) {
+            await client.query(`
+                UPDATE ordenes_compra 
+                SET estado = 'USADA' 
+                WHERE id = $1
+            `, [parseInt(orden_compra_id)]);
+        }
 
         // 6. Rastro de Auditoría
         await client.query(`
@@ -1178,5 +1188,50 @@ exports.obtenerDashboardB2B = async (req, res) => {
     } catch (err) {
         console.error("❌ Error al cargar Dashboard B2B:", err);
         res.status(500).json({ msg: 'Error al calcular las métricas del dashboard.' });
+    }
+};
+
+// =======================================================
+// 10. VALIDAR ORDEN DE COMPRA (Boton Mágico B2B)
+// =======================================================
+exports.validarOrdenCompraB2B = async (req, res) => {
+    const { codigo } = req.params;
+    const proveedorId = req.usuario.proveedor_id;
+
+    if (!proveedorId) {
+        return res.status(403).json({ msg: 'Acceso denegado.' });
+    }
+
+    try {
+        // Buscamos la Orden de Compra por su código (Ignorando mayúsculas/minúsculas)
+        const result = await pool.query(`
+            SELECT id, moneda, monto_subtotal, monto_igv, monto_total, estado, proveedor_id
+            FROM ordenes_compra
+            WHERE UPPER(codigo_oc) = UPPER($1)
+        `, [codigo.trim()]);
+
+        // 1. Validar si existe
+        if (result.rows.length === 0) {
+            return res.status(404).json({ msg: 'La Orden de Compra no existe o está mal escrita.' });
+        }
+
+        const oc = result.rows[0];
+
+        // 2. Validar si es SUYA (Evita que un proveedor use la OC de otro)
+        if (oc.proveedor_id !== proveedorId) {
+            return res.status(403).json({ msg: 'Esta Orden de Compra le pertenece a otra empresa.' });
+        }
+
+        // 3. Validar si YA FUE USADA
+        if (oc.estado === 'USADA' || oc.estado === 'FACTURADA') {
+            return res.status(400).json({ msg: '⚠️ Esta Orden de Compra ya fue procesada en una factura anterior.' });
+        }
+
+        // Si pasa todas las pruebas, se la devolvemos al frontend para que autocomplete
+        res.json(oc);
+
+    } catch (err) {
+        console.error("❌ Error validando OC B2B:", err);
+        res.status(500).json({ msg: 'Error interno al validar la Orden de Compra.' });
     }
 };

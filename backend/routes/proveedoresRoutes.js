@@ -14,4 +14,12 @@ router.get('/b2b/mi-perfil', checkAuth, proveedoresController.obtenerMiPerfilB2B
 router.put('/b2b/mi-perfil', checkAuth, proveedoresController.actualizarMiPerfilB2B);
 router.put('/:id/generar-codigo', checkAuth, checkRole(['superadmin', 'admin', 'logistica', 'gerente', 'finanzas']), proveedoresController.generarCodigoAcceso);
 
+// 🔥 NUEVA RUTA: Forzar Contraseña B2B
+router.post('/:id/forzar-password', checkAuth, checkRole(['superadmin', 'admin', 'logistica', 'gerente', 'finanzas']), proveedoresController.forzarPasswordB2B);
+
+// ==========================================
+// RUTAS ONBOARDING (INVITACIÓN B2B)
+// ==========================================
+router.post('/generar-invitacion', checkAuth, checkRole(['superadmin', 'admin', 'logistica', 'gerente', 'finanzas']), proveedoresController.generarCodigoInvitacion);
+
 module.exports = router;

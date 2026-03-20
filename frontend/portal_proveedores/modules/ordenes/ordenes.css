@@ -141,3 +141,29 @@
     background: #ef4444;
     color: white;
 }
+
+.page-controls button {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    width: 35px;
+    height: 35px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.page-controls button:hover:not(:disabled) {
+    background: #4f46e5;
+    color: white;
+    border-color: #4f46e5;
+}
+
+.page-controls button:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+/* Badge del estado */
+.status-pill.emitida { background: #dcfce7; color: #15803d; }
+.status-pill.pendiente { background: #fef9c3; color: #854d0e; }

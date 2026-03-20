@@ -415,3 +415,234 @@
         justify-content: center;
     }
 }
+
+/* =========================================================
+   PARCHE: ESTILOS PARA EL SUPER MODAL B2B (Múltiples Datos)
+   ========================================================= */
+
+/* 1. Ajuste general del Modal para evitar desbordes */
+#modal-proveedor .modal-content {
+    max-width: 800px !important; /* Más ancho para que quepan las tablas */
+    width: 95vw; /* En móviles ocupará el 95% del ancho */
+}
+
+/* Evitar scroll horizontal en el cuerpo del modal */
+#modal-proveedor .modal-body {
+    overflow-x: hidden; 
+    padding: 20px;
+}
+
+/* 2. Rediseño de las tablas dinámicas (Bancos, Correos, etc) */
+#modal-proveedor .premium-table {
+    min-width: 100% !important; /* Quitamos el min-width de 800px que rompía el modal */
+    border: 1px solid #edf2f9;
+    border-radius: 8px;
+    overflow: hidden; /* Para que los bordes redondeados se vean */
+    margin-bottom: 25px !important;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+}
+
+#modal-proveedor .premium-table td {
+    padding: 8px 10px; /* Menos padding para ahorrar espacio */
+    background: #fff;
+}
+
+/* 3. Estilo Premium para los inputs dentro de las tablas */
+#modal-proveedor .premium-table input[type="text"],
+#modal-proveedor .premium-table input[type="email"],
+#modal-proveedor .premium-table input[type="number"] {
+    width: 100%;
+    padding: 10px 12px;
+    background: #f8f9fe;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #333;
+    transition: all 0.2s ease;
+}
+
+/* Efecto focus en los inputs de tabla */
+#modal-proveedor .premium-table input:focus {
+    background: #fff;
+    border: 1px solid var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(105, 92, 254, 0.1);
+    outline: none;
+}
+
+/* Quitar los bordes grises feos que tenían antes */
+#modal-proveedor .premium-table input[data-f] {
+    border-bottom: none !important;
+}
+
+/* 4. Botones de Acción (Eliminar fila y Checkbox) */
+#modal-proveedor .premium-table button {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #ffebee !important;
+    color: #f44336 !important;
+    margin: 0 auto;
+    transition: 0.2s;
+}
+
+#modal-proveedor .premium-table button:hover {
+    background: #f44336 !important;
+    color: #fff !important;
+}
+
+#modal-proveedor .premium-table input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--primary-color);
+}
+
+/* =========================================================
+   RESPONSIVIDAD MÓVIL (Tablas colapsables tipo Tarjetas)
+   ========================================================= */
+@media (max-width: 768px) {
+    /* Las filas grid normales se apilan */
+    #modal-proveedor .row-grid {
+        grid-template-columns: 1fr !important;
+        gap: 0;
+    }
+
+    /* Ocultar cabeceras de tablas (thead) si las tuvieras */
+    #modal-proveedor .premium-table thead {
+        display: none;
+    }
+
+    /* Convertir cada fila (tr) de la tabla en una "Tarjeta" */
+    #modal-proveedor .premium-table tr {
+        display: block;
+        margin-bottom: 10px;
+        border: 1px solid #edf2f9;
+        border-radius: 8px;
+        padding: 10px;
+        background: #fbfbfb;
+        position: relative;
+    }
+
+    /* Convertir celdas (td) en bloques */
+    #modal-proveedor .premium-table td {
+        display: block;
+        padding: 5px 0;
+        border: none;
+        background: transparent;
+    }
+
+    /* Ajustar botón de basura en móvil (esquina superior derecha) */
+    #modal-proveedor .premium-table td:last-child {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 0;
+    }
+}
+
+/* =========================================================
+   CORRECCIÓN: PANEL LATERAL FULL HEIGHT (100% ALTO)
+   ========================================================= */
+
+/* 1. Forzamos al overlay a estirar el contenido de arriba a abajo */
+#modal-proveedor.modal-overlay {
+    align-items: stretch !important;
+}
+
+/* 2. Hacemos que la tarjeta blanca ocupe el 100% del alto */
+#modal-proveedor .modal-content {
+    height: 100vh !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important; /* Le quitamos los bordes redondeados para que pegue a los márgenes */
+    margin: 0 !important;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 3. Aseguramos que el scroll SOLO ocurra en el centro (body) y no en el header/footer */
+#modal-proveedor .modal-body {
+    flex: 1;
+    overflow-y: auto !important;
+    padding: 25px 30px;
+}
+
+/* 4. Mantenemos el footer anclado abajo */
+#modal-proveedor .modal-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    background: #fff;
+    box-shadow: 0 -4px 10px rgba(0,0,0,0.03); /* Sombra suave hacia arriba */
+}
+
+/* =========================================================
+   🔐 MODAL DE SEGURIDAD B2B (LA LLAVECITA)
+   ========================================================= */
+
+#modal-acceso-b2b {
+    display: flex; /* Oculto por defecto con .hidden, pero flex cuando está activo */
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.6); /* Fondo oscuro elegante */
+    backdrop-filter: blur(4px);
+    z-index: 9999; /* Por encima de todo */
+}
+
+/* Estado oculto */
+#modal-acceso-b2b.hidden {
+    display: none !important;
+}
+
+/* Animación de entrada desde abajo */
+.slide-in-bottom {
+    transform: translateY(50px);
+    opacity: 0;
+    animation: slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideUpFade {
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Estilos internos del modal de seguridad */
+#modal-acceso-b2b .modal-content {
+    background: #ffffff;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    border: 1px solid #e2e8f0;
+    height: auto !important; /* Para que no ocupe toda la pantalla como el otro modal */
+    max-height: 90vh;
+}
+
+#modal-acceso-b2b input:focus {
+    outline: none;
+    border-color: #ef4444 !important; /* Borde rojo al enfocar la contraseña */
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2) !important;
+}
+
+#modal-acceso-b2b .btn-cancel {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    color: #475569;
+}
+
+#modal-acceso-b2b .btn-cancel:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+#modal-acceso-b2b .btn-primary {
+    transition: all 0.2s ease;
+}
+
+#modal-acceso-b2b .btn-primary:hover {
+    background-color: #dc2626 !important; /* Rojo más oscuro al pasar el mouse */
+    border-color: #dc2626 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}

@@ -4,11 +4,14 @@ const pool = require('../db');
 // 1. OBTENER TODOS LOS PROVEEDORES (Solo Activos)
 exports.obtenerProveedores = async (req, res) => {
     try {
-        // Blindaje: No mostramos proveedores con estado 'ELIMINADO'
+        // 🔥 MAGIA: Cruzamos con la tabla usuarios para sacar el correo real de acceso B2B
+        // Si el proveedor tiene un usuario creado, traemos su correo de login como 'correo_b2b'
         const result = await pool.query(`
-            SELECT * FROM proveedores 
-            WHERE estado != 'ELIMINADO' OR estado IS NULL 
-            ORDER BY id DESC
+            SELECT p.*, u.correo AS correo_b2b 
+            FROM proveedores p
+            LEFT JOIN usuarios u ON p.id = u.proveedor_id
+            WHERE p.estado != 'ELIMINADO' OR p.estado IS NULL 
+            ORDER BY p.id DESC
         `);
         res.json(result.rows);
     } catch (err) {
@@ -19,18 +22,16 @@ exports.obtenerProveedores = async (req, res) => {
 
 // 2. CREAR NUEVO PROVEEDOR
 exports.crearProveedor = async (req, res) => {
-    let { ruc, razon, direccion, categoria, dias, contacto, email, telefono, banco, estado } = req.body;
+    // Recibimos exactamente los nombres de variables que manda el nuevo Frontend
+    let { ruc, razon_social, representante_legal, direccion, categoria, dias_credito, nombre_contacto, correo_contacto, telefono, cuenta_bancaria, estado } = req.body;
 
-    if (!razon || razon.trim() === '') {
-            return res.status(400).json({ msg: 'La Razón Social (Nombre de la empresa) es obligatoria.' });
-        }
+    if (!razon_social || razon_social.trim() === '') {
+        return res.status(400).json({ msg: 'La Razón Social (Nombre de la empresa) es obligatoria.' });
+    }
 
     try {
-        // 🛡️ BLINDAJE 1: Sanitización (Evitar espacios accidentales en campos clave)
         const rucLimpio = ruc ? ruc.toString().trim() : null;
-        const telefonoLimpio = telefono ? telefono.toString().trim() : null;
 
-        // Validación de RUC único
         const existing = await pool.query('SELECT id FROM proveedores WHERE ruc = $1', [rucLimpio]);
         if (existing.rows.length > 0) {
             return res.status(400).json({ msg: 'Ya existe un proveedor registrado con este RUC/DNI.' });
@@ -38,13 +39,13 @@ exports.crearProveedor = async (req, res) => {
 
         const result = await pool.query(
             `INSERT INTO proveedores (
-                ruc, razon_social, direccion, categoria, dias_credito, 
+                ruc, razon_social, representante_legal, direccion, categoria, dias_credito, 
                 nombre_contacto, correo_contacto, telefono, cuenta_bancaria, estado
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
             RETURNING *`,
             [
-                rucLimpio, razon, direccion || null, categoria, parseInt(dias) || 0, 
-                contacto || null, email || null, telefonoLimpio, banco || null, estado || 'activo'
+                rucLimpio, razon_social, representante_legal || null, direccion || null, categoria, parseInt(dias_credito) || 0, 
+                nombre_contacto || null, correo_contacto || null, telefono || null, cuenta_bancaria || null, estado || 'activo'
             ]
         );
 
@@ -59,16 +60,15 @@ exports.crearProveedor = async (req, res) => {
 // 3. ACTUALIZAR PROVEEDOR (Con validación de duplicados cruzados)
 exports.actualizarProveedor = async (req, res) => {
     const { id } = req.params;
-    let { ruc, razon, direccion, categoria, dias, contacto, email, telefono, banco, estado } = req.body;
+    let { ruc, razon_social, representante_legal, direccion, categoria, dias_credito, nombre_contacto, correo_contacto, telefono, cuenta_bancaria, estado } = req.body;
 
-    if (!razon || razon.trim() === '') {
-            return res.status(400).json({ msg: 'La Razón Social (Nombre de la empresa) es obligatoria.' });
-        }
+    if (!razon_social || razon_social.trim() === '') {
+        return res.status(400).json({ msg: 'La Razón Social (Nombre de la empresa) es obligatoria.' });
+    }
 
     try {
         const rucLimpio = ruc ? ruc.toString().trim() : null;
 
-        // 🛡️ BLINDAJE 2: Evitar que al editar se use un RUC que ya tiene OTRO proveedor
         const checkRuc = await pool.query('SELECT id FROM proveedores WHERE ruc = $1 AND id != $2', [rucLimpio, id]);
         if (checkRuc.rows.length > 0) {
             return res.status(400).json({ msg: 'El RUC ingresado ya pertenece a otro proveedor registrado.' });
@@ -76,12 +76,12 @@ exports.actualizarProveedor = async (req, res) => {
 
         const result = await pool.query(
             `UPDATE proveedores SET 
-                ruc = $1, razon_social = $2, direccion = $3, categoria = $4, dias_credito = $5, 
-                nombre_contacto = $6, correo_contacto = $7, telefono = $8, cuenta_bancaria = $9, estado = $10
-            WHERE id = $11 RETURNING *`,
+                ruc = $1, razon_social = $2, representante_legal = $3, direccion = $4, categoria = $5, dias_credito = $6, 
+                nombre_contacto = $7, correo_contacto = $8, telefono = $9, cuenta_bancaria = $10, estado = $11
+            WHERE id = $12 RETURNING *`,
             [
-                rucLimpio, razon, direccion || null, categoria, parseInt(dias) || 0, 
-                contacto || null, email || null, telefono || null, banco || null, estado,
+                rucLimpio, razon_social, representante_legal || null, direccion || null, categoria, parseInt(dias_credito) || 0, 
+                nombre_contacto || null, correo_contacto || null, telefono || null, cuenta_bancaria || null, estado,
                 id
             ]
         );
@@ -202,3 +202,107 @@ exports.generarCodigoAcceso = async (req, res) => {
         res.status(500).json({ msg: 'Error del servidor al generar el código.' });
     }
 };
+
+// =======================================================
+// 3. ONBOARDING: GENERAR INVITACIÓN B2B (FASE 1)
+// =======================================================
+
+exports.generarCodigoInvitacion = async (req, res) => {
+    try {
+        // 1. Generamos un código aleatorio único (Ej: PRV-A7B9X)
+        const codigoUnico = 'PRV-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+
+        // 2. Creamos el "cascarón" del proveedor en la base de datos
+        const result = await pool.query(
+            `INSERT INTO proveedores (
+                ruc, razon_social, codigo_acceso, estado
+            ) VALUES (
+                '00000000000', 'EN ESPERA DE REGISTRO', $1, 'PENDIENTE'
+            ) RETURNING id, codigo_acceso`,
+            [codigoUnico]
+        );
+
+        // 3. Registro de auditoría (para saber quién generó el código)
+        const usuarioCreador = req.usuario ? req.usuario.id : null;
+        if (usuarioCreador) {
+            await pool.query(
+                `INSERT INTO auditoria (usuario_id, modulo, accion, detalle) 
+                 VALUES ($1, 'PROVEEDORES', 'GENERAR_INVITACION', $2)`,
+                [usuarioCreador, `Se generó el código de invitación: ${codigoUnico} para un nuevo proveedor.`]
+            );
+        }
+
+        // 4. Respondemos con el código creado
+        res.status(201).json({
+            msg: 'Código de invitación generado con éxito',
+            codigo: result.rows[0].codigo_acceso
+        });
+
+    } catch (err) {
+        console.error("❌ Error al generar código de invitación:", err.message);
+        res.status(500).json({ msg: 'Error interno al generar el código.' });
+    }
+};
+
+// =======================================================
+// 4. SEGURIDAD: FORZAR CAMBIO DE CONTRASEÑA B2B (MODAL LLAVECITA)
+// =======================================================
+exports.forzarPasswordB2B = async (req, res) => {
+    const { id } = req.params; // Este es el ID del proveedor
+    const { nuevaPassword, correo } = req.body;
+    const usuarioId = req.usuario ? req.usuario.id : null;
+
+    if (!nuevaPassword || nuevaPassword.length < 6) {
+        return res.status(400).json({ msg: 'La contraseña debe tener al menos 6 caracteres.' });
+    }
+
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+        const bcrypt = require('bcryptjs');
+
+        // 1. Encriptamos la nueva clave
+        const salt = await bcrypt.genSalt(10);
+        const claveEncriptada = await bcrypt.hash(nuevaPassword, salt);
+
+        // 2. 🛡️ Intentamos actualizar la clave en la tabla 'usuarios' donde coincida el proveedor_id
+        const updateRes = await client.query(
+            'UPDATE usuarios SET clave = $1 WHERE proveedor_id = $2 RETURNING id',
+            [claveEncriptada, id]
+        );
+
+        // Si el update devolvió 0 filas, significa que el proveedor existe en 'proveedores' 
+        // pero nunca se le había creado una cuenta de acceso en 'usuarios'
+        if (updateRes.rows.length === 0) {
+            // Buscamos su razón social para ponerla de nombre de usuario
+            const provRes = await client.query('SELECT razon_social FROM proveedores WHERE id = $1', [id]);
+            const razonSocial = provRes.rows.length > 0 ? provRes.rows[0].razon_social : 'Proveedor';
+
+            // Insertamos la cuenta B2B nueva (Ajusta 'estado' o 'rol' si tu tabla te pide campos obligatorios)
+            await client.query(
+                `INSERT INTO usuarios (proveedor_id, correo, clave, nombres, apellidos, estado) 
+                 VALUES ($1, $2, $3, $4, $5, 'activo')`,
+                [id, correo, claveEncriptada, razonSocial, 'B2B']
+            );
+        }
+
+        // 3. 📝 Dejamos rastro en Auditoría
+        await client.query(
+            `INSERT INTO auditoria (usuario_id, modulo, accion, registro_id, detalle) 
+             VALUES ($1, 'SEGURIDAD_B2B', 'RESET_PASSWORD', $2, $3)`,
+            [usuarioId, id, `Se forzó el cambio de clave B2B para el proveedor ID ${id}`]
+        );
+
+        await client.query('COMMIT');
+        res.json({ msg: 'Contraseña del proveedor sobrescrita con éxito.' });
+
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error("❌ Error al forzar clave B2B:", err.message);
+        res.status(500).json({ msg: 'Error interno al intentar cambiar la contraseña.' });
+    } finally {
+        client.release();
+    }
+};
+

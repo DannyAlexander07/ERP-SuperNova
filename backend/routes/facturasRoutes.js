@@ -145,4 +145,7 @@ router.get('/b2b/mis-comprobantes', checkAuth, facturasController.obtenerMisComp
 
 router.get('/b2b/dashboard', checkAuth, facturasController.obtenerDashboardB2B);
 
+// Ruta para el Botón Mágico del Portal B2B
+router.get('/validar-b2b/:codigo', checkAuth, facturasController.validarOrdenCompraB2B);
+
 module.exports = router;

@@ -31,7 +31,7 @@
                     </div>
 
                     <div class="forgot-password">
-                        <a href="#">Olvidé mi contraseña</a>
+                        <a href="javascript:void(0)" onclick="abrirModalRecuperar()">Olvidé mi contraseña</a>
                     </div>
 
                     <button type="submit" class="btn-ingresar">
@@ -50,17 +50,40 @@
     </div>
 
     <div id="modal-registro" class="modal-overlay hidden">
-        <div class="modal-content">
+        <div class="modal-content" style="max-height: 90vh; overflow-y: auto;">
             <div class="modal-header">
                 <h3>Registro de Proveedor</h3>
-                <i class='bx bx-x' onclick="cerrarModalRegistro()"></i>
+                <i class='bx bx-x' onclick="cerrarModalRegistro()" style="cursor:pointer; font-size:24px;"></i>
             </div>
             <div class="modal-body">
-                <p class="modal-instruccion">Ingresa el código de acceso único proporcionado por el área de compras de SuperNova para enlazar tu cuenta.</p>
+                <p class="modal-instruccion">Ingresa el código de acceso proporcionado por SuperNova y los datos legales de tu empresa.</p>
                 
+                <h4 style="margin: 15px 0 5px; font-size: 14px; color: #4f46e5;">1. Datos de la Empresa</h4>
                 <div class="input-group">
                     <i class='bx bx-key'></i>
-                    <input type="text" id="reg-codigo" placeholder="Código de Acceso (Ej: SN-4928)" required>
+                    <input type="text" id="reg-codigo" placeholder="Código de Invitación (Ej: PRV-4928)" required>
+                </div>
+                <div class="input-group">
+                    <i class='bx bx-id-card'></i>
+                    <input type="text" id="reg-ruc" placeholder="RUC de la Empresa (11 dígitos)" maxlength="11" required>
+                </div>
+                <div class="input-group">
+                    <i class='bx bx-buildings'></i>
+                    <input type="text" id="reg-razon" placeholder="Razón Social de la Empresa" required>
+                </div>
+                <div class="input-group">
+                    <i class='bx bx-tie'></i>
+                    <input type="text" id="reg-rep-legal" placeholder="Nombre del Representante Legal" required>
+                </div>
+
+                <h4 style="margin: 15px 0 5px; font-size: 14px; color: #4f46e5;">2. Datos de Acceso y Contacto</h4>
+                <div class="input-group">
+                    <i class='bx bx-user'></i>
+                    <input type="text" id="reg-nombre" placeholder="Tu Nombre (Persona de contacto)" required>
+                </div>
+                <div class="input-group">
+                    <i class='bx bx-phone'></i>
+                    <input type="text" id="reg-telefono" placeholder="Teléfono o Celular de contacto" required>
                 </div>
                 <div class="input-group">
                     <i class='bx bx-envelope'></i>
@@ -68,15 +91,34 @@
                 </div>
                 <div class="input-group">
                     <i class='bx bx-lock'></i>
-                    <input type="password" id="reg-clave" placeholder="Crea una Contraseña" required>
-                </div>
-                <div class="input-group">
-                    <i class='bx bx-user'></i>
-                    <input type="text" id="reg-nombre" placeholder="Nombre del Contacto (Tú)" required>
+                    <input type="password" id="reg-clave" placeholder="Crea una Contraseña de acceso" required>
                 </div>
 
-                <button class="btn-ingresar" onclick="procesarRegistro()" style="margin-top: 10px;">
+                <button class="btn-ingresar" onclick="procesarRegistro()" style="margin-top: 15px;">
                     Completar Registro
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-recuperar" class="modal-overlay hidden"> 
+        <div class="modal-content" style="max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h3>Recuperar Acceso</h3>
+                <i class='bx bx-x' onclick="cerrarModalRecuperar()" style="cursor:pointer; font-size:24px;"></i>
+            </div>
+            <div class="modal-body">
+                <p class="modal-instruccion" style="margin-bottom: 20px;">
+                    Ingresa el correo electrónico con el que te registraste. Te generaremos una clave temporal para que puedas volver a entrar.
+                </p>
+                
+                <div class="input-group">
+                    <i class='bx bx-envelope'></i>
+                    <input type="email" id="rec-correo" placeholder="Tu Correo Electrónico Registrado" required>
+                </div>
+
+                <button class="btn-ingresar" onclick="procesarRecuperacion()" style="margin-top: 15px; background: #f59e0b;">
+                    Generar Clave Temporal
                 </button>
             </div>
         </div>
