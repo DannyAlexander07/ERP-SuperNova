@@ -3,6 +3,14 @@
 
 <div class="dashboard-container">
     
+    <div id="banner-comunicado" style="display: none; margin-bottom: 20px; padding: 15px 20px; border-radius: 8px; align-items: flex-start; gap: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); animation: slideDown 0.4s ease-out;">
+        <i class='bx bx-news' style="font-size: 2rem; margin-top: 2px;"></i>
+        <div>
+            <h3 id="banner-titulo" style="margin: 0 0 5px 0; font-size: 1.1rem; font-weight: 700;"></h3>
+            <p id="banner-mensaje" style="margin: 0; font-size: 0.9rem; line-height: 1.4;"></p>
+        </div>
+    </div>
+
     <div class="kpi-grid">
         <div class="kpi-card">
             <div class="kpi-icon pending"><i class='bx bx-time-five'></i></div>
@@ -11,15 +19,6 @@
                 <p id="kpi-pendientes">0</p>
             </div>
             <div class="kpi-footer" onclick="cargarModulo('comprobantes')">Ver detalles <i class='bx bx-right-arrow-alt'></i></div>
-        </div>
-
-        <div class="kpi-card">
-            <div class="kpi-icon scheduled"><i class='bx bx-calendar-check'></i></div>
-            <div class="kpi-details">
-                <h3>Programado(s)</h3>
-                <p id="kpi-programados">0</p>
-            </div>
-            <div class="kpi-footer" onclick="cargarModulo('calendario')">Ver detalles <i class='bx bx-right-arrow-alt'></i></div>
         </div>
 
         <div class="kpi-card">
@@ -34,8 +33,7 @@
         <div class="kpi-card">
             <div class="kpi-icon pending"><i class='bx bx-time-five'></i></div>
             <div class="kpi-details">
-                <h3>Pendiente / Parcial</h3> <p id="kpi-pendientes">0</p>
-            </div>
+                <h3>Pendiente / Parcial</h3> <p id="kpi-programados">0</p> </div>
             <div class="kpi-footer" onclick="cargarModulo('comprobantes')">Ver detalles <i class='bx bx-right-arrow-alt'></i></div>
         </div>
 
@@ -71,4 +69,10 @@
 
 </div>
 
+<style>
+    @keyframes slideDown {
+        from { opacity: 0; transform: translateY(-20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>
 <script src="modules/inicio/inicio.js"></script>

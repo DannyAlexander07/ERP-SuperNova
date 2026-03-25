@@ -61,3 +61,125 @@
 
 .dia-badge:hover { border-color: #06b6d4; color: #06b6d4; transform: scale(1.1); }
 .dia-badge.hoy { background: #06b6d4; color: white; border-color: #06b6d4; }
+
+/* =========================================================
+   ✨ MEJORAS VISUALES Y UNIFORMIDAD
+   ========================================================= */
+
+/* Forzamos que todas las tarjetas de mes tengan la misma altura */
+.mes-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.mes-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.07);
+}
+
+/* El cuerpo del mes se expande para llenar el espacio */
+.mes-body {
+    flex-grow: 1;
+    min-height: 120px; /* Asegura que meses con pocos días no se vean "aplastados" */
+    align-content: flex-start; /* Alinea los días al principio */
+}
+
+/* Animación de entrada para los contenedores */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Estilo para días que no son de pago (opcional, por si tu JS los usa) */
+.dia-badge.inactivo {
+    background: #f1f5f9;
+    color: #94a3b8;
+    border-style: dashed;
+    cursor: default;
+}
+
+/* =========================================================
+   📱 RESPONSIVIDAD (Desktop, Tablet, Móvil)
+   ========================================================= */
+
+/* Desktop Grande (Pantallas anchas) */
+@media screen and (min-width: 1200px) {
+    .meses-grid {
+        grid-template-columns: repeat(4, 1fr); /* 4 meses por fila */
+    }
+}
+
+/* Tablets y Laptops pequeñas (992px a 1199px) */
+@media screen and (max-width: 1199px) {
+    .meses-grid {
+        grid-template-columns: repeat(3, 1fr); /* 3 meses por fila */
+    }
+}
+
+/* Tablets en Vertical (768px a 991px) */
+@media screen and (max-width: 991px) {
+    .meses-grid {
+        grid-template-columns: repeat(2, 1fr); /* 2 meses por fila */
+    }
+    
+    .calendario-container {
+        padding: 15px;
+    }
+}
+
+/* Móviles (Menos de 767px) */
+@media screen and (max-width: 767px) {
+    .calendario-header {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .header-actions {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .header-actions button {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .alert-info {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 20px;
+    }
+
+    .meses-grid {
+        grid-template-columns: 1fr; /* 1 mes por fila (pantalla completa) */
+    }
+
+    .mes-header {
+        font-size: 1.1rem;
+        padding: 15px;
+    }
+
+    .dia-badge {
+        width: 45px; /* Días un poco más grandes para facilitar el toque táctil */
+        height: 45px;
+        font-size: 1.2rem;
+    }
+}
+
+/* Optimización para impresión (por si el proveedor quiere guardarlo en PDF) */
+@media print {
+    .header-actions, .btn-outline {
+        display: none !important;
+    }
+    .meses-grid {
+        display: block;
+    }
+    .mes-card {
+        page-break-inside: avoid;
+        margin-bottom: 20px;
+    }
+}

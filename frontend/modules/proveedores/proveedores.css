@@ -646,3 +646,175 @@
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
 }
+
+/* =========================================================
+   🛡️ MODALES DINÁMICOS (Confirmación y Copiar)
+   ========================================================= */
+
+/* 1. Comportamiento del Overlay (Centrado absoluto) */
+#modal-confirmar-proveedor,
+#modal-copiar-datos {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 9999; 
+}
+
+#modal-confirmar-proveedor.hidden,
+#modal-copiar-datos.hidden {
+    display: none !important;
+}
+
+/* 2. La Caja del Modal (Auto-ajustable y no full-height) */
+#modal-confirmar-proveedor .modal-content,
+#modal-copiar-datos .modal-content {
+    height: auto !important; /* Evita que se estire al 100% de alto */
+    max-height: 90vh;
+    width: 90%; /* Fluido en tablets y móviles */
+    background: #ffffff;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    border: 1px solid #e2e8f0;
+    margin: 0 auto; /* Centrado horizontal seguro */
+}
+
+/* 3. Detalles de Textarea (Modal Copiar) */
+#copy-modal-content {
+    background: transparent;
+    color: #334155;
+    scrollbar-width: thin; /* Para Firefox */
+}
+
+#copy-modal-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+#copy-modal-content::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 4px;
+}
+
+#copy-modal-content::selection {
+    background: #bfdbfe; /* Color de selección amigable */
+}
+
+/* 4. Efectos Hover para Botones */
+#modal-confirmar-proveedor .btn-cancel:hover,
+#modal-copiar-datos .btn-cancel:hover {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+}
+
+#modal-confirmar-proveedor .btn-primary:hover,
+#modal-copiar-datos .btn-primary:hover {
+    transform: translateY(-2px);
+    /* La sombra base será azul, pero desde JS le cambiamos el fondo a rojo si es peligroso */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); 
+    filter: brightness(1.1); /* Truco para que brille sin importar qué color le ponga el JS */
+}
+
+/* =========================================================
+   📱 RESPONSIVIDAD EXTREMA (Móviles pequeños)
+   ========================================================= */
+@media (max-width: 480px) {
+    #modal-confirmar-proveedor .modal-content,
+    #modal-copiar-datos .modal-content {
+        padding: 25px 20px !important; /* Menos padding lateral para ganar espacio */
+    }
+    
+    #modal-confirmar-proveedor h3,
+    #modal-copiar-datos h3 {
+        font-size: 20px !important;
+    }
+    
+    #modal-confirmar-proveedor p,
+    #modal-copiar-datos p {
+        font-size: 13.5px !important;
+    }
+
+    /* Apilar los botones si la pantalla es muy angosta */
+    #modal-confirmar-proveedor div[style*="display: flex"] {
+        flex-direction: column;
+        gap: 12px !important;
+    }
+    
+    /* El botón principal debe ir arriba o abajo dependiendo de la jerarquía (invertimos el orden visual) */
+    #modal-confirmar-proveedor .btn-primary {
+        order: -1; 
+    }
+    
+    #modal-confirmar-proveedor button,
+    #modal-copiar-datos button {
+        width: 100% !important;
+    }
+}
+
+/* =========================================================
+   ✨ MEJORAS VISUALES: MODAL DE COPIAR (Sincronía y UI)
+   ========================================================= */
+
+/* 1. Rediseñamos la caja que contiene el código */
+#modal-copiar-datos .modal-content div:has(#copy-modal-content) {
+    background: #f1f5f9 !important; /* Fondo gris un poco más sólido */
+    border: 2px dashed #cbd5e1 !important; /* Borde más definido */
+    border-radius: 12px !important;
+    padding: 15px 120px 15px 15px !important; /* Espacio extra a la derecha para el botón */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: relative !important;
+    min-height: 70px !important;
+}
+
+/* 2. Transformamos el Textarea en un "Display" de código elegante */
+#copy-modal-content {
+    height: auto !important;
+    min-height: 24px !important; /* Anulamos el alto de rows="3" */
+    font-size: 18px !important; /* Texto más grande */
+    font-weight: 800 !important;
+    letter-spacing: 2px !important; /* Espaciado estilo código */
+    color: #1e293b !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important; /* Quitamos el scroll */
+    line-height: 1.5 !important;
+}
+
+/* 3. Centrado perfecto y rediseño del botón "Copiar" */
+#modal-copiar-datos button[onclick="copiarContenidoModal()"] {
+    position: absolute !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important; /* Lo centra exactamente al medio vertical */
+    right: 15px !important;
+    padding: 8px 14px !important;
+    border-radius: 8px !important;
+    background: #e0e7ff !important; /* Fondo azul clarito */
+    color: #4f46e5 !important; /* Texto azul oscuro */
+    border: none !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+    box-shadow: none !important;
+    transition: all 0.2s ease !important;
+}
+
+/* Efecto al pasar el mouse por "Copiar" */
+#modal-copiar-datos button[onclick="copiarContenidoModal()"]:hover {
+    background: #4f46e5 !important;
+    color: #ffffff !important;
+    transform: translateY(-50%) scale(1.05) !important; /* Pequeño salto */
+    box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3) !important;
+}
+
+/* 4. Le damos un toque más "App Moderna" al botón principal */
+#modal-copiar-datos .btn-primary {
+    background: linear-gradient(135deg, #3b82f6, #4f46e5) !important; /* Degradado elegante */
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3) !important; /* Sombra brillante */
+    font-size: 15px !important;
+    letter-spacing: 0.5px !important;
+    text-transform: none !important;
+}
+
+#modal-copiar-datos .btn-primary:hover {
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4) !important;
+}

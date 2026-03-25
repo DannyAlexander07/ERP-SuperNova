@@ -240,5 +240,49 @@ const enviarCorreoRecuperacion = async (destinatario, nombre, claveTemporal) => 
     }
 };
 
-// ACUÉRDATE DE EXPORTAR LA NUEVA FUNCIÓN AQUÍ ABAJO:
-module.exports = { enviarCorreoComprobante, enviarPlanPagosAprobado, enviarCorreoRecuperacion };
+/**
+ * Envía un código OTP para verificar el correo durante el registro B2B
+ */
+const enviarCodigoVerificacion = async (destinatario, codigo) => {
+    try {
+        const htmlContent = `
+        <div style="font-family: 'Segoe UI', sans-serif; max-width: 500px; margin: auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+            <div style="background: #4f46e5; padding: 30px; text-align: center; color: white;">
+                <h2 style="margin: 0; letter-spacing: 1px;">Verificación de Correo</h2>
+            </div>
+            <div style="padding: 30px; text-align: center; color: #334155;">
+                <p style="font-size: 16px;">Para continuar con su registro en el <b>Portal B2B de SuperNova</b>, utilice el siguiente código de seguridad:</p>
+                
+                <div style="margin: 30px 0; padding: 20px; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px;">
+                    <span style="font-size: 36px; font-family: monospace; font-weight: 800; color: #4f46e5; letter-spacing: 5px;">${codigo}</span>
+                </div>
+                
+                <p style="font-size: 13px; color: #64748b;">Este código expirará en 10 minutos por su seguridad. Si usted no solicitó este registro, ignore este mensaje.</p>
+            </div>
+            <div style="background: #f1f5f9; padding: 15px; text-align: center; font-size: 11px; color: #94a3b8;">
+                © 2026 SuperNova POS - Seguridad B2B
+            </div>
+        </div>
+        `;
+
+        await transporter.sendMail({
+            from: '"Seguridad SuperNova" <' + process.env.SMTP_USER + '>',
+            to: destinatario,
+            subject: ` Verification Code: ${codigo} `,
+            html: htmlContent
+        });
+
+        return { success: true };
+    } catch (error) {
+        console.error("❌ Error enviando código OTP:", error);
+        return { success: false, error: error.message };
+    }
+};
+
+// ACTUALIZA TU EXPORT AL FINAL DEL ARCHIVO:
+module.exports = { 
+    enviarCorreoComprobante, 
+    enviarPlanPagosAprobado, 
+    enviarCorreoRecuperacion,
+    enviarCodigoVerificacion 
+};

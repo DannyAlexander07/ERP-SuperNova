@@ -230,7 +230,8 @@
     .btn-primary, .btn-outline {
         width: 100%;
         justify-content: center;
-        color: #8aa6b4;
+        color: #fff;
+        font-weight: 700;
     }
 
     /* El grid del modal pasa de 2 columnas a 1 columna */

@@ -2,7 +2,7 @@
 const pool = require('../db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { enviarCorreoRecuperacion } = require('../utils/emailService');
+const { enviarCorreoRecuperacion, enviarCodigoVerificacion } = require('../utils/emailService');
 
 exports.login = async (req, res) => {
     const { email, password } = req.body;
@@ -97,18 +97,30 @@ exports.login = async (req, res) => {
     }
 };
 
-// 🔥 NUEVO: LOGIN EXCLUSIVO PARA EL PORTAL B2B
+// 🔥 LOGIN EXCLUSIVO PARA EL PORTAL B2B (CORREGIDO PARA PERSISTENCIA DE NOMBRE Y FOTO)
 exports.loginProveedor = async (req, res) => {
     const { email, password } = req.body;
 
+    // Validación fail-fast
     if (!email || !password) {
         return res.status(400).json({ msg: 'Por favor, ingrese correo y contraseña.' });
     }
 
     try {
-        // 1. Buscamos al usuario e incluimos la columna clave: proveedor_id
+        // 1. Buscamos al usuario e incluimos un JOIN con la tabla proveedores para traer avatar_url
+        // Usamos COALESCE para que si p.nombre_contacto está vacío, use u.nombres por defecto
         const result = await pool.query(
-            'SELECT id, nombres, apellidos, clave, rol, foto_url, estado, proveedor_id FROM usuarios WHERE correo = $1', 
+            `SELECT 
+                u.id, 
+                u.clave, 
+                u.rol, 
+                u.estado, 
+                u.proveedor_id,
+                COALESCE(p.nombre_contacto, u.nombres) as nombre_final, 
+                p.avatar_url 
+             FROM usuarios u
+             LEFT JOIN proveedores p ON u.proveedor_id = p.id
+             WHERE u.correo = $1`, 
             [email]
         );
         
@@ -118,27 +130,29 @@ exports.loginProveedor = async (req, res) => {
 
         const usuario = result.rows[0];
 
-        // 🛡️ BLINDAJE VIP: Si no tiene un proveedor_id, lo botamos
+        // 🛡️ BLINDAJE VIP: Si no tiene un proveedor_id, no pertenece a este portal
         if (!usuario.proveedor_id) {
             return res.status(403).json({ msg: 'Acceso Denegado: Su cuenta no está habilitada para el Portal de Proveedores.' });
         }
 
+        // Verificar si la cuenta está activa
         if (usuario.estado !== 'activo') {
             return res.status(403).json({ msg: 'Su cuenta está inhabilitada. Contacte a SuperNova.' });
         }
 
+        // 2. Verificar contraseña con Bcrypt
         const isMatch = await bcrypt.compare(password, usuario.clave);
         if (!isMatch) {
             return res.status(400).json({ msg: 'Credenciales inválidas.' });
         }
 
-        // 2. Payload del Token (Ahora viaja con el ID de su empresa proveedora)
+        // 3. Payload del Token (Incluimos el nombre actualizado)
         const payload = {
             usuario: { 
                 id: usuario.id,
-                proveedor_id: usuario.proveedor_id, // 🔥 CRUCIAL PARA SUS MÓDULOS
-                nombre: usuario.nombres,
-                rol: 'PROVEEDOR' // Forzamos el rol para máxima seguridad
+                proveedor_id: usuario.proveedor_id,
+                nombre: usuario.nombre_final,
+                rol: 'PROVEEDOR'
             }
         };
 
@@ -147,31 +161,32 @@ exports.loginProveedor = async (req, res) => {
         jwt.sign(
             payload, 
             jwtSecret, 
-            { expiresIn: '24h' }, // Le damos más tiempo al proveedor
+            { expiresIn: '24h' }, 
             async (err, token) => {
                 if (err) throw err;
                 
                 const ip_origen = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'IP Desconocida';
                 
-                // Auditoría especial para proveedores
+                // Registro en Auditoría
                 try {
                     await pool.query(
                         `INSERT INTO auditoria (usuario_id, modulo, accion, detalle, ip_origen) 
-                        VALUES ($1, 'PORTAL_B2B', 'LOGIN_PROVEEDOR', $2, $3)`,
+                         VALUES ($1, 'PORTAL_B2B', 'LOGIN_PROVEEDOR', $2, $3)`,
                         [usuario.id, `Inicio de sesión exitoso en Portal Proveedores.`, ip_origen]
                     );
                 } catch (auditErr) {
                     console.error("⚠️ Error grabando auditoría B2B:", auditErr.message);
                 }
 
-                // 3. Respuesta limpia
+                // 4. RESPUESTA AL FRONTEND
+                // IMPORTANTE: Enviamos 'nombres' y 'avatar_url' actualizados para el LocalStorage
                 res.json({ 
                     token, 
                     usuario: {
                         id: usuario.id,
                         proveedor_id: usuario.proveedor_id,
-                        nombres: usuario.nombres, 
-                        foto_url: usuario.foto_url 
+                        nombres: usuario.nombre_final, 
+                        avatar_url: usuario.avatar_url 
                     }
                 });
             }
@@ -292,6 +307,73 @@ exports.recuperarClave = async (req, res) => {
 
     } catch (err) {
         console.error("❌ Error en Recuperar Clave:", err.message);
+        res.status(500).json({ msg: 'Error interno del servidor.' });
+    }
+};
+
+// =======================================================
+// 📧 DOBLE FACTOR: ENVIAR CÓDIGO DE VERIFICACIÓN AL CORREO
+// =======================================================
+exports.solicitarVerificacionEmail = async (req, res) => {
+    const { correo } = req.body;
+
+    if (!correo) return res.status(400).json({ msg: 'El correo es obligatorio.' });
+
+    try {
+        // 1. Validar que el correo no esté ya en uso en la tabla usuarios
+        const existe = await pool.query('SELECT id FROM usuarios WHERE correo = $1', [correo]);
+        if (existe.rows.length > 0) {
+            return res.status(400).json({ msg: 'Este correo ya está registrado.' });
+        }
+
+        // 2. Generar código aleatorio de 5 caracteres
+        const codigoOTP = Math.random().toString(36).substring(2, 7).toUpperCase();
+        
+        // 3. Definir expiración (10 minutos)
+        const expiraEn = new Date(Date.now() + 10 * 60 * 1000);
+
+        // 4. Limpiar códigos anteriores de este correo y guardar el nuevo
+        await pool.query('DELETE FROM verificaciones_email WHERE correo = $1', [correo]);
+        await pool.query(
+            'INSERT INTO verificaciones_email (correo, codigo, expira_en) VALUES ($1, $2, $3)',
+            [correo, codigoOTP, expiraEn]
+        );
+
+        // 5. Enviar el correo usando el servicio actualizado
+        const envio = await enviarCodigoVerificacion(correo, codigoOTP);
+
+        if (envio.success) {
+            res.json({ msg: 'Código enviado con éxito. Revise su bandeja de entrada.' });
+        } else {
+            res.status(500).json({ msg: 'Error al enviar el correo. Intente más tarde.' });
+        }
+
+    } catch (err) {
+        console.error("❌ Error verificando email:", err);
+        res.status(500).json({ msg: 'Error interno del servidor.' });
+    }
+};
+
+// =======================================================
+// 📧 DOBLE FACTOR: VALIDAR CÓDIGO ANTES DEL REGISTRO
+// =======================================================
+exports.validarCodigoEmail = async (req, res) => {
+    const { correo, codigo } = req.body;
+
+    try {
+        const result = await pool.query(
+            'SELECT * FROM verificaciones_email WHERE correo = $1 AND codigo = $2 AND expira_en > NOW()',
+            [correo, codigo]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(400).json({ msg: 'Código inválido o expirado.' });
+        }
+
+        res.json({ msg: 'Correo verificado correctamente.', verificado: true });
+
+    } catch (err) {
+        console.error("❌ Error validando código:", err);
         res.status(500).json({ msg: 'Error interno del servidor.' });
     }
 };

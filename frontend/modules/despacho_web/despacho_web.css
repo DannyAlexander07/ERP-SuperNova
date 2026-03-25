@@ -344,3 +344,148 @@
         padding: 12px 10px;
     }
 }
+
+/* =========================================================================
+   📱 RESPONSIVIDAD MAESTRA: MÓDULO DESPACHO (E-COMMERCE)
+   (Pega esto al final de tu archivo css para sobreescribir lo anterior)
+   ========================================================================= */
+
+/* ---------------------------------------------------------
+   💻 TABLETS (Hasta 1024px)
+   --------------------------------------------------------- */
+@media screen and (max-width: 1024px) {
+    /* La barra de búsqueda y el botón exportar se vuelven flexibles */
+    .tab-content .despacho-actions {
+        flex-wrap: wrap !important; 
+    }
+    
+    /* El botón de exportar crece si hay espacio */
+    .btn-excel {
+        flex: 1;
+        justify-content: center;
+    }
+}
+
+/* ---------------------------------------------------------
+   📱 MÓVILES (Hasta 768px)
+   --------------------------------------------------------- */
+@media screen and (max-width: 768px) {
+    /* 1. Contenedor general: menos relleno lateral para aprovechar la pantalla */
+    .despacho-container {
+        padding: 10px;
+    }
+
+    /* 2. Cabecera: Apilamos el título y el botón de actualizar */
+    .despacho-header {
+        flex-direction: column;
+        align-items: stretch; /* Que el botón ocupe todo el ancho */
+        gap: 12px;
+    }
+
+    .despacho-title h2 {
+        font-size: 1.25rem;
+    }
+
+    .btn-secondary {
+        width: 100%;
+        justify-content: center;
+        height: 45px; /* Más alto para facilitar el toque (Touch target) */
+    }
+
+    /* 3. Pestañas (Tabs): Scroll horizontal nativo tipo App */
+    .despacho-tabs {
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto; 
+        -webkit-overflow-scrolling: touch; /* Scroll fluido en iPhone */
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 0;
+        margin-bottom: 15px;
+    }
+
+    .tab-btn {
+        flex: 1;
+        min-width: 160px; /* Evita que las palabras se aplasten */
+        justify-content: center;
+        font-size: 13px;
+        padding: 12px 10px;
+    }
+
+    /* 4. Barra de búsqueda y Exportar (Sobrescribiendo estilos en línea del HTML) */
+    .tab-content div[style*="display: flex"] {
+        flex-direction: column !important; /* Apilamos input arriba, botón abajo */
+        align-items: stretch !important;
+        gap: 12px !important;
+        margin-bottom: 15px !important;
+    }
+
+    .search-box {
+        width: 100% !important;
+    }
+
+    .search-box input {
+        height: 50px; 
+        font-size: 16px; /* 16px evita el zoom automático fastidioso en iPhone */
+    }
+
+    .btn-excel {
+        width: 100% !important;
+        justify-content: center !important;
+        height: 50px !important;
+        font-size: 15px !important;
+    }
+
+    /* 5. Ajustes de la Tabla para que no consuma tanto espacio visual */
+    .table-responsive {
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+    }
+    
+    .despacho-table th, 
+    .despacho-table td {
+        padding: 12px 10px; /* Relleno más compacto */
+        font-size: 13px;
+    }
+
+    /* El botón verde de "Entregar" se estira para ser fácil de tocar */
+    .btn-entregar {
+        padding: 10px 12px;
+        font-size: 12px;
+        width: 100%; 
+        justify-content: center;
+    }
+    
+    .acciones-tabla {
+        flex-wrap: nowrap;
+    }
+}
+
+/* ---------------------------------------------------------
+   📱 CELULARES MUY PEQUEÑOS (Hasta 480px)
+   --------------------------------------------------------- */
+@media screen and (max-width: 480px) {
+    .despacho-title h2 {
+        font-size: 1.15rem;
+    }
+    
+    .despacho-title p {
+        font-size: 0.8rem;
+    }
+    
+    /* Letra un poco más pequeña en la tabla para que quepan más columnas sin hacer scroll horizontal */
+    .despacho-table th {
+        font-size: 11px;
+        padding: 10px 8px;
+    }
+    
+    .despacho-table td {
+        font-size: 12px;
+        padding: 10px 8px;
+    }
+
+    /* Reducimos el tamaño de los badges (Pendiente/Entregado) */
+    .badge-estado {
+        font-size: 10px;
+        padding: 4px 8px;
+    }
+}

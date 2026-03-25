@@ -306,3 +306,79 @@ exports.forzarPasswordB2B = async (req, res) => {
     }
 };
 
+// 5. OBTENER UN SOLO PROVEEDOR POR ID (Para autocompletar Cuentas Bancarias)
+exports.obtenerProveedorPorId = async (req, res) => {
+    const { id } = req.params;
+    try {
+        // Seleccionamos la columna cuenta_bancaria
+        const result = await pool.query(`
+            SELECT id, ruc, razon_social, cuenta_bancaria 
+            FROM proveedores 
+            WHERE id = $1
+        `, [id]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ msg: 'Proveedor no encontrado.' });
+        }
+
+        const prov = result.rows[0];
+        
+        // 🔥 EL TRUCO: Creamos un alias para que el Frontend reciba "cuentas_bancarias"
+        // Enviamos el valor tal cual está en la base de datos (sea JSON o String)
+        prov.cuentas_bancarias = prov.cuenta_bancaria;
+
+        res.json(prov);
+    } catch (err) {
+        console.error("❌ Error en obtenerProveedorPorId:", err.message);
+        res.status(500).json({ msg: 'Error al obtener los datos del proveedor.' });
+    }
+};
+
+// =======================================================
+// 6. PERFIL PREMIUM B2B (Foto y Nombre de Contacto)
+// =======================================================
+exports.actualizarPerfilB2B = async (req, res) => {
+    // En el portal B2B, el ID viene del token de seguridad, no de la URL
+    const proveedorId = req.usuario.proveedor_id;
+    const { nombres } = req.body; // El frontend envía 'nombres'
+    
+    // Capturamos la URL que nos devuelve Cloudinary gracias al middleware 'uploadCloud'
+    const fotoNuevaUrl = req.file ? (req.file.secure_url || req.file.path) : null;
+
+    if (!proveedorId) {
+        return res.status(403).json({ msg: 'Acceso denegado. Exclusivo para proveedores.' });
+    }
+
+    try {
+        let query = `UPDATE proveedores SET nombre_contacto = $1`;
+        let values = [nombres];
+        let contador = 2;
+
+        if (fotoNuevaUrl) {
+            query += `, avatar_url = $${contador}`;
+            values.push(fotoNuevaUrl);
+            contador++;
+        }
+
+        // RETURNING avatar_url nos permite devolverle la foto nueva al frontend al instante
+        query += ` WHERE id = $${contador} RETURNING avatar_url`;
+        values.push(proveedorId);
+
+        const result = await pool.query(query, values);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ msg: 'Proveedor no encontrado.' });
+        }
+
+        res.json({
+            msg: 'Perfil actualizado correctamente',
+            usuario: {
+                avatar_url: result.rows[0].avatar_url
+            }
+        });
+
+    } catch (err) {
+        console.error("❌ Error actualizando perfil B2B:", err);
+        res.status(500).json({ msg: 'Error interno al actualizar el perfil.' });
+    }
+};

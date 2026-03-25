@@ -189,4 +189,45 @@
             </form>
         </div>
     </div>
+    <div id="modal-confirmar-proveedor" class="modal-overlay hidden" style="display: flex; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 9999;">
+        <div class="modal-content slide-in-bottom" style="max-width: 400px; height: auto; max-height: 90vh; width: 90%; padding: 30px; border-radius: 16px; text-align: center; position: relative; margin: 0 auto; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0;">
+            <div id="confirm-modal-icon" style="margin-bottom: 15px;">
+                <i class='bx bx-help-circle' style="font-size: 55px; color: #3b82f6;"></i>
+            </div>
+            <h3 id="confirm-modal-title" style="margin-bottom: 10px; color: #1e293b; font-size: 22px;">Confirmar Acción</h3>
+            <p id="confirm-modal-text" style="font-size: 14.5px; color: #64748b; margin-bottom: 25px; line-height: 1.5;">¿Estás seguro de realizar esta acción?</p>
+            
+            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                <button type="button" class="btn-cancel" onclick="cerrarModalConfirmacionProv()" style="flex: 1; min-width: 120px; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; font-weight: 600; color: #475569; transition: 0.2s;" onmouseover="this.style.background='#f1f5f9'; this.style.color='#0f172a'" onmouseout="this.style.background='#fff'; this.style.color='#475569'">
+                    Cancelar
+                </button>
+                <button type="button" class="btn-primary" id="confirm-modal-btn" style="flex: 1; min-width: 120px; padding: 12px; border-radius: 8px; background-color: #3b82f6; border: none; cursor: pointer; font-weight: 600; color: #fff; transition: 0.2s; display: flex; justify-content: center; align-items: center; gap: 5px;">
+                    Sí, Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-copiar-datos" class="modal-overlay hidden" style="display: flex; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 9999;">
+        <div class="modal-content slide-in-bottom" style="max-width: 450px; height: auto; max-height: 90vh; width: 90%; padding: 30px; border-radius: 16px; text-align: center; position: relative; margin: 0 auto; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0;">
+            <div id="copy-modal-icon" style="margin-bottom: 15px;">
+                <i class='bx bx-check-shield' style="font-size: 55px; color: #10b981;"></i>
+            </div>
+            <h3 id="copy-modal-title" style="margin-bottom: 10px; color: #1e293b; font-size: 22px;">¡Acción Exitosa!</h3>
+            <p id="copy-modal-text" style="font-size: 14.5px; color: #64748b; margin-bottom: 20px; line-height: 1.5;">Por favor, comparta esta información con el proveedor.</p>
+            
+            <div style="background: #f1f5f9; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 15px 110px 15px 15px; margin-bottom: 25px; position: relative; display: flex; align-items: center; justify-content: center; min-height: 70px; box-sizing: border-box;">
+                
+                <textarea id="copy-modal-content" readonly style="width: 100%; border: none; background: transparent; resize: none; font-family: 'Courier New', monospace; font-size: 17px; color: #1e293b; text-align: center; outline: none; font-weight: 800; letter-spacing: 1.5px; overflow: hidden; line-height: 1.5; padding: 0; margin: 0; height: auto;" rows="2"></textarea>
+                
+                <button onclick="copiarContenidoModal()" style="position: absolute; top: 50%; transform: translateY(-50%); right: 15px; background: #e0e7ff; border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer; color: #4f46e5; display: flex; align-items: center; gap: 5px; font-weight: 600; font-size: 13px; transition: 0.2s;" title="Copiar al portapapeles" onmouseover="this.style.background='#4f46e5'; this.style.color='#fff';" onmouseout="this.style.background='#e0e7ff'; this.style.color='#4f46e5';">
+                    <i class='bx bx-copy'></i> Copiar
+                </button>
+            </div>
+            
+            <button type="button" class="btn-primary" onclick="cerrarModalCopiar()" style="width: 100%; padding: 14px; border-radius: 8px; background: linear-gradient(135deg, #3b82f6, #4f46e5); box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3); border: none; cursor: pointer; font-weight: 600; font-size: 15px; color: #fff; transition: 0.2s;" onmouseover="this.style.boxShadow='0 6px 20px rgba(59, 130, 246, 0.4)'" onmouseout="this.style.boxShadow='0 4px 15px rgba(59, 130, 246, 0.3)'">
+                Entendido, cerrar
+            </button>
+        </div>
+    </div>
 </div>

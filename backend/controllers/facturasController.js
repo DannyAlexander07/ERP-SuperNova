@@ -1,7 +1,7 @@
 // Ubicacion: SuperNova/backend/controllers/facturasController.js
 const pool = require('../db');
 
-// 1.1 OBTENER TODAS LAS FACTURAS (ACTUALIZADO: Soporte para JSONB, Impuestos y Registro de Compras)
+// 1.1 OBTENER TODAS LAS FACTURAS (ACTUALIZADO: Soporte para JSONB, Impuestos, Registro de Compras y OC)
 exports.obtenerFacturas = async (req, res) => {
     try {
         // 🚀 SE INCLUYEN TODOS los campos necesarios para la reconstrucción en el Front-end
@@ -14,7 +14,9 @@ exports.obtenerFacturas = async (req, res) => {
                 f.tipo_documento,     
                 f.descripcion,
                 f.monto_total,
-                f.base_imponible,     
+                f.base_imponible,
+                f.monto_igv,
+                f.tasa_impuesto,   
                 f.monto_neto_pagar,   
                 f.estado_pago,
                 f.estado_aprobacion,  
@@ -36,6 +38,8 @@ exports.obtenerFacturas = async (req, res) => {
                 f.glosa_adicional,
                 f.adicionales,        -- El JSONB con todos los conceptos
                 f.operacion_impuesto, -- 'suma' o 'resta'
+                f.orden_compra_id,    -- ID Relacional de la OC
+                f.numero_oc,          -- 🚀 NUEVO: Número de la Orden de Compra en texto
                 
                 p.razon_social AS proveedor,
                 s.nombre AS sede,
@@ -70,7 +74,11 @@ exports.obtenerFacturas = async (req, res) => {
 
             // 🚀 IMPORTANTE: Si 'adicionales' viene como string (depende de la config del driver), 
             // lo parseamos a objeto real para que el JS lo recorra fácilmente.
-            adicionales: typeof f.adicionales === 'string' ? JSON.parse(f.adicionales) : (f.adicionales || [])
+            adicionales: typeof f.adicionales === 'string' ? JSON.parse(f.adicionales) : (f.adicionales || []),
+
+            // 🔥 NUEVO: Homologamos la variable para el Frontend
+            // Tu Frontend espera 'orden_compra', así que mapeamos 'numero_oc' hacia 'orden_compra'
+            orden_compra: f.numero_oc || ''
         }));
 
         res.json(facturasConSaldo);
@@ -81,7 +89,7 @@ exports.obtenerFacturas = async (req, res) => {
     }
 };
 
-// 1.2 CREAR NUEVA FACTURA (ACTUALIZADO: Soporte para JSONB y Operación de Impuesto)
+// 1.2 CREAR NUEVA FACTURA (ACTUALIZADO: Validación y Bloqueo de OC Interna)
 exports.crearFactura = async (req, res) => {
     let {
         proveedorId, glosa, sede, tipo, serie, emision, vencimiento,
@@ -90,7 +98,8 @@ exports.crearFactura = async (req, res) => {
         clasificacion,
         // 🚀 RECIBIMOS LOS NUEVOS CAMPOS
         adicionales, 
-        operacion_impuesto 
+        operacion_impuesto,
+        orden_compra // 🔥 NUEVO: Capturamos la OC enviada desde el ERP
     } = req.body;
 
     const usuarioId = req.usuario ? req.usuario.id : null; 
@@ -138,13 +147,35 @@ exports.crearFactura = async (req, res) => {
         return res.status(400).json({ msg: 'El Monto Total debe ser mayor a cero.' });
     }
 
+    // 🔥 NUEVO: VALIDACIÓN ESTRICTA DE LA ORDEN DE COMPRA
+    let ordenCompraId = null;
+    let ocLimpia = orden_compra && orden_compra.trim() !== '' && orden_compra !== 'undefined' ? orden_compra.trim() : null;
+
+    if (ocLimpia) {
+        const ocRes = await pool.query("SELECT id, estado, proveedor_id FROM ordenes_compra WHERE UPPER(codigo_oc) = UPPER($1)", [ocLimpia]);
+        
+        if (ocRes.rows.length === 0) {
+            return res.status(400).json({ msg: '❌ La Orden de Compra ingresada no existe en el sistema.' });
+        }
+        
+        const ocObj = ocRes.rows[0];
+        if (ocObj.estado === 'FACTURADA' || ocObj.estado === 'USADA') {
+            return res.status(400).json({ msg: '❌ Esta Orden de Compra ya fue utilizada y no puede volver a usarse.' });
+        }
+        if (ocObj.proveedor_id != proveedorId) {
+            return res.status(400).json({ msg: '❌ Esta Orden de Compra pertenece a otro proveedor.' });
+        }
+        
+        ordenCompraId = ocObj.id;
+    }
+
     const estadoPago = 'pendiente';
     const client = await pool.connect();
 
     try {
         await client.query('BEGIN');
 
-        // A. Insertar en la tabla facturas (Incluyendo adicionales y operacion_impuesto)
+        // A. Insertar en la tabla facturas (Incluyendo OC y su ID)
         const result = await client.query(
             `INSERT INTO facturas (
                 proveedor_id, usuario_id, sede_id, descripcion, tipo_documento, 
@@ -153,11 +184,11 @@ exports.crearFactura = async (req, res) => {
                 base_imponible, porcentaje_detraccion, banco, numero_cuenta, 
                 cci, fecha_programacion, clasificacion, programado_hoy,
                 monto_adicional, glosa_adicional, forma_pago,
-                adicionales, operacion_impuesto
+                adicionales, operacion_impuesto, numero_oc, orden_compra_id
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 
                 $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, FALSE,
-                $21, $22, $23, $24, $25
+                $21, $22, $23, $24, $25, $26, $27
             )
             RETURNING id, numero_documento`,
             [
@@ -185,11 +216,18 @@ exports.crearFactura = async (req, res) => {
                 glosaAdicionalConcatenada, // $22
                 formaPago,               // $23
                 adicionalesJson,         // $24 (JSONB)
-                operacion_impuesto || 'suma' // $25
+                operacion_impuesto || 'suma', // $25
+                ocLimpia,                // 🔥 $26 (numero_oc)
+                ordenCompraId            // 🔥 $27 (orden_compra_id)
             ]
         );
 
         const facturaId = result.rows[0].id;
+
+        // 🔥 NUEVO: BLOQUEAR LA ORDEN DE COMPRA (Cambiar a FACTURADA)
+        if (ordenCompraId) {
+            await client.query("UPDATE ordenes_compra SET estado = 'FACTURADA' WHERE id = $1", [ordenCompraId]);
+        }
 
         // B. Registro de Auditoría
         await client.query(
@@ -210,7 +248,7 @@ exports.crearFactura = async (req, res) => {
     }
 };
 
-// 1.3 ELIMINAR FACTURA
+// 1.3 ELIMINAR FACTURA (ACTUALIZADO: Liberar Orden de Compra al eliminar)
 exports.eliminarFactura = async (req, res) => {
     const { id } = req.params;
     const usuarioId = req.usuario ? req.usuario.id : null;
@@ -226,25 +264,35 @@ exports.eliminarFactura = async (req, res) => {
             throw new Error('No se puede eliminar: La factura ya tiene pagos registrados en caja.');
         }
 
-        // 2. Eliminar la factura
+        // 2. Eliminar la factura y capturar sus datos eliminados (RETURNING *)
         const result = await client.query('DELETE FROM facturas WHERE id = $1 RETURNING *', [id]);
         
         if (result.rows.length === 0) throw new Error('Factura no encontrada.');
         
-        // Auditoría
+        const facturaEliminada = result.rows[0];
+
+        // 🔥 NUEVO: 3. LIBERAR LA ORDEN DE COMPRA (Si tenía una asociada)
+        if (facturaEliminada.orden_compra_id) {
+            await client.query(
+                "UPDATE ordenes_compra SET estado = 'EMITIDA' WHERE id = $1", 
+                [facturaEliminada.orden_compra_id]
+            );
+        }
+        
+        // 4. Auditoría
         await client.query(
             `INSERT INTO auditoria (usuario_id, accion, modulo, registro_id, detalle) 
              VALUES ($1, 'ELIMINAR', 'FACTURAS', $2, $3)`,
-            [usuarioId, id, `Eliminó factura N° ${result.rows[0].numero_documento}`]
+            [usuarioId, id, `Eliminó factura N° ${facturaEliminada.numero_documento}`]
         );
 
         await client.query('COMMIT');
-        res.json({ msg: 'Factura eliminada' });
+        res.json({ msg: 'Factura eliminada y Orden de Compra liberada (si aplicaba)' });
 
     } catch (err) {
         await client.query('ROLLBACK');
         const msg = err.message.includes('pagos registrados') ? err.message : 'Error al eliminar factura';
-        console.error(err.message);
+        console.error("❌ Error en eliminarFactura:", err.message);
         res.status(400).json({ msg });
 
     } finally {
@@ -252,7 +300,7 @@ exports.eliminarFactura = async (req, res) => {
     }
 };
 
-// 1.4 ACTUALIZAR FACTURA (ACTUALIZADO: Soporte para JSONB, Operación de Impuesto y Clasificación)
+// 1.4 ACTUALIZAR FACTURA (ACTUALIZADO: Soporte para OC, JSONB, Operación y Clasificación)
 exports.actualizarFactura = async (req, res) => {
     const { id } = req.params;
     
@@ -261,10 +309,8 @@ exports.actualizarFactura = async (req, res) => {
         proveedorId, glosa, sede, tipo, serie, emision, formaPago, vencimiento, 
         moneda, total, categoria,
         monto_base, impuesto_porcentaje, banco, cuenta, cci, programacion,
-        clasificacion,
-        // 🚀 RECIBIMOS LOS CAMPOS ACTUALIZADOS
-        adicionales, 
-        operacion_impuesto 
+        clasificacion, adicionales, operacion_impuesto, tasa_impuesto,
+        orden_compra // 🔥 NUEVO: Capturamos el campo de Orden de Compra
     } = req.body;
     
     const usuarioId = req.usuario ? req.usuario.id : null; 
@@ -276,19 +322,16 @@ exports.actualizarFactura = async (req, res) => {
 
     if (adicionales) {
         try {
-            // Parseamos el JSON que viene del frontend
             const listaAdicionales = JSON.parse(adicionales);
             if (Array.isArray(listaAdicionales)) {
-                adicionalesJson = adicionales; // Mantenemos el string para la columna JSONB
-                
-                // Sumamos montos y concatenamos descripciones para compatibilidad
+                adicionalesJson = adicionales; 
                 montoAdicionalTotal = listaAdicionales.reduce((acc, curr) => acc + parseFloat(curr.monto || 0), 0);
                 glosaAdicionalConcatenada = listaAdicionales
                     .map(item => `${item.glosa || 'Adicional'}: ${item.monto}`)
                     .join(" | ");
             }
         } catch (e) {
-            console.error("Error al parsear adicionales en actualización:", e);
+            console.error("Error al parsear adicionales:", e);
             montoAdicionalTotal = parseFloat(req.body.monto_adicional) || 0;
         }
     }
@@ -296,19 +339,51 @@ exports.actualizarFactura = async (req, res) => {
     // --- 🛡️ SANITIZACIÓN DE DATOS ---
     monto_base = (monto_base === "" || monto_base === null) ? 0 : monto_base;
     let impuestoNumerico = parseFloat(impuesto_porcentaje) || 0;
-    
+    let tasaFinal = tasa_impuesto !== undefined && tasa_impuesto !== null ? parseFloat(tasa_impuesto) : (impuestoNumerico / 100);
+
     banco = banco ? banco.trim() : null;
     cuenta = cuenta ? cuenta.trim() : null;
     cci = cci ? cci.trim() : null;
     programacion = (programacion === "" || programacion === null) ? null : programacion;
     
-    // Normalización de clasificación
     if (clasificacion === 'Implementacion') clasificacion = 'Implementación';
     const clasificacionFinal = clasificacion || 'Operativo';
 
-    // Validaciones básicas
     if (!proveedorId || !emision || !total || !categoria) {
         return res.status(400).json({ msg: 'Faltan campos obligatorios.' });
+    }
+
+    // 🔥 NUEVO: VALIDACIÓN ESTRICTA AL EDITAR LA ORDEN DE COMPRA
+    let ordenCompraId = null;
+    let ocLimpia = orden_compra && orden_compra.trim() !== '' && orden_compra !== 'undefined' ? orden_compra.trim() : null;
+
+    if (ocLimpia) {
+        // Buscamos a quién le pertenece la OC actualmente
+        const ocRes = await pool.query(`
+            SELECT o.id, o.estado, o.proveedor_id, f.id as id_factura_duena 
+            FROM ordenes_compra o 
+            LEFT JOIN facturas f ON f.orden_compra_id = o.id 
+            WHERE UPPER(o.codigo_oc) = UPPER($1)
+        `, [ocLimpia]);
+
+        if (ocRes.rows.length === 0) {
+            return res.status(400).json({ msg: '❌ La Orden de Compra ingresada no existe en el sistema.' });
+        }
+        
+        const ocData = ocRes.rows[0];
+
+        // Validar Proveedor
+        if (ocData.proveedor_id != proveedorId) {
+            return res.status(400).json({ msg: '❌ Esta Orden de Compra pertenece a otro proveedor.' });
+        }
+
+        // Validar Estado y Duplicidad
+        // Si está FACTURADA o USADA, pero el dueño NO es la factura que estamos editando ahorita mismo...
+        if ((ocData.estado === 'FACTURADA' || ocData.estado === 'USADA') && ocData.id_factura_duena != id) {
+             return res.status(400).json({ msg: '❌ Esta Orden de Compra ya fue utilizada en otra factura.' });
+        }
+        
+        ordenCompraId = ocData.id;
     }
 
     const client = await pool.connect();
@@ -316,17 +391,15 @@ exports.actualizarFactura = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // --- A. ACTUALIZAR EVIDENCIA EN LA NUBE ---
         if (req.file) {
-            // 🔥 NUEVO: Usamos directamente el link de Cloudinary
             const nuevaEvidenciaUrl = req.file.path;
             await client.query(
                 'UPDATE facturas SET evidencia_url = $1 WHERE id = $2',
                 [nuevaEvidenciaUrl, id]
             );
-        };
+        }
 
-        // --- C. ACTUALIZAR DATOS DE LA FACTURA (Protegiendo el estado de pago) ---
+        // 🚀 NUEVO: Añadimos 'numero_oc' y 'orden_compra_id' al UPDATE
         const result = await client.query(
             `UPDATE facturas SET
                 proveedor_id = $1, 
@@ -350,40 +423,32 @@ exports.actualizarFactura = async (req, res) => {
                 monto_adicional = $19,
                 glosa_adicional = $20,
                 adicionales = $21,
-                operacion_impuesto = $22
-            WHERE id = $23 RETURNING *`,
+                operacion_impuesto = $22,
+                tasa_impuesto = $23,
+                numero_oc = $24,
+                orden_compra_id = $25
+            WHERE id = $26 RETURNING *`,
             [
-                proveedorId,               // $1
-                sede,                      // $2
-                glosa,                     // $3
-                tipo,                      // $4
-                serie,                     // $5
-                emision,                   // $6
-                vencimiento,               // $7
-                formaPago,                 // $8
-                moneda,                    // $9
-                total,                     // $10
-                categoria,                 // $11
-                monto_base,                // $12
-                impuestoNumerico,          // $13
-                banco,                     // $14
-                cuenta,                    // $15
-                cci,                       // $16
-                programacion,              // $17
-                clasificacionFinal,        // $18
-                montoAdicionalTotal,       // $19
-                glosaAdicionalConcatenada, // $20
-                adicionalesJson,           // $21
-                operacion_impuesto || 'suma', // $22
-                id                         // $23
+                proveedorId, sede, glosa, tipo, serie, emision, vencimiento,
+                formaPago, moneda, total, categoria, monto_base, impuestoNumerico,
+                banco, cuenta, cci, programacion, clasificacionFinal,
+                montoAdicionalTotal, glosaAdicionalConcatenada, adicionalesJson,
+                operacion_impuesto || 'suma', tasaFinal, 
+                ocLimpia, ordenCompraId, // 🔥 Campos de la OC ($24 y $25)
+                id // $26
             ]
         );
+
+        // 🔥 NUEVO: BLOQUEAR LA ORDEN DE COMPRA (Si se asignó una válida)
+        if (ordenCompraId) {
+            await client.query("UPDATE ordenes_compra SET estado = 'FACTURADA' WHERE id = $1", [ordenCompraId]);
+        }
 
         // Auditoría
         await client.query(
             `INSERT INTO auditoria (usuario_id, accion, modulo, registro_id, detalle) 
              VALUES ($1, 'ACTUALIZAR', 'FACTURAS', $2, $3)`,
-            [usuarioId, id, `Actualizó factura N° ${serie}. Se actualizaron montos y conceptos adicionales.`]
+            [usuarioId, id, `Actualizó factura N° ${serie}. Se actualizaron datos, montos y/o OC.`]
         );
 
         await client.query('COMMIT');
@@ -392,7 +457,7 @@ exports.actualizarFactura = async (req, res) => {
     } catch (err) {
         await client.query('ROLLBACK');
         console.error("❌ Error updating factura:", err);
-        res.status(500).json({ msg: err.message || 'Error al actualizar' });
+        res.status(500).json({ msg: err.message || 'Error al actualizar factura' });
     } finally {
         client.release();
     }
@@ -423,7 +488,7 @@ exports.subirArchivo = async (req, res) => {
 // 2. GESTIÓN DE PAGOS (AMORTIZACIONES Y PARCIALES)
 // =======================================================
 
-// 2.1 REGISTRAR PAGO A FACTURA (ACTUALIZADO: Integración con Tesorería y Reset de Programación)
+// 2.1 REGISTRAR PAGO A FACTURA (ACTUALIZADO: Integración Tesorería, Reset y Notificación B2B)
 exports.pagarFactura = async (req, res) => {
     const { id } = req.params;
     // Recibimos los datos del formulario de pago
@@ -456,26 +521,12 @@ exports.pagarFactura = async (req, res) => {
         // B. Registrar el pago en la tabla independiente 'pagos_facturas'
         await client.query(
             `INSERT INTO pagos_facturas (
-                factura_id, 
-                usuario_id, 
-                sede_id, 
-                monto, 
-                moneda, 
-                fecha_pago, 
-                metodo_pago, 
-                numero_operacion, 
-                descripcion
+                factura_id, usuario_id, sede_id, monto, moneda, 
+                fecha_pago, metodo_pago, numero_operacion, descripcion
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
             [
-                id, 
-                usuarioId,
-                fac.sede_id,
-                monto,
-                fac.moneda,
-                fechaPago,
-                metodo || 'TRANSFERENCIA', 
-                operacion || '',
-                `Amortización Fac. ${fac.numero_documento}`
+                id, usuarioId, fac.sede_id, monto, fac.moneda, fechaPago,
+                metodo || 'TRANSFERENCIA', operacion || '', `Amortización Fac. ${fac.numero_documento}`
             ]
         );
 
@@ -491,9 +542,7 @@ exports.pagarFactura = async (req, res) => {
         // para que salga de la ventana de Tesorería Diaria.
         await client.query(
             `UPDATE facturas 
-             SET estado_pago = $1, 
-                 fecha_pago = $2, 
-                 programado_hoy = FALSE 
+             SET estado_pago = $1, fecha_pago = $2, programado_hoy = FALSE 
              WHERE id = $3`,
             [nuevoEstado, fechaPago, id]
         );
@@ -504,6 +553,19 @@ exports.pagarFactura = async (req, res) => {
              VALUES ($1, 'PAGO', 'FACTURAS', $2, $3)`,
             [usuarioId, id, `Pagó ${fac.moneda === 'USD' ? '$' : 'S/'} ${monto} a Fac. ${fac.numero_documento}. Estado: ${nuevoEstado}`]
         );
+
+        // 🔥 E. NUEVO: NOTIFICAR AL PROVEEDOR (Portal B2B)
+        if (fac.proveedor_id) {
+            const monedaSym = fac.moneda === 'USD' ? '$' : 'S/';
+            const tituloNoti = nuevoEstado === 'pagado' ? '✅ Pago Completado' : '💰 Pago Parcial';
+            const textoNoti = `Se ha registrado un abono de ${monedaSym} ${parseFloat(monto).toFixed(2)} para su documento ${fac.numero_documento || 'S/N'}.`;
+
+            await client.query(
+                `INSERT INTO notificaciones_b2b (proveedor_id, titulo, mensaje, tipo) 
+                 VALUES ($1, $2, $3, 'pago')`,
+                [fac.proveedor_id, tituloNoti, textoNoti]
+            );
+        }
 
         await client.query('COMMIT');
         res.json({ 
@@ -616,25 +678,106 @@ exports.obtenerKpisPagos = async (req, res) => {
 // 8. NUEVAS FUNCIONES: FLUJO DE APROBACIÓN Y MODAL "VER" (FASE 2)
 // =======================================================
 
-// 8.1 Cambiar el Estado de Aprobación (Para el botón de Flujo)
+// 8.1 Cambiar el Estado de Aprobación (ACTUALIZADO: Flujo de Rechazo, Liberación de OC y Notificaciones B2B)
 exports.cambiarEstadoAprobacion = async (req, res) => {
     const { id } = req.params;
-    const { nuevoEstado } = req.body; // Ej: 'Programado', 'Pendiente'
+    const { nuevoEstado, motivo } = req.body; // Capturamos el motivo del rechazo
+    const usuarioId = req.usuario ? req.usuario.id : null;
+
+    const client = await pool.connect();
 
     try {
-        const result = await pool.query(
-            'UPDATE facturas SET estado_aprobacion = $1 WHERE id = $2 RETURNING *',
-            [nuevoEstado, id]
-        );
+        await client.query('BEGIN'); // 🛡️ Iniciamos transacción segura
 
-        if (result.rows.length === 0) {
+        // 1. Buscamos la factura original para saber si tiene una Orden de Compra asociada y el proveedor_id
+        const facResult = await client.query('SELECT * FROM facturas WHERE id = $1', [id]);
+        
+        if (facResult.rows.length === 0) {
+            await client.query('ROLLBACK');
             return res.status(404).json({ msg: 'Factura no encontrada' });
         }
+        
+        const factura = facResult.rows[0];
+        let facturaActualizada;
+        let detalleAuditoria = `Estado cambiado a ${nuevoEstado}`;
 
-        res.json({ msg: `Estado cambiado a ${nuevoEstado}`, factura: result.rows[0] });
+        // Variables para la notificación
+        let tituloNoti = "";
+        let mensajeNoti = "";
+        let tipoNoti = "info";
+
+        // 2. LÓGICA DE RECHAZO
+        if (nuevoEstado === 'rechazado') {
+            
+            // A. Liberar la Orden de Compra (Si tiene una OC vinculada)
+            if (factura.orden_compra_id) {
+                await client.query(
+                    "UPDATE ordenes_compra SET estado = 'EMITIDA' WHERE id = $1", 
+                    [factura.orden_compra_id]
+                );
+            }
+
+            // B. Actualizar la Factura a Rechazada y añadir el motivo a la descripción
+            const updateRes = await client.query(
+                `UPDATE facturas 
+                 SET estado_aprobacion = 'rechazado', 
+                     estado_pago = 'rechazado', 
+                     descripcion = COALESCE(descripcion, '') || $1
+                 WHERE id = $2 RETURNING *`,
+                [` | ❌ RECHAZADO: ${motivo}`.substring(0, 250), id]
+            );
+            
+            facturaActualizada = updateRes.rows[0];
+            detalleAuditoria = `Factura Rechazada. Motivo: ${motivo}. Se liberó la OC asociada.`;
+
+            // C. Preparar Notificación de Rechazo
+            tituloNoti = "❌ Comprobante Rechazado";
+            mensajeNoti = `Su documento ${factura.numero_documento} fue rechazado. Motivo: ${motivo}`;
+            tipoNoti = "rechazo";
+
+        } else {
+            // 3. FLUJO NORMAL (Aprobar, Programar, etc.)
+            const updateRes = await client.query(
+                'UPDATE facturas SET estado_aprobacion = $1 WHERE id = $2 RETURNING *',
+                [nuevoEstado, id]
+            );
+            facturaActualizada = updateRes.rows[0];
+
+            // Preparar Notificación de Aprobación (Si pasa a pendiente/aprobado)
+            if (nuevoEstado === 'pendiente') {
+                tituloNoti = "✅ Factura Aprobada";
+                mensajeNoti = `Su factura ${factura.numero_documento} ha sido aprobada y programada para pago.`;
+                tipoNoti = "pago";
+            }
+        }
+
+        // 4. INSERTAR NOTIFICACIÓN EN LA TABLA B2B (Si corresponde)
+        if (tituloNoti !== "") {
+            await client.query(
+                `INSERT INTO notificaciones_b2b (proveedor_id, titulo, mensaje, tipo) 
+                 VALUES ($1, $2, $3, $4)`,
+                [factura.proveedor_id, tituloNoti, mensajeNoti, tipoNoti]
+            );
+        }
+
+        // 5. Registrar movimiento en Auditoría (Interno)
+        if (usuarioId) {
+            await client.query(
+                `INSERT INTO auditoria (usuario_id, modulo, accion, registro_id, detalle) 
+                 VALUES ($1, 'FACTURAS', 'FLUJO_APROBACION', $2, $3)`,
+                [usuarioId, id, detalleAuditoria]
+            );
+        }
+
+        await client.query('COMMIT'); // 🛡️ Todo salió bien, guardamos cambios
+        res.json({ msg: `Estado cambiado a ${nuevoEstado}`, factura: facturaActualizada });
+
     } catch (err) {
+        await client.query('ROLLBACK'); // ⚠️ Algo falló, deshacemos todo
         console.error("Error al cambiar estado:", err);
-        res.status(500).json({ msg: 'Error al cambiar el estado de aprobación' });
+        res.status(500).json({ msg: err.message || 'Error al cambiar el estado de aprobación' });
+    } finally {
+        client.release(); // Liberamos la conexión a la base de datos
     }
 };
 
@@ -992,7 +1135,7 @@ exports.notificarPlanPagos = async (req, res) => {
 // =======================================================
 
 exports.recepcionarFacturaB2B = async (req, res) => {
-    // 1. 🛡️ SEGURIDAD ABSOLUTA
+    // 1. 🛡️ SEGURIDAD Y EXTRACCIÓN DE DATOS
     const proveedorId = req.usuario.proveedor_id;
     const usuarioId = req.usuario.id;
 
@@ -1000,17 +1143,34 @@ exports.recepcionarFacturaB2B = async (req, res) => {
         return res.status(403).json({ msg: 'Acceso denegado. Esta acción es exclusiva para Proveedores.' });
     }
 
-    // 2. Capturamos los datos del formulario (Ahora con Fecha Vencimiento y OC_ID)
+    // Capturamos todos los datos, INCLUYENDO LA TASA DE IMPUESTO 🔥
     const {
         tipo_documento, serie, numero_documento, fecha_emision, fecha_vencimiento,
-        orden_compra, orden_compra_id, moneda, base_imponible, monto_igv, monto_total
+        orden_compra, orden_compra_id, moneda, base_imponible, monto_igv, monto_total,
+        tasa_impuesto 
     } = req.body;
 
+    const idLimpio = parseInt(orden_compra_id);
+    
+    if (!orden_compra_id || isNaN(idLimpio) || idLimpio <= 0) {
+        return res.status(400).json({ 
+            msg: 'Error: El ID de la Orden de Compra es inválido. Asegúrese de haber validado la OC.' 
+        });
+    }
+
+    // 🔥 NUEVA LÓGICA DE ARCHIVOS (Atrapando los 3 posibles)
     const pdfFile = req.files && req.files['pdf'] ? req.files['pdf'][0] : null;
     const xmlFile = req.files && req.files['xml'] ? req.files['xml'][0] : null;
+    const ocFile = req.files && req.files['pdf_oc'] ? req.files['pdf_oc'][0] : null; // <-- CAPTURAMOS LA OC
 
-    if (!pdfFile || !xmlFile) {
-        return res.status(400).json({ msg: 'Es obligatorio adjuntar tanto el PDF como el XML de SUNAT.' });
+    if (!pdfFile) {
+        return res.status(400).json({ msg: 'El archivo PDF es obligatorio.' });
+    }
+    if (tipo_documento !== 'Recibo' && !xmlFile) {
+        return res.status(400).json({ msg: 'El archivo XML de SUNAT es obligatorio para Facturas.' });
+    }
+    if (idLimpio > 0 && !ocFile) { // Si hay OC, el archivo es obligatorio
+         return res.status(400).json({ msg: 'Debe adjuntar el PDF de la Orden de Compra validada.' });
     }
 
     const client = await pool.connect();
@@ -1018,65 +1178,81 @@ exports.recepcionarFacturaB2B = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // 4. Insertar la Cabecera en la tabla Facturas
+        // 🔥 MAGIA AQUÍ: Buscamos a qué sede pertenece la Orden de Compra
+        const ocQuery = await client.query('SELECT sede_id FROM ordenes_compra WHERE id = $1', [idLimpio]);
+        
+        // Si por algún motivo rarísimo la OC no tiene sede, le ponemos 1 por defecto para que no se rompa la Analítica
+        const sedeHeredada = ocQuery.rows.length > 0 && ocQuery.rows[0].sede_id ? ocQuery.rows[0].sede_id : 1;
+
+        // 2. INSERTAR CABECERA (Heredando la SEDE de la OC)
         const insertFac = await client.query(`
             INSERT INTO facturas (
-                proveedor_id, usuario_id, tipo_documento, numero_documento,
-                fecha_emision, fecha_vencimiento, moneda, base_imponible, monto_igv, monto_total,
-                orden_compra, orden_compra_id, evidencia_url, estado_pago, estado_aprobacion,
-                categoria_gasto, clasificacion, descripcion
+                proveedor_id, usuario_id, sede_id, tipo_documento, numero_documento,
+                fecha_emision, fecha_vencimiento, moneda, base_imponible, 
+                tasa_impuesto, monto_igv, monto_total,
+                numero_oc, orden_compra_id, evidencia_url, estado_pago, 
+                estado_aprobacion, categoria_gasto, clasificacion, descripcion
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 
-                'pendiente', 'registrado', 'POR_CLASIFICAR', 'Operativo', $14
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 
+                'pendiente', 'registrado', 'POR_CLASIFICAR', 'Operativo', $16
             ) RETURNING id
         `, [
             proveedorId, 
             usuarioId, 
+            sedeHeredada, 
             tipo_documento, 
             `${serie.toUpperCase()}-${numero_documento}`,
             fecha_emision, 
-            fecha_vencimiento || null, // 🔥 NUEVO
+            fecha_vencimiento || null, 
             moneda, 
             base_imponible, 
+            tasa_impuesto ? parseFloat(tasa_impuesto) : 0, 
             monto_igv, 
             monto_total,
-            orden_compra || null, 
-            orden_compra_id ? parseInt(orden_compra_id) : null, // 🔥 NUEVO (ID exacto)
+            orden_compra || null, // 🔥 Ahora viaja a la columna correcta: numero_oc
+            idLimpio, 
             pdfFile.path, 
-            `Recepción B2B: ${tipo_documento} de Proveedor`
+            `Recepción B2B: ${tipo_documento} de Proveedor - Ref: ${orden_compra}`
         ]);
 
         const facturaId = insertFac.rows[0].id;
 
-        // 5. Insertar el XML en la tabla de Documentos Extra
-        await client.query(`
-            INSERT INTO facturas_documentos (factura_id, nombre_archivo, ruta_archivo, tipo_documento)
-            VALUES ($1, $2, $3, 'XML SUNAT')
-        `, [facturaId, xmlFile.originalname, xmlFile.path]);
-
-        // 🔥🔥🔥 EL CANDADO DE SEGURIDAD 🔥🔥🔥
-        // Si el proveedor usó una Orden de Compra, la marcamos como "USADA" inmediatamente.
-        if (orden_compra_id) {
+        // 3. INSERTAR DOCUMENTOS EXTRA (XML y PDF de la OC) 🔥
+        if (xmlFile) {
             await client.query(`
-                UPDATE ordenes_compra 
-                SET estado = 'USADA' 
-                WHERE id = $1
-            `, [parseInt(orden_compra_id)]);
+                INSERT INTO facturas_documentos (factura_id, nombre_archivo, ruta_archivo, tipo_documento)
+                VALUES ($1, $2, $3, 'XML SUNAT')
+            `, [facturaId, xmlFile.originalname, xmlFile.path]);
         }
 
-        // 6. Rastro de Auditoría
+        if (ocFile) {
+            await client.query(`
+                INSERT INTO facturas_documentos (factura_id, nombre_archivo, ruta_archivo, tipo_documento)
+                VALUES ($1, $2, $3, 'Orden de Compra')
+            `, [facturaId, ocFile.originalname, ocFile.path]);
+        }
+
+        // 4. ACTUALIZAR ORDEN DE COMPRA A 'FACTURADA'
+        await client.query(`
+            UPDATE ordenes_compra SET estado = 'FACTURADA' WHERE id = $1
+        `, [idLimpio]);
+
+        // 5. REGISTRO EN AUDITORÍA
         await client.query(`
             INSERT INTO auditoria (usuario_id, modulo, accion, registro_id, detalle)
             VALUES ($1, 'PORTAL_B2B', 'RECEPCION_FACTURA', $2, $3)
-        `, [usuarioId, facturaId, `El proveedor subió la factura ${serie}-${numero_documento}`]);
+        `, [usuarioId, facturaId, `Proveedor subió ${tipo_documento} ${serie}-${numero_documento} junto a su OC.`]);
 
         await client.query('COMMIT');
-        res.status(201).json({ msg: '¡Comprobante recepcionado con éxito en SuperNova!' });
+        res.status(201).json({ 
+            success: true,
+            msg: `¡${tipo_documento} recepcionado con éxito!`
+        });
 
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error("❌ Error en Recepción B2B:", err);
-        res.status(500).json({ msg: 'Error interno al guardar la factura.' });
+        console.error("❌ Error Crítico en Recepción B2B:", err);
+        res.status(500).json({ msg: 'Error interno al procesar el documento en el servidor.' });
     } finally {
         client.release();
     }
@@ -1164,7 +1340,7 @@ exports.obtenerDashboardB2B = async (req, res) => {
             } else if (cat.includes('activo') || cat.includes('fijo')) {
                 categorias.activos += cant;
             } else {
-                categorias.mercaderia += cant; // Todo lo demás cae aquí
+                categorias.mercaderia += cant;
             }
         });
 
@@ -1205,7 +1381,7 @@ exports.validarOrdenCompraB2B = async (req, res) => {
     try {
         // Buscamos la Orden de Compra por su código (Ignorando mayúsculas/minúsculas)
         const result = await pool.query(`
-            SELECT id, moneda, monto_subtotal, monto_igv, monto_total, estado, proveedor_id
+            SELECT id, moneda, monto_subtotal, monto_igv, monto_total, estado, proveedor_id, porcentaje_impuesto
             FROM ordenes_compra
             WHERE UPPER(codigo_oc) = UPPER($1)
         `, [codigo.trim()]);
@@ -1233,5 +1409,66 @@ exports.validarOrdenCompraB2B = async (req, res) => {
     } catch (err) {
         console.error("❌ Error validando OC B2B:", err);
         res.status(500).json({ msg: 'Error interno al validar la Orden de Compra.' });
+    }
+};
+
+// --- 🆕 OBTENER NOTIFICACIONES DEL PROVEEDOR ---
+exports.obtenerNotificacionesB2B = async (req, res) => {
+    try {
+        // En el portal B2B, el proveedor_id viene del token (req.usuario.proveedor_id)
+        const proveedorId = req.usuario.proveedor_id;
+
+        if (!proveedorId) {
+            return res.status(403).json({ msg: "No autorizado para ver notificaciones" });
+        }
+
+        const result = await pool.query(
+            `SELECT id, titulo, mensaje, tipo, leido, fecha_creacion 
+             FROM notificaciones_b2b 
+             WHERE proveedor_id = $1 
+             ORDER BY fecha_creacion DESC LIMIT 50`,
+            [proveedorId]
+        );
+
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Error al obtener notificaciones:", err);
+        res.status(500).json({ msg: "Error de servidor" });
+    }
+};
+
+// --- 🆕 MARCAR TODAS COMO LEÍDAS ---
+exports.marcarLeidasB2B = async (req, res) => {
+    try {
+        const proveedorId = req.usuario.proveedor_id;
+        
+        await pool.query(
+            "UPDATE notificaciones_b2b SET leido = TRUE WHERE proveedor_id = $1",
+            [proveedorId]
+        );
+
+        res.json({ msg: "Notificaciones marcadas como leídas" });
+    } catch (err) {
+        console.error("Error al marcar leídas:", err);
+        res.status(500).json({ msg: "Error de servidor" });
+    }
+};
+
+// --- 🆕 OBTENER COMUNICADO ACTIVO (BANNER B2B) ---
+exports.obtenerComunicadoB2B = async (req, res) => {
+    try {
+        // Buscamos el último comunicado que esté marcado como activo
+        const result = await pool.query(
+            `SELECT titulo, mensaje, tipo, fecha_publicacion 
+             FROM comunicados_b2b 
+             WHERE activo = TRUE 
+             ORDER BY fecha_publicacion DESC LIMIT 1`
+        );
+
+        // Si hay un comunicado, lo enviamos. Si no, enviamos null.
+        res.json(result.rows.length > 0 ? result.rows[0] : null);
+    } catch (err) {
+        console.error("Error al obtener comunicado B2B:", err);
+        res.status(500).json({ msg: "Error de servidor al cargar el comunicado" });
     }
 };

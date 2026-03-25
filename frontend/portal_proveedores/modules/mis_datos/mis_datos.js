@@ -382,13 +382,13 @@
                 const responseData = await res.json();
 
                 if (res.ok) {
-                    alert("✅ " + responseData.msg);
+                    mostrarAlertaB2B("Datos Guardados", responseData.msg, "success");
                 } else {
-                    alert("❌ Error: " + responseData.msg);
+                    mostrarAlertaB2B("Error al Guardar", responseData.msg, "error");
                 }
             } catch (err) {
                 console.error(err);
-                alert("Error de conexión al guardar los datos.");
+                mostrarAlertaB2B("Error de Conexión", "No se pudo comunicar con el servidor para guardar los datos.", "error");
             } finally {
                 // 🔥 EL ARREGLO (Restaurar el botón solo si existe)
                 if (btnGuardar) {

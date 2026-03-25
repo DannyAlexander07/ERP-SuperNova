@@ -1,4 +1,4 @@
-//Ubicacion: SUPERNOVA/frontend/modules/ordenes_compra/ordenes.js
+//Ubicacion: SUPERNOVA/frontend/modules/ordenes_compra/ordenes_compra.js
 
 window.initOrdenesCompra = async function() {
     console.log("Módulo Interno de Órdenes de Compra Cargado");
@@ -7,38 +7,44 @@ window.initOrdenesCompra = async function() {
     // 1. CARGAR PROVEEDORES
     async function cargarProveedoresSelect() {
         try {
-            const res = await fetch('http://localhost:3000/api/proveedores', { headers: { 'x-auth-token': token } });
+            const res = await fetch('/api/proveedores', { headers: { 'x-auth-token': token } });
             const proveedores = await res.json();
             const select = document.getElementById('oc-proveedor');
-            select.innerHTML = '<option value="">Seleccione un proveedor...</option>';
-            proveedores.forEach(p => select.innerHTML += `<option value="${p.id}">${p.razon_social} (RUC: ${p.ruc})</option>`);
+            if(!select) return;
+            let options = '<option value="">Seleccione un proveedor...</option>';
+            proveedores.forEach(p => options += `<option value="${p.id}">${p.razon_social} (RUC: ${p.ruc})</option>`);
+            select.innerHTML = options;
         } catch (err) { console.error("Error cargando proveedores", err); }
     }
 
     // 2. CARGAR SEDES (NUEVO)
     async function cargarSedesSelect() {
         try {
-            const res = await fetch('http://localhost:3000/api/sedes', { headers: { 'x-auth-token': token } });
+            const res = await fetch('/api/sedes', { headers: { 'x-auth-token': token } });
             const sedes = await res.json();
             const select = document.getElementById('oc-sede');
-            select.innerHTML = '<option value="">Seleccione una sede...</option>';
-            sedes.forEach(s => select.innerHTML += `<option value="${s.id}">${s.nombre}</option>`);
+            if(!select) return;
+            let options = '<option value="">Seleccione una sede...</option>';
+            sedes.forEach(s => options += `<option value="${s.id}">${s.nombre}</option>`);
+            select.innerHTML = options;
         } catch (err) { console.error("Error cargando sedes", err); }
     }
 
     // 3. CARGAR DATOS DESDE EL API
     async function cargarTablaOC() {
         const tbody = document.getElementById('tabla-oc-interna');
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">Cargando...</td></tr>`;
+        if(!tbody) return;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;"><i class='bx bx-loader-alt bx-spin'></i> Cargando...</td></tr>`;
         
         try {
-            const res = await fetch('http://localhost:3000/api/ordenes', { headers: { 'x-auth-token': token } });
-            // 🔥 Guardamos en la variable global para paginar
+            const res = await fetch('/api/ordenes', { headers: { 'x-auth-token': token } });
             ordenesData = await res.json(); 
-            
             paginaActual = 1; 
-            renderizarPagina(); // Llamamos a la nueva función de dibujo
-        } catch (err) { console.error("Error", err); }
+            renderizarPagina(); 
+        } catch (err) { 
+            console.error("Error", err); 
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:red;">Error al cargar datos</td></tr>`;
+        }
     }
 
    // 4. LÓGICA MATEMÁTICA (CÁLCULO AUTOMÁTICO DE IMPUESTOS Y TOTAL)
@@ -60,8 +66,7 @@ window.initOrdenesCompra = async function() {
         let montoImpuestoCalculado = subtotal * tasaImpuesto;
         let montoTotalCalculado = 0;
 
-        // Si es Retención (RxH 8%), el impuesto se RESTA del subtotal para hallar el Total a Pagar.
-        // En los demás casos (IGV), se SUMA.
+        // Lógica dinámica: Si es Retención (0.08) se resta, cualquier otra tasa (0.18, 0.105) se suma.
         if (tasaImpuesto === 0.08) {
             montoTotalCalculado = subtotal - montoImpuestoCalculado;
         } else {
@@ -99,11 +104,11 @@ window.initOrdenesCompra = async function() {
                 monto_subtotal: document.getElementById('oc-subtotal').value,
                 monto_igv: document.getElementById('oc-igv').value,
                 monto_total: document.getElementById('oc-total').value,
-                observaciones: document.getElementById('oc-obs').value
-                // 🚀 Nota: Ya no mandamos el 'codigo_oc', el backend lo autogenerará
+                observaciones: document.getElementById('oc-obs').value,
+                porcentaje_impuesto: (parseFloat(document.getElementById('oc-tipo-impuesto').value) * 100).toFixed(2)
             };
 
-            const res = await fetch('http://localhost:3000/api/ordenes', {
+            const res = await fetch('/api/ordenes', {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
@@ -151,7 +156,8 @@ window.initOrdenesCompra = async function() {
     // --- 🔥 NUEVAS FUNCIONES DE PAGINACIÓN ---
     function renderizarPagina() {
         const tbody = document.getElementById('tabla-oc-interna');
-        tbody.innerHTML = '';
+        if(!tbody) return;
+        let html = ''; // Acumulador
 
         const inicio = (paginaActual - 1) * filasPorPagina;
         const fin = inicio + filasPorPagina;
@@ -162,19 +168,55 @@ window.initOrdenesCompra = async function() {
                 ? `<a href="${oc.archivo_pdf_url}" target="_blank" style="color:#dd5555; text-decoration:none; font-weight:bold;"><i class='bx bxs-file-pdf'></i> PDF</a>` 
                 : '<span style="color:#94a3b8;">Sin PDF</span>';
 
-            tbody.innerHTML += `
+            const fechaLimpia = oc.fecha_emision ? oc.fecha_emision.split('T')[0] : 'S/F';
+
+            html += `
                 <tr>
                     <td style="color:#8aa6b4; font-weight:700;">${oc.codigo_oc}</td>
                     <td>${oc.proveedor_nombre || 'Desconocido'}</td>
-                    <td>${oc.fecha_emision.split('T')[0]}</td>
+                    <td>${fechaLimpia}</td>
                     <td><strong>${oc.moneda}</strong></td>
-                    <td>${oc.moneda === 'PEN' ? 'S/' : '$'} ${parseFloat(oc.monto_total).toFixed(2)}</td>
+                    <td>${oc.moneda === 'PEN' ? 'S/' : '$'} ${parseFloat(oc.monto_total || 0).toFixed(2)}</td>
                     <td><span class="status-badge" style="background:#dce5eb; color:#6a66c0; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:bold;">${oc.estado}</span></td>
                     <td>${btnPdf}</td>
                 </tr>`;
         });
+        tbody.innerHTML = html; // Asignación única al DOM
         actualizarControlesPaginacion();
     }
+
+    // 🔥 NUEVA FUNCIÓN: EXPORTAR A EXCEL
+    window.exportarOrdenesExcel = function() {
+        if (!ordenesData || ordenesData.length === 0) {
+            if(typeof mostrarToast === 'function') mostrarToast("No hay datos para exportar", "error");
+            else alert("No hay datos para exportar");
+            return;
+        }
+
+        // 1. Preparar los datos para SheetJS (Nombres de columnas limpios)
+        const datosExcel = ordenesData.map(oc => ({
+            "CÓDIGO OC": oc.codigo_oc,
+            "PROVEEDOR": oc.proveedor_nombre,
+            "RUC": oc.proveedor_ruc,
+            "FECHA EMISIÓN": oc.fecha_emision ? oc.fecha_emision.split('T')[0] : '',
+            "MONEDA": oc.moneda,
+            "SUBTOTAL": parseFloat(oc.monto_subtotal).toFixed(2),
+            "IMPUESTO": parseFloat(oc.monto_igv).toFixed(2),
+            "TOTAL": parseFloat(oc.monto_total).toFixed(2),
+            "ESTADO": oc.estado,
+            "CONDICIÓN": oc.condicion_pago
+        }));
+
+        // 2. Crear el libro y la hoja
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(datosExcel);
+
+        // 3. Añadir la hoja al libro y descargar
+        XLSX.utils.book_append_sheet(wb, ws, "Ordenes_Compra");
+        XLSX.writeFile(wb, `Reporte_OC_SuperNova_${new Date().toISOString().slice(0,10)}.xlsx`);
+
+        if(typeof mostrarToast === 'function') mostrarToast("Excel generado con éxito", "success");
+    };
 
     function actualizarControlesPaginacion() {
         const totalPaginas = Math.ceil(ordenesData.length / filasPorPagina);

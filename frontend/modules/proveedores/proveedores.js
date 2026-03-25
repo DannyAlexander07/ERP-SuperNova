@@ -454,17 +454,29 @@
     // ==========================================
     // 6. UTILIDADES RESTANTES (Sunat, Eliminar, etc)
     // ==========================================
-    window.eliminarProveedor = async function(id) {
-        if(!await showConfirm("¿Estás seguro de eliminar este proveedor?", "Confirmar")) return;
-        try {
-            const res = await fetch(`/api/proveedores/${id}`, {
-                method: 'DELETE',
-                headers: { 'x-auth-token': localStorage.getItem('token') }
-            });
-            const data = await res.json();
-            if(res.ok) { showToast(data.msg, "success"); window.initProveedores(); } 
-            else showToast(data.msg, "error");
-        } catch(e) { showToast("Error al procesar.", "error"); }
+    window.eliminarProveedor = function(id) {
+        solicitarConfirmacionProveedor(
+            "Eliminar Proveedor",
+            "¿Estás seguro de eliminar este proveedor? Esta acción no se puede deshacer.",
+            "danger",
+            async () => {
+                try {
+                    const res = await fetch(`/api/proveedores/${id}`, {
+                        method: 'DELETE',
+                        headers: { 'x-auth-token': localStorage.getItem('token') }
+                    });
+                    const data = await res.json();
+                    if(res.ok) { 
+                        showToast(data.msg, "success"); 
+                        window.initProveedores(); 
+                    } else {
+                        showToast(data.msg, "error");
+                    }
+                } catch(e) { 
+                    showToast("Error al procesar la eliminación.", "error"); 
+                }
+            }
+        );
     };
 
     window.buscarDatosSunat = async function(idDoc, idNombre, idDireccion) {
@@ -558,6 +570,7 @@
         const nuevaPass = document.getElementById('b2b-nueva-pass').value.trim();
         const correoBase = document.getElementById('b2b-correo').value;
         const btnSave = document.getElementById('btn-guardar-b2b');
+        const nombreProv = document.getElementById('b2b-proveedor-nombre').innerText;
 
         if(nuevaPass.length < 6) {
             return showToast("La nueva contraseña debe tener al menos 6 caracteres.", "warning");
@@ -567,57 +580,155 @@
             return showToast("El proveedor primero debe tener un correo registrado en sus datos fiscales.", "error");
         }
 
-        if(!confirm(`⚠️ ATENCIÓN:\n\nVa a sobrescribir la contraseña de acceso al portal B2B para:\n${document.getElementById('b2b-proveedor-nombre').innerText}.\n\n¿Desea continuar?`)) {
-            return;
-        }
+        // 🔥 LLAMAMOS AL MODAL DE CONFIRMACIÓN ELEGANTE EN LUGAR DEL CONFIRM NATIVO
+        solicitarConfirmacionProveedor(
+            "Sobrescribir Contraseña",
+            `⚠️ ATENCIÓN:\nVa a sobrescribir la contraseña de acceso al portal B2B para:\n${nombreProv}.\n¿Desea continuar?`,
+            "primary",
+            async () => {
+                const txtOriginal = btnSave.innerHTML;
+                btnSave.disabled = true;
+                btnSave.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Aplicando...";
 
-        const txtOriginal = btnSave.innerHTML;
-        btnSave.disabled = true;
-        btnSave.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Aplicando...";
+                try {
+                    const token = localStorage.getItem('token');
+                    // 🔥 Llamada a la nueva ruta secreta del backend
+                    const res = await fetch(`/api/proveedores/${provId}/forzar-password`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
+                        body: JSON.stringify({ nuevaPassword: nuevaPass, correo: correoBase })
+                    });
 
-        try {
-            const token = localStorage.getItem('token');
-            // 🔥 Llamada a la nueva ruta secreta del backend
-            const res = await fetch(`/api/proveedores/${provId}/forzar-password`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-                body: JSON.stringify({ nuevaPassword: nuevaPass, correo: correoBase })
-            });
-
-            const data = await res.json();
-            
-            if(res.ok) {
-                showToast("✅ Contraseña sobrescrita exitosamente.", "success");
-                
-                // Le mostramos al usuario interno un alert para que la copie y se la mande al proveedor
-                prompt("Acceso restaurado. Copie esta información y envíesela al proveedor:", `Usuario: ${correoBase}\nNueva Contraseña: ${nuevaPass}`);
-                
-                cerrarModalB2B();
-            } else {
-                showToast(data.msg, "error");
+                    const data = await res.json();
+                    
+                    if(res.ok) {
+                        showToast("✅ Contraseña sobrescrita exitosamente.", "success");
+                        
+                        cerrarModalB2B(); // Cerramos el modal del formulario
+                        
+                        // 🔥 LLAMAMOS AL MODAL DE COPIAR EN VEZ DEL PROMPT NATIVO
+                        mostrarModalCopiar(
+                            "Acceso Restaurado",
+                            "Copie esta información y envíela al proveedor para que pueda ingresar al sistema:",
+                            `Usuario: ${correoBase}\nNueva Contraseña: ${nuevaPass}`
+                        );
+                        
+                    } else {
+                        showToast(data.msg, "error");
+                    }
+                } catch (error) {
+                    console.error(error);
+                    showToast("Error crítico al forzar la contraseña.", "error");
+                } finally {
+                    btnSave.disabled = false;
+                    btnSave.innerHTML = txtOriginal;
+                }
             }
-        } catch (error) {
-            console.error(error);
-            showToast("Error crítico al forzar la contraseña.", "error");
-        } finally {
-            btnSave.disabled = false;
-            btnSave.innerHTML = txtOriginal;
-        }
+        );
     });
 
-    window.generarInvitacionProveedor = async function() {
-        if(!confirm('¿Generar código de invitación?')) return;
-        try {
-            const res = await fetch('/api/proveedores/generar-invitacion', {
-                method: 'POST',
-                headers: { 'x-auth-token': localStorage.getItem('token') }
-            });
-            const data = await res.json();
-            if (res.ok) {
-                prompt(`✅ CÓDIGO GENERADO:\n\nEnvíe este código al proveedor:`, data.codigo);
-                window.initProveedores();
-            } else showToast(data.msg, "error");
-        } catch (err) { showToast('Error de conexión.', "error"); }
+    window.generarInvitacionProveedor = function() {
+        solicitarConfirmacionProveedor(
+            "Generar Invitación",
+            "¿Deseas generar un nuevo código de invitación para un proveedor?",
+            "primary",
+            async () => {
+                try {
+                    const res = await fetch('/api/proveedores/generar-invitacion', {
+                        method: 'POST',
+                        headers: { 'x-auth-token': localStorage.getItem('token') }
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        // 🔥 LLAMAMOS AL MODAL DE COPIAR (Reemplaza el prompt)
+                        mostrarModalCopiar(
+                            "Código Generado",
+                            "Envíe este código al nuevo proveedor para que pueda registrarse:",
+                            data.codigo
+                        );
+                        window.initProveedores();
+                    } else {
+                        showToast(data.msg, "error");
+                    }
+                } catch (err) { 
+                    showToast('Error de conexión.', "error"); 
+                }
+            }
+        );
+    };
+
+    // ==========================================
+    // 🛡️ CONTROLADORES DE MODALES DINÁMICOS
+    // ==========================================
+    
+    // 1. Modal de Confirmación
+    window.solicitarConfirmacionProveedor = function(titulo, mensaje, tipo, callback) {
+        const modal = document.getElementById('modal-confirmar-proveedor');
+        const title = document.getElementById('confirm-modal-title');
+        const text = document.getElementById('confirm-modal-text');
+        const btn = document.getElementById('confirm-modal-btn');
+        const iconContainer = document.getElementById('confirm-modal-icon');
+
+        title.innerText = titulo;
+        text.innerText = mensaje;
+        
+        if (tipo === 'danger') {
+            iconContainer.innerHTML = "<i class='bx bx-error-circle' style='color: #ef4444; font-size: 55px;'></i>";
+            btn.style.backgroundColor = "#ef4444";
+            btn.innerText = "Sí, Eliminar";
+        } else {
+            iconContainer.innerHTML = "<i class='bx bx-help-circle' style='color: #3b82f6; font-size: 55px;'></i>";
+            btn.style.backgroundColor = "#3b82f6";
+            btn.innerText = "Sí, Continuar";
+        }
+
+        btn.onclick = async () => {
+            btn.disabled = true;
+            btn.innerText = "Procesando...";
+            try {
+                await callback();
+            } finally {
+                cerrarModalConfirmacionProv();
+                btn.disabled = false;
+            }
+        };
+
+        modal.classList.remove('hidden');
+        modal.classList.add('active');
+    };
+
+    window.cerrarModalConfirmacionProv = function() {
+        const modal = document.getElementById('modal-confirmar-proveedor');
+        if(modal) {
+            modal.classList.remove('active');
+            modal.classList.add('hidden');
+        }
+    };
+
+    // 2. Modal de Copiar Datos
+    window.mostrarModalCopiar = function(titulo, mensaje, contenidoCopiar) {
+        const modal = document.getElementById('modal-copiar-datos');
+        document.getElementById('copy-modal-title').innerText = titulo;
+        document.getElementById('copy-modal-text').innerText = mensaje;
+        document.getElementById('copy-modal-content').value = contenidoCopiar;
+        
+        modal.classList.remove('hidden');
+        modal.classList.add('active');
+    };
+
+    window.cerrarModalCopiar = function() {
+        const modal = document.getElementById('modal-copiar-datos');
+        if(modal) {
+            modal.classList.remove('active');
+            modal.classList.add('hidden');
+        }
+    };
+
+    window.copiarContenidoModal = function() {
+        const text = document.getElementById('copy-modal-content');
+        text.select();
+        document.execCommand("copy");
+        showToast("¡Copiado al portapapeles!", "success");
     };
 
     window.initProveedores();

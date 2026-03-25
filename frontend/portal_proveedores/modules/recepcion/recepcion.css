@@ -103,56 +103,115 @@
     gap: 4px;
 }
 
-/* --- DRAG AND DROP ZONES --- */
+/* =========================================================
+   ✨ MEJORAS VISUALES: ZONAS DE CARGA DE ARCHIVOS
+   ========================================================= */
+
+/* 1. Contenedor Grid Responsivo (Desktop, Tablet, Móvil) */
 .files-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
+    display: grid !important;
+    /* Se adapta solo: 3 en PC, 2 o 1 en Tablet, 1 en Móvil */
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+    gap: 20px !important;
 }
 
+/* 2. Estructura de cada Tarjeta (Drop Zone) */
 .file-drop-zone {
-    border: 2px dashed #cbd5e1;
-    border-radius: 12px;
-    padding: 30px 20px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    background: #f8fafc;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 2px dashed #cbd5e1 !important;
+    border-radius: 12px !important;
+    padding: 25px 15px !important;
+    text-align: center !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+    background: #f8fafc !important;
+    min-height: 170px !important; /* Fija la misma altura para las 3 cajas */
+    position: relative;
 }
 
+/* Efectos Hover elegantes */
 .file-drop-zone:hover {
-    border-color: #06b6d4;
-    background: #f0fdfa;
+    border-color: #06b6d4 !important;
+    background: #f0fdfa !important;
+    transform: translateY(-4px) !important;
+    box-shadow: 0 8px 20px rgba(6, 182, 212, 0.08) !important;
 }
 
+/* Estado cuando se arrastra un archivo encima */
 .file-drop-zone.dragover {
-    background: #e0f2fe;
-    border-color: #0ea5e9;
-    transform: scale(1.02);
+    background: #e0f2fe !important;
+    border-color: #0ea5e9 !important;
+    transform: scale(1.03) !important;
 }
 
+/* 3. Contenedor del Icono (Efecto Burbuja Premium) */
 .file-drop-zone i {
-    font-size: 3rem;
-    margin-bottom: 10px;
+    font-size: 2.2rem !important;
+    margin-bottom: 12px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 55px !important;
+    height: 55px !important;
+    border-radius: 50% !important;
+    transition: all 0.3s ease !important;
 }
 
-.icon-pdf { color: #ef4444; } /* Rojo PDF */
-.icon-xml { color: #f59e0b; } /* Naranja XML */
+/* Colores específicos para los fondos de los iconos */
+.file-drop-zone:nth-child(1) i { color: #ef4444 !important; background: #fee2e2 !important; } /* PDF (Rojo) */
+.file-drop-zone:nth-child(2) i { color: #f59e0b !important; background: #fef3c7 !important; } /* XML (Naranja) */
+.file-drop-zone:nth-child(3) i { color: #64748b !important; background: #f1f5f9 !important; } /* OC (Gris) */
 
+/* Animación del icono al hacer hover en la caja */
+.file-drop-zone:hover i {
+    background: #ffffff !important;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.06) !important;
+    transform: scale(1.1) !important;
+}
+
+/* 4. Textos forzados a centrarse y no romperse */
 .file-drop-zone h4 {
-    color: #1e293b;
-    font-size: 0.95rem;
-    margin-bottom: 5px;
+    color: #1e293b !important;
+    font-size: 0.95rem !important;
+    font-weight: 700 !important;
+    margin: 0 0 6px 0 !important;
+    line-height: 1.2 !important;
+    width: 100% !important;
 }
 
 .file-drop-zone p {
-    color: #64748b;
-    font-size: 0.8rem;
+    color: #64748b !important;
+    font-size: 0.8rem !important;
+    margin: 0 !important;
+    font-weight: 500 !important;
+    width: 100% !important;
 }
 
-.file-ready {
-    border-color: #10b981;
-    background: #ecfdf5;
+/* 5. Estado de Éxito (Archivo cargado) */
+.file-drop-zone.file-ready {
+    border-color: #10b981 !important;
+    background: #ecfdf5 !important;
+    border-style: solid !important;
+}
+
+.file-drop-zone.file-ready i {
+    color: #10b981 !important;
+    background: #d1fae5 !important;
+}
+
+/* 6. Responsividad Extrema (Móvil y Tablet pequeña) */
+@media screen and (max-width: 768px) {
+    .files-grid { 
+        grid-template-columns: 1fr !important; /* 1 sola columna apilada en móvil */
+        gap: 15px !important;
+    }
+    .file-drop-zone {
+        min-height: 140px !important;
+        padding: 20px 15px !important;
+    }
 }
 
 /* --- BOTÓN SUBMIT --- */
@@ -187,4 +246,133 @@
 /* Responsive */
 @media screen and (max-width: 768px) {
     .files-grid { grid-template-columns: 1fr; }
+}
+
+/* ==========================================
+   MODAL CAMALEÓN B2B (Notificaciones)
+========================================== */
+.modal-b2b-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(15, 23, 42, 0.6);
+    display: none; justify-content: center; align-items: center;
+    z-index: 9999; backdrop-filter: blur(4px);
+    opacity: 0; transition: opacity 0.3s ease;
+}
+.modal-b2b-overlay.active { display: flex; opacity: 1; }
+
+.modal-b2b-content {
+    background: #fff; padding: 30px; border-radius: 16px;
+    width: 90%; max-width: 400px; text-align: center;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    transform: scale(0.9); transition: transform 0.3s ease;
+}
+.modal-b2b-overlay.active .modal-b2b-content { transform: scale(1); }
+
+.modal-b2b-icon { font-size: 4rem; margin-bottom: 10px; }
+.modal-b2b-icon.success { color: #10b981; }
+.modal-b2b-icon.error { color: #ef4444; }
+.modal-b2b-icon.warning { color: #f59e0b; }
+
+.btn-b2b-confirm {
+    padding: 12px 30px; border: none; border-radius: 8px; 
+    font-weight: 600; cursor: pointer; font-size: 1rem; 
+    transition: background 0.2s; color: white; width: 100%;
+}
+.btn-b2b-confirm.success { background: #10b981; }
+.btn-b2b-confirm.success:hover { background: #059669; }
+.btn-b2b-confirm.error { background: #ef4444; }
+.btn-b2b-confirm.error:hover { background: #dc2626; }
+.btn-b2b-confirm.warning { background: #f59e0b; }
+.btn-b2b-confirm.warning:hover { background: #d97706; }
+
+/* =========================================================
+   📱 RESPONSIVIDAD GLOBAL (Desktop, Tablet, Móvil)
+   ========================================================= */
+
+/* 1. Protección general anti-desborde */
+.recepcion-container {
+    width: 100%;
+    max-width: 900px;
+    box-sizing: border-box;
+    overflow-x: hidden; /* Evita que se pueda hacer scroll horizontal en la pantalla */
+}
+
+.recepcion-form *, .recepcion-header * {
+    box-sizing: border-box;
+}
+
+/* 2. Ajustes para Tablets (max-width: 992px) */
+@media screen and (max-width: 992px) {
+    .recepcion-container {
+        margin: 10px;
+        width: calc(100% - 20px);
+    }
+    
+    .form-grid {
+        grid-template-columns: 1fr 1fr; /* Mantiene 2 columnas en tablet */
+    }
+}
+
+/* 3. Ajustes extremos para Móviles (max-width: 768px) */
+@media screen and (max-width: 768px) {
+    /* Reducimos el relleno interno para ganar espacio en la pantallita */
+    .recepcion-form {
+        padding: 20px 15px !important;
+    }
+    
+    .recepcion-header {
+        padding: 20px 15px !important;
+    }
+
+    .recepcion-header h2 {
+        font-size: 1.15rem !important;
+    }
+
+    /* Convertimos todas las grillas a 1 sola columna vertical */
+    .form-grid {
+        grid-template-columns: 1fr !important;
+        gap: 15px !important;
+    }
+
+    /* 🔥 LA MAGIA: Apilamos los elementos que estaban forzados en línea (Fechas, OC, Impuestos) */
+    .form-grid > div[style*="display: flex"],
+    .input-group > div[style*="display: flex"] {
+        flex-direction: column !important; /* Pone uno debajo del otro */
+        width: 100% !important;
+        gap: 10px !important;
+    }
+
+    /* Obligamos a los inputs, selects y grupos hijos a tomar todo el ancho */
+    .form-grid > div[style*="display: flex"] > .input-group,
+    .input-group > div[style*="display: flex"] > input,
+    .input-group > div[style*="display: flex"] > select {
+        width: 100% !important;
+        max-width: 100% !important;
+        flex: none !important;
+    }
+
+    /* El botón de Validar OC ahora será grande y fácil de tocar con el dedo */
+    .btn-validar-oc {
+        width: 100% !important;
+        padding: 12px !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        margin-top: 2px !important;
+        border-radius: 8px !important;
+    }
+
+    /* El botón de Enviar final ocupará todo el ancho para mayor comodidad */
+    .btn-submit {
+        width: 100% !important;
+        justify-content: center !important;
+        font-size: 1rem !important;
+        padding: 15px !important;
+    }
+    
+    /* Pequeño ajuste visual para la ayuda textual de la OC */
+    .help-text {
+        line-height: 1.4;
+        margin-top: 5px;
+    }
 }

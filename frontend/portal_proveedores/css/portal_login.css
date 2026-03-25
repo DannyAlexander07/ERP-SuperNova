@@ -1,4 +1,19 @@
+/* =========================================
+   1. VARIABLES Y BASE
+   ========================================= */
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap');
+
+:root {
+    --primary-color: #ff6600;
+    --primary-hover: #e65c00;
+    --dark-bg: #1e2022;
+    --dark-hover: #333639;
+    --text-main: #333333;
+    --text-muted: #666666;
+    --border-color: #cccccc;
+    --bg-light: #fafafa;
+    --shadow-card: 0 15px 35px rgba(0, 0, 0, 0.5);
+}
 
 * {
     margin: 0;
@@ -10,13 +25,15 @@
 body, html {
     height: 100%;
     width: 100%;
-    overflow: hidden; /* Evita scrolls raros en el body */
+    overflow: hidden; 
 }
 
+/* =========================================
+   2. CONTENEDOR PRINCIPAL
+   ========================================= */
 .login-container {
     height: 100vh;
     width: 100%;
-    /* Pon aquí una imagen corporativa genial para el fondo */
     background: url('https://images.unsplash.com/photo-1494412519320-aa613dfb7738?q=80&w=2070&auto=format&fit=crop') center/cover no-repeat;
     position: relative;
     display: flex;
@@ -27,21 +44,27 @@ body, html {
 .login-overlay {
     position: absolute;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0, 0, 0, 0.6); /* Un poco más oscuro para que resalte la tarjeta */
+    background: rgba(0, 0, 0, 0.65);
+    z-index: 1;
 }
 
+/* =========================================
+   3. TARJETA DE LOGIN (CARD)
+   ========================================= */
 .login-card {
     background: #ffffff;
     width: 100%;
     max-width: 400px;
-    border-top: 5px solid #ff6600; /* Línea Naranja superior corporativa */
-    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+    border-top: 5px solid var(--primary-color);
+    box-shadow: var(--shadow-card);
     position: relative;
     z-index: 10;
+    border-radius: 4px;
+    overflow: hidden;
 }
 
 .login-header {
-    background: #1e2022; /* Gris oscuro industrial */
+    background: var(--dark-bg);
     color: white;
     text-align: center;
     padding: 30px 20px;
@@ -49,7 +72,7 @@ body, html {
 
 .login-header h2 {
     font-weight: 900;
-    letter-spacing: 1px;
+    letter-spacing: 1.5px;
     font-size: 1.8rem;
 }
 
@@ -65,6 +88,9 @@ body, html {
     padding: 35px 30px;
 }
 
+/* =========================================
+   4. FORMULARIO E INPUTS
+   ========================================= */
 .input-group {
     position: relative;
     margin-bottom: 22px;
@@ -75,22 +101,23 @@ body, html {
     top: 50%;
     left: 15px;
     transform: translateY(-50%);
-    color: #666;
+    color: var(--text-muted);
     font-size: 1.2rem;
 }
 
 .input-group input {
     width: 100%;
     padding: 14px 15px 14px 45px;
-    border: 1px solid #ccc;
-    background: #fafafa;
+    border: 1px solid var(--border-color);
+    background: var(--bg-light);
     font-size: 0.95rem;
     outline: none;
     transition: 0.3s;
+    border-radius: 4px;
 }
 
 .input-group input:focus {
-    border-color: #ff6600;
+    border-color: var(--primary-color);
     background: #fff;
     box-shadow: 0 0 0 3px rgba(255, 102, 0, 0.1);
 }
@@ -101,19 +128,22 @@ body, html {
 }
 
 .forgot-password a {
-    color: #666;
+    color: var(--text-muted);
     font-size: 0.85rem;
     text-decoration: none;
     font-weight: 500;
 }
 
 .forgot-password a:hover {
-    color: #ff6600;
+    color: var(--primary-color);
 }
 
+/* =========================================
+   5. BOTONES
+   ========================================= */
 .btn-ingresar {
     width: 100%;
-    background: #ff6600; /* Naranja potente */
+    background: var(--primary-color);
     color: white;
     border: none;
     padding: 14px;
@@ -126,10 +156,11 @@ body, html {
     align-items: center;
     gap: 8px;
     text-transform: uppercase;
+    border-radius: 4px;
 }
 
 .btn-ingresar:hover {
-    background: #e65c00;
+    background: var(--primary-hover);
     transform: translateY(-1px);
 }
 
@@ -141,14 +172,14 @@ body, html {
 }
 
 .register-section p {
-    color: #666;
+    color: var(--text-muted);
     font-size: 0.85rem;
     margin-bottom: 15px;
 }
 
 .btn-registro {
     width: 100%;
-    background: #1e2022;
+    background: var(--dark-bg);
     color: white;
     border: none;
     padding: 12px;
@@ -160,24 +191,25 @@ body, html {
     justify-content: center;
     align-items: center;
     gap: 8px;
+    border-radius: 4px;
 }
 
 .btn-registro:hover {
-    background: #333639;
+    background: var(--dark-hover);
 }
 
 /* =========================================
-   ESTILOS DEL MODAL DE REGISTRO
+   6. MODALES (GENERAL)
    ========================================= */
 .modal-overlay {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.8); /* Fondo más oscuro para enfoque */
-    z-index: 100;
+    background: rgba(0,0,0,0.85); 
+    z-index: 1000;
     display: flex;
     justify-content: center;
     align-items: center;
-    backdrop-filter: blur(3px); /* Efecto desenfoque al fondo */
+    backdrop-filter: blur(3px);
 }
 
 .modal-overlay.hidden {
@@ -188,8 +220,10 @@ body, html {
     background: #fff;
     width: 90%;
     max-width: 450px;
-    border-top: 5px solid #ff6600;
+    border-top: 5px solid var(--primary-color);
     box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+    border-radius: 4px;
+    position: relative;
 }
 
 .modal-header {
@@ -202,43 +236,222 @@ body, html {
 }
 
 .modal-header h3 {
-    color: #1e2022;
+    color: var(--dark-bg);
     font-size: 1.2rem;
     font-weight: 700;
 }
 
-.modal-header i {
-    font-size: 1.8rem;
-    cursor: pointer;
-    color: #999;
-    transition: 0.3s;
-}
-
-.modal-header i:hover { color: #ff6600; }
-
 .modal-body {
-    padding: 30px 25px;
+    padding: 25px;
 }
 
 .modal-instruccion {
     font-size: 0.85rem;
-    color: #666;
+    color: var(--text-muted);
     margin-bottom: 25px;
     line-height: 1.5;
     background: #fff3eb;
     padding: 15px;
-    border-left: 4px solid #ff6600;
+    border-left: 4px solid var(--primary-color);
+}
+
+/* Estilos para Toasts */
+.toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+}
+.toast {
+    background: white;
+    padding: 15px 25px;
+    border-radius: 4px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+    animation: slideIn 0.3s ease forwards;
+}
+.toast.success { border-left: 5px solid #10b981; }
+.toast.error { border-left: 5px solid #ef4444; }
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
 }
 
 /* =========================================
-   DISEÑO RESPONSIVE BÁSICO
+   7. ADAPTACIÓN PARA TABLETS (Hasta 768px)
+   ========================================= */
+@media screen and (max-width: 768px) {
+    .login-card {
+        max-width: 360px;
+    }
+    
+    .modal-content {
+        max-width: 420px;
+    }
+}
+
+/* =========================================
+   8. ADAPTACIÓN PARA MÓVILES (Hasta 480px)
    ========================================= */
 @media screen and (max-width: 480px) {
-    .login-card { 
-        width: 90%; 
-        border-radius: 4px; /* Un toque de redondeado en móvil */
+    body, html {
+        overflow-y: auto; /* Permitir scroll si el contenido del modal es largo */
     }
+
+    .login-container {
+        padding: 15px;
+        background-attachment: scroll; /* Mejora rendimiento en móviles */
+    }
+
+    .login-card {
+        width: 100%;
+        max-width: 100%;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+    }
+
+    .login-header {
+        padding: 25px 15px;
+    }
+
+    .login-header h2 {
+        font-size: 1.5rem;
+    }
+
     .login-body {
         padding: 25px 20px;
     }
+
+    .modal-content {
+        width: 95%;
+        max-height: 95vh; /* Evita que el modal sea más grande que la pantalla */
+        overflow-y: auto;
+    }
+
+    .modal-body {
+        padding: 20px 15px;
+    }
+
+    /* Ajuste para formularios con botones al lado (OTP) */
+    .modal-body div[style*="display: flex"] {
+        flex-direction: column !important;
+        gap: 10px !important;
+    }
+
+    .modal-body div[style*="display: flex"] button {
+        width: 100% !important;
+        padding: 12px !important;
+    }
+
+    .toast-container {
+        width: calc(100% - 40px);
+        right: 20px;
+        left: 20px;
+    }
+
+    .toast {
+        width: 100%;
+    }
+}
+
+/* =========================================================
+   9. OPTIMIZACIONES FINALES (Desktop / Tablet / Móvil)
+   ========================================================= */
+
+/* Desktop: Evitamos comportamientos extraños con el teclado numérico o inputs */
+@media screen and (min-width: 1024px) {
+    .login-card {
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .login-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+    }
+}
+
+/* Tablet: Ajuste de fuentes para mejor lectura */
+@media screen and (max-width: 768px) {
+    .login-header h2 { font-size: 1.6rem; }
+    .modal-header h3 { font-size: 1.1rem; }
+}
+
+/* Móvil: UX y Accesibilidad */
+@media screen and (max-width: 480px) {
+    /* Ajuste de inputs para que no se haga zoom automático en iPhone */
+    .input-group input {
+        font-size: 16px !important; 
+        padding: 12px 12px 12px 42px;
+    }
+
+    /* Espaciado de secciones en el registro */
+    .modal-body h4 {
+        margin-top: 20px !important;
+        font-size: 13px !important;
+    }
+
+    /* Botón cerrar del modal más fácil de tocar */
+    .modal-header i {
+        padding: 10px;
+        margin: -10px;
+    }
+
+    /* Efecto de pulsación para botones en móvil */
+    .btn-ingresar:active, .btn-registro:active {
+        transform: scale(0.98);
+        filter: brightness(0.9);
+    }
+
+    /* Ajuste del fondo para que no se mueva al abrir el teclado */
+    .login-container {
+        height: -webkit-fill-available;
+        min-height: 100vh;
+    }
+}
+
+/* =========================================================
+   10. UTILIDADES DE ESTADO (Para JS)
+   ========================================================= */
+
+/* Clase para cuando un botón está cargando */
+.btn-loading {
+    pointer-events: none;
+    opacity: 0.7;
+    position: relative;
+    color: transparent !important;
+}
+
+.btn-loading::after {
+    content: "";
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    top: 50%;
+    left: 50%;
+    margin: -10px;
+    border: 3px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Scrollbar estética para modales largos en Windows */
+.modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+.modal-body::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+.modal-body::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 10px;
+}
+.modal-body::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-color);
 }

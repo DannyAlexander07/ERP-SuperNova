@@ -145,11 +145,15 @@
         const filtroProv = (document.getElementById('buscador-proveedor-compras')?.value || '').toLowerCase().trim();
         const filtroNum = (document.getElementById('buscador-numero-compras')?.value || '').toLowerCase().trim();
 
-        // 3. LÓGICA DE FILTRADO
+        // 3. LÓGICA DE FILTRADO (ACTUALIZADA: Ocultar Rechazados)
         const filtrados = facturasData.filter(f => {
             const matchProv = (f.proveedor || '').toLowerCase().includes(filtroProv);
             const matchNum = (f.numero_documento || '').toLowerCase().includes(filtroNum);
-            return matchProv && matchNum;
+            
+            // 🔥 MAGIA: Si está rechazada, la ocultamos de esta vista
+            const noEsRechazada = f.estado_aprobacion !== 'rechazado' && f.estado_pago !== 'rechazado';
+            
+            return matchProv && matchNum && noEsRechazada;
         });
 
         // 4. LÓGICA DE SEGMENTACIÓN (PAGINACIÓN)
@@ -262,7 +266,9 @@
                             <i class='bx bx-show'></i>
                         </button>
                         <button class="btn-icon edit" style="color:#2563eb; background:#dbeafe; font-size: 0.65rem;" onclick="editarFactura(${f.id})" title="Editar"><i class='bx bx-edit'></i></button>
-                        <button class="btn-icon delete" style="color:#dc2626; background:#fee2e2; font-size: 0.65rem;" onclick="eliminarFactura(${f.id})" title="Eliminar"><i class='bx bx-trash'></i></button>
+                        <button class="btn-icon" style="color:#dc2626; background:#fee2e2; font-size: 0.65rem;" onclick="cambiarEstadoFlujo(${f.id}, 'rechazado')" title="Anular/Rechazar Documento y Liberar OC">
+                            <i class='bx bx-x-circle'></i>
+                        </button>
                     </div>
                 </td>
             `;
@@ -290,6 +296,8 @@
         cuentasData = facturasData.filter(f => 
             f.estado_pago !== 'pagado' && 
             f.estado_pago !== 'anulado' && 
+            f.estado_pago !== 'rechazado' && // 🔥 NUEVO: Filtrar rechazos
+            f.estado_aprobacion !== 'rechazado' && // 🔥 NUEVO: Por si se usa esta columna
             f.programado_hoy === false
         );
         
@@ -672,7 +680,7 @@
     /**
      * 💾 GUARDAR FACTURA 
      * Actualizado: Soporte para múltiples adicionales (JSONB), operación de impuesto (suma/resta) 
-     * y sincronización total con el backend.
+     * y sincronización total con el backend (Incluye OC).
      */
     async function guardarFactura() {
         // 1. Obtener IDs y valores básicos
@@ -740,6 +748,13 @@
         }
         formData.append('serie', numeroDocumentoFinal);
 
+        // 🔥 NUEVO: CAPTURAR Y ENVIAR LA ORDEN DE COMPRA
+        const inputOC = document.getElementById('fac-oc');
+        if (inputOC && inputOC.value.trim() !== '') {
+            // Mandamos el string, el backend se encarga de buscar el ID en BD
+            formData.append('orden_compra', inputOC.value.trim());
+        }
+
         // Fechas
         formData.append('emision', document.getElementById('fac-emision').value);
         formData.append('programacion', document.getElementById('fac-programacion').value); 
@@ -764,6 +779,10 @@
 
         formData.append('impuesto_porcentaje', impuestoFinal); 
         formData.append('operacion_impuesto', operacionImpuesto);
+        
+        // 🔥 NUEVO: Enviar la tasa en formato decimal (0.18) para compatibilidad con B2B
+        let tasaDecimal = parseFloat(impuestoFinal) / 100;
+        formData.append('tasa_impuesto', tasaDecimal.toString());
 
         // --- ADICIONALES DINÁMICOS ---
         const adicionales = [];
@@ -1296,11 +1315,14 @@
 
     /**
      * Edición: Cargar datos en el modal para editar 
-     * (ACTUALIZADO: Clasificación, Tesorería, Adicionales e Impuestos Personalizados)
+     * (ACTUALIZADO: Clasificación, Tesorería, Adicionales, Impuestos y OC)
      */
     async function editarFactura(id) {
         // Buscamos la factura en el set de datos actual
         const factura = facturasData.find(f => f.id === id);
+
+        console.log("DATOS DE LA FACTURA A EDITAR:", factura);
+
         if (!factura) {
             console.error("No se encontró la factura con ID:", id);
             return;
@@ -1323,8 +1345,25 @@
             };
 
             setVal('fac-proveedor', factura.proveedor_id);
+
+            // 🔥 CORRECCIÓN BANCOS: Despertar al buscador obligando al evento a "burbujear" hasta el body
+            const selectProv = document.getElementById('fac-proveedor');
+            if (selectProv) {
+                selectProv.dispatchEvent(new Event('change', { bubbles: true }));
+                
+                // Rellenamos los campos de texto 500ms después para dar tiempo a que el servidor responda
+                setTimeout(() => {
+                    setVal('fac-banco', factura.banco);
+                    setVal('fac-cuenta', factura.numero_cuenta);
+                    setVal('fac-cci', factura.cci);
+                }, 500);
+            }
+            
             setVal('fac-sede', factura.sede_id);
             setVal('fac-glosa', factura.descripcion);
+            
+            // 🔥 NUEVO: CARGAR LA ORDEN DE COMPRA (Atrapa ambas variables por seguridad)
+            setVal('fac-oc', factura.orden_compra || factura.numero_oc || '');
             
             // --- 🛡️ CARGA CRÍTICA: CLASIFICACIÓN ---
             const inputClasificacion = document.getElementById('fac-clasificacion');
@@ -1383,18 +1422,56 @@
             const inputBase = document.getElementById('fac-base');
             if (inputBase) inputBase.value = parseFloat(base).toFixed(2);
 
-            // --- 🚨 LÓGICA DE IMPUESTO (Soporte para estándar y 'Otros') 🚨 ---
+            // --- 🔥 CORRECCIÓN 3: LÓGICA DE IMPUESTO BLINDADA CONTRA REDONDEOS SQL ---
             const selectImpuesto = document.getElementById('fac-impuesto-porc');
             const containerOtros = document.getElementById('fac-otros-container'); 
             
             if (selectImpuesto) {
-                let impuestoVal = factura.porcentaje_detraccion !== null ? parseFloat(factura.porcentaje_detraccion).toString() : "0";
-                const valoresEstandar = ["0", "18", "10.5", "8"];
+                let impuestoVal = "0";
 
-                if (valoresEstandar.includes(impuestoVal)) {
+                // 1. Calculamos la VERDAD ABSOLUTA (La matemática no miente)
+                let tasaMatematica = "0";
+                if (factura.monto_igv && factura.base_imponible && parseFloat(factura.base_imponible) > 0) {
+                    let calc = (parseFloat(factura.monto_igv) / parseFloat(factura.base_imponible)) * 100;
+                    tasaMatematica = parseFloat(calc.toFixed(2)).toString(); // Esto dará "10.5" exacto
+                }
+
+                // 2. Leemos lo que guardó la BD y comparamos
+                if (factura.tasa_impuesto !== undefined && factura.tasa_impuesto !== null && parseFloat(factura.tasa_impuesto) > 0) {
+                    let tasaBD = parseFloat(factura.tasa_impuesto);
+                    
+                    // Si la BD guardó decimales (ej: 0.105 o 0.11), lo multiplicamos por 100
+                    if (tasaBD < 1) {
+                        tasaBD = tasaBD * 100;
+                    }
+
+                    // 🛡️ BLINDAJE: Si la BD dice 11 pero la matemática dice 10.5 (Diferencia por redondeo SQL)
+                    if (Math.abs(tasaBD - parseFloat(tasaMatematica)) < 1 && tasaMatematica !== "0") {
+                        impuestoVal = tasaMatematica; // Le creemos a la matemática
+                        console.log(`🛡️ Redondeo SQL detectado y corregido: De ${tasaBD} a ${tasaMatematica}`);
+                    } else {
+                        impuestoVal = parseFloat(tasaBD.toFixed(2)).toString();
+                    }
+                } else {
+                    impuestoVal = tasaMatematica;
+                }
+                
+                // 3. Si es RHE, forzar el 8% (resta) si hay impuesto pero no se detectó la tasa
+                if (factura.tipo_documento === 'Recibo' || factura.tipo_documento === 'RHE' || factura.operacion_impuesto === 'resta') {
+                    if (impuestoVal === "0" && parseFloat(factura.monto_igv) > 0) impuestoVal = "8";
+                }
+
+                console.log(`🧠 Impuesto Calculado Final: ${impuestoVal}`);
+
+                // 4. Asignación al DOM leyendo las opciones REALES de tu HTML
+                const opcionesEstandar = Array.from(selectImpuesto.options).map(opt => opt.value);
+
+                if (opcionesEstandar.includes(impuestoVal)) {
+                    // ¡Lo encontró en tu HTML! (18, 10.5, 8 o 0)
                     selectImpuesto.value = impuestoVal;
                     if (containerOtros) containerOtros.style.display = 'none';
                 } else {
+                    // Es un impuesto raro (ej. 12%), lo mandamos a 'otros'
                     selectImpuesto.value = 'otros';
                     if (containerOtros) containerOtros.style.display = 'grid'; 
                     
@@ -1628,6 +1705,26 @@
         document.getElementById(`btn-prev-${idContenedor}`).onclick = () => callback(pagActual - 1);
         document.getElementById(`btn-next-${idContenedor}`).onclick = () => callback(pagActual + 1);
     }
+
+    async function initModulo() {
+        // Cargas iniciales para selects
+        await Promise.all([
+            obtenerProveedoresParaSelect(),
+            obtenerSedesParaSelect()
+        ]);
+
+        configurarFileUpload();
+        configurarBuscadores();
+        
+        // 🔥 INICIAMOS EL ESCUCHADOR DE BANCOS AQUÍ
+        configurarSelectorCuentas(); 
+
+        // Cargar datos de la pestaña activa por defecto (Gastos)
+        await cargarGastos();
+        
+        // Exponer funciones globales
+        exposeGlobalFunctions();
+    } 
 
     /**
      * --- EXPONER FUNCIONES AL HTML (WINDOW) ---
@@ -2405,13 +2502,11 @@ window.cargarDocumentosExtra = async function(id) {
         }
     };
 
-    // 8. FLUJO DE APROBACIÓN (CON MODAL ELEGANTE)
+    // 8. FLUJO DE APROBACIÓN (CON MODAL ELEGANTE Y RECHAZOS)
     window.cambiarEstadoFlujo = function(id, nuevoEstado) {
-        // 1. Guardar datos en el modal
         document.getElementById('flujo-factura-id').value = id;
         document.getElementById('flujo-nuevo-estado').value = nuevoEstado;
 
-        // 2. Personalizar visualmente el modal según la acción
         const icono = document.getElementById('flujo-modal-icon');
         const titulo = document.getElementById('flujo-modal-title');
         const texto = document.getElementById('flujo-modal-text');
@@ -2419,23 +2514,32 @@ window.cargarDocumentosExtra = async function(id) {
 
         if (nuevoEstado === 'programado') {
             icono.innerHTML = "<i class='bx bx-calendar-star'></i>";
-            icono.style.color = "#f59e0b"; // Amarillo/Naranja
+            icono.style.color = "#f59e0b"; 
             titulo.innerText = "Programar Factura";
-            texto.innerText = "¿Deseas PROGRAMAR esta factura? Pasará al estado de programación para que contabilidad la reciba.";
-            boton.style.backgroundColor = "#f59e0b";
-            boton.style.borderColor = "#f59e0b";
+            texto.innerText = "¿Deseas PROGRAMAR esta factura? Pasará al estado de programación.";
+            boton.style.backgroundColor = "#f59e0b"; boton.style.borderColor = "#f59e0b";
             boton.innerText = "Sí, Programar";
         } else if (nuevoEstado === 'pendiente') {
             icono.innerHTML = "<i class='bx bx-check-double'></i>";
-            icono.style.color = "#8b5cf6"; // Morado
+            icono.style.color = "#8b5cf6"; 
             titulo.innerText = "Aprobar para Pago";
             texto.innerText = "¿Confirmas la recepción y APROBACIÓN de esta factura para habilitar su pago?";
-            boton.style.backgroundColor = "#8b5cf6";
-            boton.style.borderColor = "#8b5cf6";
+            boton.style.backgroundColor = "#8b5cf6"; boton.style.borderColor = "#8b5cf6";
             boton.innerText = "Sí, Aprobar";
+        } else if (nuevoEstado === 'rechazado') {
+            // 🔥 LÓGICA DE RECHAZO/ANULACIÓN CON CAJA DE TEXTO INYECTADA
+            icono.innerHTML = "<i class='bx bx-x-circle'></i>";
+            icono.style.color = "#ef4444"; 
+            titulo.innerText = "Anular / Rechazar Comprobante";
+            texto.innerHTML = `
+                ¿Está seguro de anular/rechazar este documento? Desaparecerá de las cuentas por pagar.<br>
+                <strong style="color:#ef4444; font-size: 0.85rem;">⚠️ La Orden de Compra asociada será liberada para el proveedor.</strong>
+                <textarea id="flujo-motivo-rechazo" placeholder="Describa el motivo de la anulación para notificar al proveedor..." style="width: 100%; margin-top: 15px; padding: 10px; border: 1px solid #fca5a5; border-radius: 6px; font-family: inherit; font-size: 0.85rem; resize: vertical;" rows="3"></textarea>
+            `;
+            boton.style.backgroundColor = "#ef4444"; boton.style.borderColor = "#ef4444";
+            boton.innerText = "Anular y Liberar OC";
         }
 
-        // 3. Mostrar el modal
         document.getElementById('modal-confirmar-flujo').classList.add('active');
     };
 
@@ -2444,12 +2548,21 @@ window.cargarDocumentosExtra = async function(id) {
         document.getElementById('modal-confirmar-flujo').classList.remove('active');
     };
 
-    // 8.2 EJECUTAR EL CAMBIO DE ESTADO EN BASE DE DATOS E INTERFAZ
     window.ejecutarCambioFlujo = async function() {
         const id = document.getElementById('flujo-factura-id').value;
         const nuevoEstado = document.getElementById('flujo-nuevo-estado').value;
         const boton = document.getElementById('flujo-modal-btn');
         
+        // 🔥 CAPTURAR MOTIVO SI ES RECHAZO
+        let motivo = "";
+        if (nuevoEstado === 'rechazado') {
+            const txtMotivo = document.getElementById('flujo-motivo-rechazo');
+            if (!txtMotivo || txtMotivo.value.trim() === '') {
+                return showToast("Debe escribir un motivo para poder rechazar la factura.", "warning");
+            }
+            motivo = txtMotivo.value.trim();
+        }
+
         const textoOriginal = boton.innerText;
         boton.innerText = "Procesando...";
         boton.disabled = true;
@@ -2459,25 +2572,14 @@ window.cargarDocumentosExtra = async function(id) {
             const res = await fetch(`/api/facturas/${id}/estado`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-                body: JSON.stringify({ nuevoEstado })
+                body: JSON.stringify({ nuevoEstado, motivo }) // Enviamos el motivo al backend
             });
 
             if (res.ok) {
-                showToast(`Factura actualizada a: ${nuevoEstado.toUpperCase()}`, "success");
+                showToast(`Operación exitosa: Documento ${nuevoEstado.toUpperCase()}`, "success");
                 cerrarModalFlujo();
                 
-                // ACTUALIZACIÓN VISUAL AL INSTANTE
-                // Buscamos la factura en la memoria y le cambiamos el estado
-                if(typeof cuentasData !== 'undefined') {
-                    const index = cuentasData.findIndex(f => f.id == id);
-                    if (index !== -1) cuentasData[index].estado_aprobacion = nuevoEstado;
-                    renderizarTablaCuentas(); // Volvemos a dibujar la tabla de cuentas
-                }
-                if(typeof facturasData !== 'undefined') {
-                    const indexGastos = facturasData.findIndex(f => f.id == id);
-                    if (indexGastos !== -1) facturasData[indexGastos].estado_aprobacion = nuevoEstado;
-                    if(typeof renderizarTablaGastos === 'function') renderizarTablaGastos(); // Dibujar tabla principal
-                }
+                if(typeof cargarGastos === 'function') await cargarGastos(); // Recargamos para traer info real
             } else {
                 const data = await res.json();
                 showToast(data.msg || "Error al cambiar estado", "error");
@@ -3298,34 +3400,21 @@ window.cargarDocumentosExtra = async function(id) {
     };
 
     /**
-     * 10.5 FILTRAR POR COLUMNA (Actualizado para respetar paginación)
+     * 10.5 FILTRAR POR COLUMNA (Actualizado para funcionar con la nueva estructura HTML)
      */
     window.filtrarColumna = function(input, colIndex, tbodyId) {
-        const filter = input.value.toLowerCase().trim();
+        // En lugar de hacer la lógica a mano aquí, aprovechamos las funciones
+        // de renderizado que ya creaste y que leen directamente los inputs.
         
         if (tbodyId === 'tabla-cuentas-body') {
-            // Filtrar sobre los datos reales para no romper la paginación
             paginaCuentas = 1;
-            
-            // Volvemos a llenar la variable desde la base
-            const baseCuentas = facturasData.filter(f => 
-                f.estado_pago !== 'pagado' && f.estado_pago !== 'anulado' && f.programado_hoy === false
-            );
-
-            if (filter === '') {
-                cuentasData = [...baseCuentas];
-            } else {
-                cuentasData = baseCuentas.filter(c => {
-                    // colIndex 3 = Proveedor, colIndex 4 = Documento
-                    if (colIndex === 3) return (c.proveedor || '').toLowerCase().includes(filter);
-                    if (colIndex === 4) return (c.numero_documento || '').toLowerCase().includes(filter);
-                    return true;
-                });
-            }
-            renderizarTablaCuentas();
-        } else if (tbodyId === 'tabla-facturas-body') {
-            // Ya tienes la lógica correcta en renderizarTablaGastos()
+            renderizarTablaCuentas(); 
+            // Nota: Si 'renderizarTablaCuentas' no lee los inputs internamente, 
+            // necesitarás adaptar su código tal como está en 'renderizarTablaGastos'.
+        } 
+        else if (tbodyId === 'tabla-facturas-body') {
             paginaGastos = 1;
+            // renderizarTablaGastos ya lee 'buscador-proveedor-compras' y 'buscador-numero-compras'
             renderizarTablaGastos();
         }
     };
@@ -3389,4 +3478,105 @@ window.cargarDocumentosExtra = async function(id) {
     if (document.getElementById('tabla-facturas-body') || document.querySelector('.facturas-container')) {
         window.initFacturas();
     }
+
+    // =======================================================
+    // 🏦 CARGA DINÁMICA DE CUENTAS BANCARIAS
+    // =======================================================
+    function configurarSelectorCuentas() {
+        document.body.addEventListener('change', async function(e) {
+            if (e.target && e.target.id === 'fac-proveedor') {
+                const proveedorId = e.target.value;
+                if (!proveedorId || proveedorId.startsWith('NEW|')) return;
+
+                try {
+                    const token = localStorage.getItem('token');
+                    const res = await fetch(`/api/proveedores/${proveedorId}`, { 
+                        headers: { 'x-auth-token': token } 
+                    });
+                    const proveedor = await res.json();
+
+                    // 1. Limpieza total de selectores previos
+                    const selectorViejo = document.getElementById('selector-cuentas-rapido');
+                    if (selectorViejo) selectorViejo.remove();
+
+                    if (res.ok && proveedor.cuentas_bancarias) {
+                        let cuentas = [];
+                        try {
+                            // Intentamos parsear si es string, si no, lo tomamos directo
+                            cuentas = typeof proveedor.cuentas_bancarias === 'string' 
+                                ? JSON.parse(proveedor.cuentas_bancarias) 
+                                : proveedor.cuentas_bancarias;
+                        } catch(err) {
+                            console.error("❌ Error parseando cuentas:", err);
+                        }
+
+                        if (Array.isArray(cuentas) && cuentas.length > 0) {
+                            const inputBanco = document.getElementById('fac-banco');
+                            if (!inputBanco) return;
+
+                            // Obtenemos el contenedor real
+                            const divPadre = inputBanco.closest('.form-grid-row') || inputBanco.parentElement.parentElement;
+
+                            const divSelector = document.createElement('div');
+                            divSelector.id = 'selector-cuentas-rapido';
+                            divSelector.style.cssText = 'grid-column: 1 / -1; margin-bottom:15px; background:#f0f7ff; padding:12px; border-radius:8px; border:2px dashed #3b82f6;';
+                            
+                            let opcionesHTML = `<option value="">-- Seleccionar una cuenta guardada --</option>`;
+                            
+                            cuentas.forEach((c, index) => {
+                                // Normalización de moneda para evitar el signo de dólar por error
+                                const m = (c.moneda || '').toString().toUpperCase();
+                                const simbolo = (m.includes('SOL') || m.includes('PEN')) ? 'S/' : '$';
+                                
+                                opcionesHTML += `<option value="${index}">${c.banco} | ${simbolo} | ${c.cuenta}</option>`;
+                            });
+
+                            divSelector.innerHTML = `
+                                <label style="font-size:0.75rem; color:#2563eb; font-weight:700; display:block; margin-bottom:5px;">
+                                    <i class='bx bxs-bank'></i> CUENTAS DEL PROVEEDOR:
+                                </label>
+                                <select id="select-cuenta-auto" style="width:100%; padding:10px; border-radius:6px; border:1px solid #3b82f6; background:#fff; font-weight:600;">
+                                    ${opcionesHTML}
+                                </select>
+                            `;
+
+                            divPadre.prepend(divSelector);
+
+                            // Evento al elegir cuenta
+                            document.getElementById('select-cuenta-auto').onchange = function() {
+                                const idx = this.value;
+                                if (idx !== "") {
+                                    const cta = cuentas[idx];
+                                    
+                                    // Llenado de campos
+                                    document.getElementById('fac-banco').value = cta.banco || '';
+                                    document.getElementById('fac-cuenta').value = cta.cuenta || '';
+                                    document.getElementById('fac-cci').value = cta.cci || '';
+                                    
+                                    // Ajuste automático de moneda
+                                    const monInput = document.getElementById('fac-moneda');
+                                    const mTag = (cta.moneda || '').toString().toUpperCase();
+                                    if (monInput) {
+                                        monInput.value = (mTag.includes('SOL') || mTag.includes('PEN')) ? 'PEN' : 'USD';
+                                    }
+
+                                    if (typeof showToast === 'function') showToast("Datos bancarios cargados", "success");
+                                }
+                            };
+                        }
+                    }
+                } catch (error) {
+                    console.error("❌ Error en selector de cuentas:", error);
+                }
+            }
+        });
+    }
+
+    // Al limpiar el modal (cuando se da a crear nueva factura), borramos el selector si quedó abierto
+    const oldCerrarModalFactura = window.cerrarModalFactura;
+    window.cerrarModalFactura = function() {
+        if(oldCerrarModalFactura) oldCerrarModalFactura();
+        const selectorViejo = document.getElementById('selector-cuentas-rapido');
+        if (selectorViejo) selectorViejo.remove();
+    };
 })();

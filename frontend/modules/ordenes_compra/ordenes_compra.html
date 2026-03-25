@@ -1,9 +1,16 @@
 <div class="modulo-container">
-    <div class="header-acciones">
+    <div class="header-acciones" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
         <h2><i class='bx bx-cart-add'></i> Gestión de Órdenes de Compra</h2>
-        <button class="btn-primary" onclick="abrirModalCrearOC()">
-            <i class='bx bx-plus'></i> Emitir Nueva OC
-        </button>
+        
+        <div style="display: flex; gap: 10px;">
+            <button class="btn-excel" onclick="exportarOrdenesExcel()" style="background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 10px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2);">
+                <i class='bx bxs-file-export' style="font-size: 1.2rem;"></i> Exportar Excel
+            </button>
+
+            <button class="btn-primary" onclick="abrirModalCrearOC()" style="padding: 10px 20px; border-radius: 10px; display: flex; align-items: center; gap: 8px;">
+                <i class='bx bx-plus'></i> Emitir Nueva OC
+            </button>
+        </div>
     </div>
 
     <div class="table-responsive">

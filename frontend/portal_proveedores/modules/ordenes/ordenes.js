@@ -1,3 +1,5 @@
+// Ubicación: SuperNova/frontend/modules/ordenes/ordenes.js
+
 (async function() {
     console.log("Módulo Órdenes de Compra Cargado (Paginación B2B) 🚚");
 
@@ -80,7 +82,7 @@
     try {
         tbody.innerHTML = `<tr><td colspan="8" style="text-align: center;"><i class='bx bx-loader-alt bx-spin'></i> Buscando Órdenes de Compra...</td></tr>`;
 
-        const res = await fetch('http://localhost:3000/api/ordenes/b2b/mis-ordenes', {
+        const res = await fetch('/api/ordenes/b2b/mis-ordenes', {
             method: 'GET',
             headers: { 'x-auth-token': token }
         });

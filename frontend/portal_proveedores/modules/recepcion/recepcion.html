@@ -52,7 +52,7 @@
                             <i class='bx bx-search-alt-2'></i> Validar OC
                         </button>
                     </div>
-                    <input type="hidden" id="rec-oc-id">
+                    <input type="hidden" id="rec-oc-id" value="0">
                     <small class="help-text"><i class='bx bx-info-circle'></i> Dele clic a "Validar OC" para autocompletar y bloquear los importes exactos.</small>
                 </div>
             </div>
@@ -72,10 +72,20 @@
                     <label>Subtotal (Valor Venta) *</label>
                     <input type="number" step="0.01" id="rec-subtotal" placeholder="0.00" required>
                 </div>
+                
                 <div class="input-group">
-                    <label>IGV (18%) *</label>
-                    <input type="number" step="0.01" id="rec-igv" placeholder="0.00" required readonly class="readonly-input">
+                    <label id="label-impuesto">Tipo de Impuesto/Retención *</label>
+                    <div style="display: flex; gap: 5px;">
+                        <select id="rec-tipo-impuesto" required style="width: 55%;">
+                            <option value="0.18">IGV (18%)</option>
+                            <option value="0.105">IGV (10.5%)</option>
+                            <option value="0.08">Retención RxH (8%)</option>
+                            <option value="0">Exonerado / Inafecto (0%)</option>
+                        </select>
+                        <input type="number" step="0.01" id="rec-igv" placeholder="0.00" required readonly class="readonly-input" style="width: 45%;">
+                    </div>
                 </div>
+
                 <div class="input-group">
                     <label>Importe Total *</label>
                     <input type="number" step="0.01" id="rec-total" placeholder="0.00" required readonly class="readonly-input total-highlight">
@@ -85,20 +95,27 @@
 
         <div class="form-section">
             <h3 class="section-title">4. Archivos Digitales</h3>
-            <div class="files-grid">
+            <div class="files-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
                 
                 <div class="file-drop-zone" id="drop-pdf" onclick="document.getElementById('file-pdf').click()">
-                    <input type="file" id="file-pdf" accept=".pdf" hidden>
+                    <input type="file" id="file-pdf" name="pdf" accept=".pdf" hidden>
                     <i class='bx bxs-file-pdf icon-pdf'></i>
-                    <h4>Subir representación impresa (PDF)</h4>
-                    <p id="text-pdf">Arrastre el archivo aquí o haga clic para explorar</p>
+                    <h4>Comprobante (PDF) *</h4>
+                    <p id="text-pdf">Haga clic o arrastre aquí</p>
                 </div>
 
                 <div class="file-drop-zone" id="drop-xml" onclick="document.getElementById('file-xml').click()">
-                    <input type="file" id="file-xml" accept=".xml" hidden>
+                    <input type="file" id="file-xml" name="xml" accept=".xml" hidden>
                     <i class='bx bx-code-block icon-xml'></i>
-                    <h4>Subir archivo SUNAT (XML)</h4>
-                    <p id="text-xml">Arrastre el archivo aquí o haga clic para explorar</p>
+                    <h4>Archivo SUNAT (XML)</h4>
+                    <p id="text-xml">Solo para Facturas</p>
+                </div>
+
+                <div class="file-drop-zone" id="drop-oc" onclick="document.getElementById('file-oc').click()">
+                    <input type="file" id="file-oc" name="pdf_oc" accept=".pdf" hidden>
+                    <i class='bx bx-receipt icon-pdf' style="color: #64748b;"></i>
+                    <h4>Orden de Compra (PDF)</h4>
+                    <p id="text-oc" style="color: #64748b;">Si aplica</p>
                 </div>
 
             </div>
@@ -111,6 +128,17 @@
         </div>
 
     </form>
+
+    <div id="modal-alerta-b2b" class="modal-b2b-overlay">
+        <div class="modal-b2b-content">
+            <div class="modal-b2b-icon" id="modal-b2b-icon">
+                <i class='bx bx-check-circle'></i>
+            </div>
+            <h3 id="modal-b2b-title" style="margin-bottom: 10px; color: #0f172a;">Título</h3>
+            <p id="modal-b2b-message" style="color: #64748b; margin-bottom: 25px; line-height: 1.5; font-size: 0.95rem;">Mensaje</p>
+            <button class="btn-b2b-confirm" id="modal-b2b-btn" onclick="cerrarAlertaB2B()">Aceptar</button>
+        </div>
+    </div>
 </div>
 
 <script src="modules/recepcion/recepcion.js"></script>

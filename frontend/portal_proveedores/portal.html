@@ -6,6 +6,13 @@
     <title>Portal de Proveedores | SuperNova</title>
     <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
     <link rel="stylesheet" href="css/portal_layout.css">
+    <style>
+        /* Pequeña animación para que el modal del perfil caiga suavemente */
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
 </head>
 <body>
 
@@ -69,11 +76,16 @@
                     <i class='bx bx-bell'></i>
                     <span class="badge" id="noti-badge">0</span>
                 </div>
-                <div class="user-profile">
-                    <i class='bx bxs-user-circle'></i>
-                    <span id="topbar-usuario-nombre">Usuario</span>
-                    <i class='bx bx-log-out cursor-pointer' title="Cerrar Sesión" onclick="cerrarSesion()"></i>
+                
+                <div class="user-profile" style="display: flex; align-items: center; gap: 10px;">
+                    <div onclick="abrirModalPerfil()" style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 5px 10px; border-radius: 8px; transition: background 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+                        <img id="topbar-avatar" src="https://ui-avatars.com/api/?name=U&background=eff6ff&color=3b82f6" style="width: 35px; height: 35px; border-radius: 50%; object-fit: cover; border: 2px solid #e2e8f0;">
+                        <span id="topbar-usuario-nombre" style="font-weight: 600; color: #1e293b;">Usuario</span>
+                    </div>
+                    
+                    <i class='bx bx-log-out cursor-pointer' style="font-size: 1.5rem; color: #ef4444; margin-left: 5px; transition: 0.2s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'" title="Cerrar Sesión" onclick="cerrarSesion()"></i>
                 </div>
+
             </div>
         </header>
 
@@ -84,6 +96,127 @@
             </div>
         </div>
     </main>
+
+    <div id="modal-perfil-b2b" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(3px); z-index: 9999; justify-content: center; align-items: center;">
+        <div style="background: white; width: 90%; max-width: 360px; border-radius: 16px; padding: 30px; box-shadow: 0 25px 50px rgba(0,0,0,0.25);">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 15px; margin-bottom: 25px;">
+                <h3 style="margin: 0; color: #1e293b; font-size: 1.25rem; display: flex; align-items: center; gap: 8px;">
+                    <i class='bx bx-user-circle' style="color: #3b82f6;"></i> Mi Perfil
+                </h3>
+                <i class='bx bx-x' style="font-size: 1.8rem; cursor: pointer; color: #94a3b8;" onclick="cerrarModalPerfil()"></i>
+            </div>
+            
+            <div style="text-align: center;">
+                <div style="position: relative; width: 120px; height: 120px; margin: 0 auto 25px;">
+                    <img id="perfil-preview" src="" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; border: 4px solid white; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+                    
+                    <label for="perfil-upload" style="position: absolute; bottom: 5px; right: 5px; background: #3b82f6; color: white; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 3px solid white;">
+                        <i class='bx bx-camera' style="font-size: 1.2rem;"></i>
+                    </label>
+                    <input type="file" id="perfil-upload" accept="image/*" style="display: none;" onchange="previsualizarFoto(event)">
+                </div>
+
+                <div style="text-align: left; margin-bottom: 25px;">
+                    <label style="font-size: 0.85rem; color: #475569; font-weight: 700; margin-bottom: 8px; display: block;">Nombre del Contacto Principal</label>
+                    <input type="text" id="perfil-nombre" style="width: 100%; padding: 12px 15px; border: 2px solid #e2e8f0; border-radius: 8px; outline: none; font-size: 0.95rem;">
+                </div>
+
+                <button id="btn-guardar-perfil" style="width: 100%; padding: 14px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 1rem; cursor: pointer;" onclick="guardarPerfilB2B()">
+                    Guardar Cambios
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function abrirModalPerfil() {
+            const modal = document.getElementById('modal-perfil-b2b');
+            const inputNombre = document.getElementById('perfil-nombre');
+            const preview = document.getElementById('perfil-preview');
+            
+            const userDataString = localStorage.getItem('proveedor_data');
+            if (userDataString) {
+                const userData = JSON.parse(userDataString);
+                inputNombre.value = userData.nombres || '';
+                const avatarUrl = userData.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.nombres || 'User')}&background=eff6ff&color=3b82f6`;
+                preview.src = avatarUrl;
+            }
+            // Forzamos la apertura directa
+            modal.style.display = 'flex';
+        }
+
+        function cerrarModalPerfil() {
+            document.getElementById('modal-perfil-b2b').style.display = 'none';
+        }
+
+        function previsualizarFoto(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('perfil-preview').src = e.target.result;
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        async function guardarPerfilB2B() {
+            const inputNombre = document.getElementById('perfil-nombre').value.trim();
+            const inputFile = document.getElementById('perfil-upload').files[0];
+            const btn = document.getElementById('btn-guardar-perfil');
+            const token = localStorage.getItem('proveedor_token');
+
+            if (!inputNombre) {
+                alert("El nombre no puede estar vacío");
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = "Guardando...";
+
+            const formData = new FormData();
+            formData.append('nombres', inputNombre);
+            if (inputFile) {
+                formData.append('foto', inputFile);
+            }
+
+            try {
+                // Apuntamos al localhost asegurando que no se pierda
+                const res = await fetch('http://localhost:3000/api/proveedores/b2b/perfil', {
+                    method: 'PUT',
+                    headers: { 'x-auth-token': token },
+                    body: formData
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    const userData = JSON.parse(localStorage.getItem('proveedor_data'));
+                    userData.nombres = inputNombre;
+                    if (data.usuario && data.usuario.avatar_url) {
+                        userData.avatar_url = data.usuario.avatar_url;
+                    }
+                    localStorage.setItem('proveedor_data', JSON.stringify(userData));
+
+                    document.getElementById('topbar-usuario-nombre').textContent = userData.nombres;
+                    if (userData.avatar_url) {
+                        document.getElementById('topbar-avatar').src = userData.avatar_url;
+                    }
+
+                    cerrarModalPerfil();
+                    alert("¡Perfil actualizado con éxito!");
+                } else {
+                    alert(data.msg || "Error al actualizar perfil");
+                }
+            } catch (error) {
+                console.error("Error al guardar perfil:", error);
+                alert("Error de conexión al servidor");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = "Guardar Cambios";
+            }
+        }
+    </script>
 
     <script src="js/portal_layout.js"></script>
 </body>

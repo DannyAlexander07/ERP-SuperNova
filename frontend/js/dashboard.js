@@ -38,22 +38,22 @@ if (userStr && token) {
 
 // 2. DEFINICIÓN DE MENÚ Y PERMISOS
 const menuItems = [
-    { id: 'inicio', icon: 'bx-grid-alt', text: 'Dashboard', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'logistica', 'finanzas', 'contabilidad'] },
-    { id: 'calendario', icon: 'bx-calendar-event', text: 'Calendario', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'finanzas', 'contabilidad'] },
-    { id: 'ventas', icon: 'bx-cart-alt', text: 'Ventas', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'finanzas', 'contabilidad'] },
+    { id: 'inicio', icon: 'bx-grid-alt', text: 'Dashboard', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'logistica', 'finanzas', 'contabilidad', 'director'] },
+    { id: 'calendario', icon: 'bx-calendar-event', text: 'Calendario', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'finanzas', 'contabilidad', 'director'] },
+    { id: 'ventas', icon: 'bx-cart-alt', text: 'Ventas', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'finanzas', 'contabilidad', 'director'] },
     { id: 'despacho_web', icon: 'bx-shopping-bag', text: 'Despacho Web', roles: ['superadmin', 'admin', 'cajero', 'gerente'] },
     { id: 'terceros', icon: 'bx-qr-scan', text: 'Canjes / Terceros', roles: ['superadmin', 'admin', 'gerente', 'cajero', 'finanzas', 'contabilidad'] },
-    { id: 'historial', icon: 'bx-history', text: 'Historial Ventas', roles: ['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad'] },
+    { id: 'historial', icon: 'bx-history', text: 'Historial Ventas', roles: ['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad', 'director', 'cajero'] },
     { id: 'caja', icon: 'bx-wallet', text: 'Flujo de Caja', roles: ['superadmin', 'admin', 'gerente', 'cajero', 'finanzas', 'contabilidad'] },
     { id: 'caja_chica', icon: 'bx-wallet-alt', text: 'Caja Chica', roles: ['superadmin', 'admin', 'gerente', 'cajero', 'finanzas', 'contabilidad'] },
-    { id: 'inventario', icon: 'bx-box', text: 'Inventario', roles: ['superadmin', 'admin', 'cajero', 'logistica', 'gerente'] },
+    { id: 'inventario', icon: 'bx-box', text: 'Inventario', roles: ['superadmin', 'admin', 'cajero', 'logistica', 'gerente', 'director'] },
     { id: 'proveedores', icon: 'bx-store-alt', text: 'Proveedores', roles: ['superadmin', 'admin', 'logistica', 'gerente', 'finanzas', 'contabilidad'] },
     { id: 'ordenes_compra', icon: 'bx-cart-add', text: 'Órdenes de Compra', roles: ['superadmin', 'admin', 'logistica', 'gerente', 'finanzas'] },
-    { id: 'facturas', icon: 'bx-receipt', text: 'Facturas', roles: ['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad'] },
+    { id: 'facturas', icon: 'bx-receipt', text: 'Facturas', roles: ['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad', 'director'] },
     { id: 'prestamos', icon: 'bx-credit-card', text: 'Créditos', roles: ['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad'] },
     { id: 'clientes', icon: 'bx-user-pin', text: 'Clientes', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'finanzas', 'contabilidad'] },
     { id: 'crm', icon: 'bx-doughnut-chart', text: 'CRM / Leads', roles: ['superadmin', 'admin', 'cajero', 'gerente'] },
-    { id: 'analitica', icon: 'bx-bar-chart-alt-2', text: 'Analítica', roles: ['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad'] },
+    { id: 'analitica', icon: 'bx-bar-chart-alt-2', text: 'Analítica', roles: ['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad','director'] },
     { id: 'configuracion', icon: 'bx-cog', text: 'Configuración', roles: ['superadmin', 'admin'] },
     { id: 'perfil', icon: 'bx-user', text: 'Mi Perfil', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'logistica', 'finanzas', 'contabilidad'], hidden: true }
 ];
@@ -360,3 +360,31 @@ window.addEventListener('popstate', (event) => {
     // Desactivamos la bandera
     setTimeout(() => { window.isHistoryNavigation = false; }, 100);
 });
+
+// Función para actualizar los datos del Sidebar en tiempo real
+window.actualizarSidebarUI = function(datos) {
+    const profileName = document.getElementById('sidebar-profile-name');
+    const profileImg = document.getElementById('sidebar-profile-img');
+
+    if (profileName) {
+        profileName.innerText = `${datos.nombres} ${datos.apellidos || ''}`.trim();
+    }
+
+    if (profileImg && datos.foto_url) {
+        // Agregamos un timestamp (?t=...) para que el navegador no use la imagen vieja de la caché
+        const urlFinal = datos.foto_url.includes('?') ? datos.foto_url + '&t=' : datos.foto_url + '?t=';
+        profileImg.src = urlFinal + new Date().getTime();
+        
+        // También actualizamos el objeto en memoria para que persista durante la sesión
+        currentUser.photoUrl = datos.foto_url;
+    }
+
+    // Actualizamos el localStorage para que al presionar F5 los cambios sigan ahí
+    const userLocal = JSON.parse(localStorage.getItem('user') || '{}');
+    userLocal.nombres = datos.nombres;
+    userLocal.apellidos = datos.apellidos;
+    if (datos.foto_url) userLocal.foto_url = datos.foto_url;
+    localStorage.setItem('user', JSON.stringify(userLocal));
+
+    console.log("🔄 Sidebar sincronizado con éxito.");
+};

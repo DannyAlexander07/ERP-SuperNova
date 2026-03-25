@@ -32,7 +32,7 @@
         }
 
         // 4. Cargar Datos Reales (Solo si tiene permisos)
-        if (['superadmin', 'admin', 'gerente'].includes(userRole)) {
+        if (['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad', 'director', 'logistica', 'colaborador', 'cajero', ].includes(userRole)) {
             await cargarResumenDia();
         } else {
             // Si es colaborador/logística, ocultar montos sensibles

@@ -15,23 +15,40 @@
     ];
 
     const grid = document.getElementById('grid-calendario');
-    
-    // Hoy para marcar el día actual si coincide (Simulación)
-    const mesActual = "Marzo"; 
-    const diaActual = 12;
+    if (!grid) return;
+
+    // --- AUTOMATIZACIÓN DE FECHA ACTUAL ---
+    const fechaReloj = new Date();
+    const opciones = { month: 'long' };
+    // Obtenemos el nombre del mes actual en español (Enero, Febrero...)
+    const nombreMesActual = new Intl.DateTimeFormat('es-ES', opciones).format(fechaReloj);
+    const diaHoy = fechaReloj.getDate();
+
+    // Variable para acumular el HTML y hacer un solo render (Más rápido)
+    let htmlFinal = '';
 
     mesesDatos.forEach(mes => {
         let diasHtml = '';
+        
         mes.dias.forEach(dia => {
-            const esHoy = (mes.nombre === mesActual && dia === diaActual) ? 'hoy' : '';
-            diasHtml += `<div class="dia-badge ${esHoy}" title="Día de pago">${dia}</div>`;
+            // Comparamos el nombre del mes (ignorando mayúsculas/minúsculas) y el número del día
+            const esHoy = (mes.nombre.toLowerCase() === nombreMesActual.toLowerCase() && dia === diaHoy) ? 'hoy' : '';
+            
+            diasHtml += `<div class="dia-badge ${esHoy}" title="${esHoy ? 'Hoy es día de pago' : 'Día de pago programado'}">${dia}</div>`;
         });
 
-        grid.innerHTML += `
+        htmlFinal += `
             <div class="mes-card">
                 <div class="mes-header">${mes.nombre}</div>
-                <div class="mes-body">${diasHtml}</div>
+                <div class="mes-body">
+                    ${diasHtml}
+                </div>
             </div>
         `;
     });
+
+    // Renderizado único en el DOM
+    grid.innerHTML = htmlFinal;
+
+    console.log("📅 Calendario renderizado con éxito.");
 })();

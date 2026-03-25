@@ -85,14 +85,36 @@
                     <i class='bx bx-phone'></i>
                     <input type="text" id="reg-telefono" placeholder="Teléfono o Celular de contacto" required>
                 </div>
-                <div class="input-group">
-                    <i class='bx bx-envelope'></i>
-                    <input type="email" id="reg-correo" placeholder="Tu Correo Electrónico" required>
+
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <div class="input-group" style="flex: 1; margin-bottom: 0;">
+                        <i class='bx bx-envelope'></i>
+                        <input type="email" id="reg-correo" placeholder="Tu Correo Electrónico" required>
+                    </div>
+                    <button type="button" id="btn-enviar-otp" onclick="solicitarCodigoOTP()" style="background: #4f46e5; color: white; border: none; border-radius: 8px; padding: 0 15px; cursor: pointer; font-size: 12px; font-weight: 600; transition: 0.3s;">
+                        Enviar Código
+                    </button>
                 </div>
+
+                <div id="seccion-otp" style="display: none; margin-bottom: 15px; background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <p style="font-size: 11px; color: #64748b; margin-bottom: 5px;">Ingresa el código enviado a tu correo:</p>
+                    <div style="display: flex; gap: 10px;">
+                        <div class="input-group" style="flex: 1; margin-bottom: 0;">
+                            <i class='bx bx-shield-quarter'></i>
+                            <input type="text" id="reg-otp" placeholder="Código de 5 dígitos" maxlength="5" style="text-transform: uppercase; font-weight: bold; letter-spacing: 2px;">
+                        </div>
+                        <button type="button" id="btn-verificar-otp" onclick="verificarCodigoOTP()" style="background: #10b981; color: white; border: none; border-radius: 8px; padding: 0 15px; cursor: pointer; font-size: 12px; font-weight: 600;">
+                            Verificar
+                        </button>
+                    </div>
+                </div>
+
                 <div class="input-group">
                     <i class='bx bx-lock'></i>
                     <input type="password" id="reg-clave" placeholder="Crea una Contraseña de acceso" required>
                 </div>
+
+                <input type="hidden" id="email-verificado" value="false">
 
                 <button class="btn-ingresar" onclick="procesarRegistro()" style="margin-top: 15px;">
                     Completar Registro

@@ -263,17 +263,25 @@ exports.obtenerResumenGlobal = async (req, res) => {
     }
 };
 
-// 4. RESUMEN DEL DÍA (CORREGIDO: Zona Horaria manejada 100% por PostgreSQL)
 exports.obtenerResumenDia = async (req, res) => {
-    const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
-    const esAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
-    const sedeId = req.usuario.sede_id; 
+    const rol = (req.usuario && req.usuario.rol) ? req.usuario.rol.toLowerCase().trim() : '';
+    const esAdmin = ['admin', 'administrador', 'gerente', 'superadmin', 'director'].includes(rol); // aqui para que vean ingreso del dia
+    const usuarioSedeId = req.usuario ? req.usuario.sede_id : null; 
 
     try {
-        const filtroSede = esAdmin ? "" : "AND sede_id = $1";  
-        const params = esAdmin ? [] : [sedeId];
+        // Mejoramos la lógica de filtrado: 
+        // Si es Admin y NO mandó una sede por query, ve TODO. 
+        // Si no es Admin, ve obligatoriamente su SEDE.
+        let sedeParaFiltrar = req.query.sede || (esAdmin ? null : usuarioSedeId);
+        
+        let filtroSede = "";
+        let params = [];
 
-        // 🔥 CORRECCIÓN 3: Usamos "AT TIME ZONE 'America/Lima'" directamente en SQL
+        if (sedeParaFiltrar) {
+            filtroSede = "AND sede_id = $1";
+            params.push(sedeParaFiltrar);
+        }
+
         const ventasQuery = `
             SELECT COALESCE(SUM(total_venta), 0) as total 
             FROM ventas 
@@ -297,13 +305,13 @@ exports.obtenerResumenDia = async (req, res) => {
         ]);
 
         res.json({
-            ventasHoy: parseFloat(resVentas.rows[0].total),
-            eventosHoy: parseInt(resEventos.rows[0].cantidad)
+            ventasHoy: parseFloat(resVentas.rows[0].total) || 0,
+            eventosHoy: parseInt(resEventos.rows[0].cantidad) || 0
         });
 
     } catch (err) {
-        console.error("Error Resumen Día:", err.message);
-        res.status(500).json({ msg: 'Error al cargar resumen.' });
+        console.error("❌ Error en Resumen Día:", err.message);
+        res.status(500).json({ msg: 'Error al cargar resumen diario.', error: err.message });
     }
 };
 

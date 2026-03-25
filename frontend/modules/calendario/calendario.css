@@ -694,3 +694,180 @@
         gap: 10px !important;
     }
 }
+
+/* =========================================================
+   🚀 RESPONSIVIDAD GLOBAL: CALENDARIO DE EVENTOS
+   ========================================================= */
+
+/* ---------------------------------------------------------
+   💻 DESKTOP (Optimizaciones menores)
+   --------------------------------------------------------- */
+@media screen and (min-width: 1025px) {
+    .calendar-module-container {
+        /* Evitar que el scroll del body afecte al calendario interno */
+        height: calc(100vh - 90px); 
+    }
+}
+
+/* ---------------------------------------------------------
+   📱 TABLET (De 769px a 1024px)
+   --------------------------------------------------------- */
+@media screen and (max-width: 1024px) {
+    .calendar-module-container {
+        height: auto; /* Dejamos que el contenido dicte la altura */
+        min-height: calc(100vh - 100px);
+    }
+
+    /* Rompemos el diseño de 2 columnas: Sidebar arriba, Calendario abajo */
+    .calendar-wrapper {
+        flex-direction: column;
+        height: auto;
+    }
+
+    /* La barra lateral se convierte en una barra superior horizontal */
+    .calendar-sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid #f0f0f0;
+        flex-direction: row; /* Elementos uno al lado del otro */
+        flex-wrap: wrap; /* Si no caben, bajan a la siguiente línea */
+        align-items: center;
+        padding: 15px 20px;
+        gap: 20px;
+    }
+
+    .calendar-sidebar hr {
+        display: none; /* Ocultamos la línea divisoria porque ahora es horizontal */
+    }
+
+    .mini-calendar-title {
+        margin-bottom: 0;
+        margin-right: 10px;
+    }
+
+    /* El selector de sede no ocupa todo el ancho, solo lo necesario */
+    .select-sede-full {
+        width: auto;
+        min-width: 200px;
+        margin-bottom: 0;
+    }
+
+    /* Los filtros (checkboxes) se ponen en línea */
+    .filter-group {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 15px;
+        align-items: center;
+    }
+
+    /* Damos una altura mínima al calendario para que no se aplaste */
+    .calendar-main-area {
+        min-height: 600px; 
+    }
+}
+
+/* ---------------------------------------------------------
+   📱 MÓVIL (Menos de 768px)
+   --------------------------------------------------------- */
+@media screen and (max-width: 768px) {
+    .calendar-module-container {
+        padding: 10px 0; /* Quitamos padding lateral para dar espacio al calendario */
+    }
+
+    .module-header {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 0 15px;
+    }
+
+    .calendar-wrapper {
+        border-radius: 12px;
+        border-left: none;
+        border-right: none;
+    }
+
+    /* En móvil, los filtros vuelven a apilarse para no salirse de la pantalla */
+    .calendar-sidebar {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 15px;
+        gap: 15px;
+    }
+
+    .select-sede-full {
+        width: 100%;
+    }
+
+    /* Botones del encabezado del calendario (Mes, Semana, Día, Hoy, Flechas) */
+    .fc-header-toolbar {
+        flex-direction: column !important;
+        gap: 12px !important;
+    }
+
+    .fc-toolbar-chunk {
+        display: flex;
+        justify-content: center;
+        width: 100%;
+    }
+
+    /* Título del mes más pequeño */
+    .fc-toolbar-title {
+        font-size: 1.2rem !important;
+    }
+
+    /* Días del calendario más pequeños */
+    .fc-col-header-cell-cushion {
+        font-size: 10px;
+    }
+
+    .fc-daygrid-day-number {
+        font-size: 12px;
+        padding: 2px !important;
+    }
+
+    .fc-event {
+        font-size: 10px !important;
+        padding: 2px 4px !important;
+        margin: 1px !important;
+    }
+
+    /* --- MODAL DE NUEVA RESERVA EN MÓVIL --- */
+    .slide-in-right {
+        width: 100% !important;
+        max-width: 100% !important;
+        border-radius: 15px 15px 0 0 !important; /* Bordes redondeados solo arriba */
+        transform: translateY(100%); /* Ahora entra desde abajo, tipo App */
+        animation: none;
+        transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    /* Cambiamos la animación para que en móvil suba en lugar de deslizar de lado */
+    .modal-overlay.active .slide-in-right {
+        transform: translateY(0);
+    }
+
+    /* Apilar todos los grids internos del formulario a 1 columna */
+    .row-grid {
+        grid-template-columns: 1fr !important;
+        gap: 15px !important;
+    }
+
+    .modal-header {
+        padding: 20px !important;
+    }
+
+    .modal-body {
+        padding: 20px !important;
+    }
+
+    .modal-footer {
+        flex-direction: column-reverse; /* Apilar botones, Guardar arriba */
+        padding: 15px 20px !important;
+        gap: 10px;
+    }
+
+    .modal-footer button {
+        width: 100%;
+        justify-content: center;
+    }
+}

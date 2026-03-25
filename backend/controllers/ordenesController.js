@@ -9,10 +9,16 @@ const cloudinary = require('cloudinary').v2;
 // 1. FUNCIONES INTERNAS (PARA EL ERP SUPERNOVA)
 // =======================================================
 
-// 1.1 Crear nueva Orden de Compra (DISEÑO CORPORATIVO AVANZADO + CLOUDINARY)
+// 1.1 Crear nueva Orden de Compra (DISEÑO CORPORATIVO AVANZADO + CLOUDINARY + NOTIFICACIÓN B2B)
 exports.crearOrdenCompra = async (req, res) => {
-    const { proveedor_id, sede_id, fecha_emision, fecha_entrega_esperada, condicion_pago, moneda, monto_subtotal, monto_igv, monto_total, observaciones } = req.body;
+    const { 
+        proveedor_id, sede_id, fecha_emision, fecha_entrega_esperada, 
+        condicion_pago, moneda, monto_subtotal, monto_igv, monto_total, 
+        observaciones, porcentaje_impuesto 
+    } = req.body;
     const usuarioCreadorId = req.usuario ? req.usuario.id : null;
+
+    const tasaAplicada = porcentaje_impuesto ? parseFloat(porcentaje_impuesto) : 18.00;
 
     if (!proveedor_id || !fecha_emision || !monto_total) {
         return res.status(400).json({ msg: 'Faltan campos obligatorios para emitir la OC.' });
@@ -162,7 +168,7 @@ exports.crearOrdenCompra = async (req, res) => {
         doc.font('Helvetica-Bold').text('Subtotal:', 415, footerY + 5);
         doc.font('Helvetica').text(`${simbolo} ${parseFloat(monto_subtotal).toFixed(2)}`, 415, footerY + 5, { width: 135, align: 'right' });
         
-        doc.font('Helvetica-Bold').text('Impuesto:', 415, footerY + 17);
+        doc.font('Helvetica-Bold').text(`Impuesto (${tasaAplicada}%):`, 415, footerY + 17);
         doc.font('Helvetica').text(`${simbolo} ${parseFloat(monto_igv).toFixed(2)}`, 415, footerY + 17, { width: 135, align: 'right' });
         
         doc.font('Helvetica-Bold').text('Total:', 415, footerY + 30);
@@ -171,7 +177,6 @@ exports.crearOrdenCompra = async (req, res) => {
         // Caja Lugar de Entrega
         doc.rect(40, footerY + 45, 515, 30).stroke();
         doc.fontSize(8).font('Helvetica-Bold').text('Lugar de Entrega / Servicio:', 45, footerY + 50);
-        // 🔥 Aquí mostramos la Sede elegida en el combobox y su dirección real de la BD
         doc.font('Helvetica').text(`SEDE ${sede.nombre.toUpperCase()} - ${sede.direccion || 'Dirección no especificada'}`, 45, footerY + 60);
 
         // Notas legales
@@ -201,22 +206,32 @@ exports.crearOrdenCompra = async (req, res) => {
             `INSERT INTO ordenes_compra (
                 proveedor_id, sede_id, usuario_creador_id, codigo_oc, fecha_emision, 
                 fecha_entrega_esperada, moneda, monto_subtotal, monto_igv, monto_total, 
-                condicion_pago, estado, observaciones, archivo_pdf_url
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'EMITIDA', $12, $13) RETURNING *`,
+                condicion_pago, estado, observaciones, archivo_pdf_url, porcentaje_impuesto
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'EMITIDA', $12, $13, $14) RETURNING *`,
             [
                 proveedor_id, sede_id, usuarioCreadorId, codigo_oc, fecha_emision, 
                 fecha_entrega_esperada || null, moneda, monto_subtotal, monto_igv, monto_total, 
-                condicion_pago || 'Al contado', observaciones, urlCloudinary
+                condicion_pago || 'Al contado', observaciones, urlCloudinary, tasaAplicada
             ]
         );
 
         const nuevaOC = result.rows[0];
 
-        // 7. 📝 AUDITORÍA
+        // 7. 📝 AUDITORÍA (Interna)
         await client.query(
             `INSERT INTO auditoria (usuario_id, modulo, accion, registro_id, detalle) 
              VALUES ($1, 'ORDENES_COMPRA', 'CREAR', $2, $3)`,
             [usuarioCreadorId, nuevaOC.id, `Se emitió la OC N° ${codigo_oc} corporativa en Cloudinary`]
+        );
+
+        // 🔥 8. NUEVO: NOTIFICACIÓN B2B (Disparador a la Campana del Proveedor)
+        const tituloNoti = "📄 Nueva Orden de Compra Emitida";
+        const textoNoti = `SuperNova S.A.C. ha emitido la Orden de Compra ${codigo_oc} por el monto de ${simbolo} ${parseFloat(monto_total).toFixed(2)}. Puede revisarla y descargar el PDF en la pestaña "Órdenes de Compra".`;
+
+        await client.query(
+            `INSERT INTO notificaciones_b2b (proveedor_id, titulo, mensaje, tipo) 
+             VALUES ($1, $2, $3, 'orden')`,
+            [proveedor_id, tituloNoti, textoNoti]
         );
 
         await client.query('COMMIT');
@@ -229,7 +244,7 @@ exports.crearOrdenCompra = async (req, res) => {
     } finally {
         client.release();
     }
-};
+}; 
 
 // 1.2 Obtener todas las Órdenes de Compra (Para tu panel interno)
 exports.obtenerOrdenesInternas = async (req, res) => {
@@ -320,15 +335,16 @@ exports.obtenerOrdenesB2B = async (req, res) => {
 
 exports.validarOrdenCompraB2B = async (req, res) => {
     const { codigo } = req.params;
-    const proveedorId = req.usuario.proveedor_id; // Sacamos el ID del token del proveedor logueado
+    const proveedorId = req.usuario.proveedor_id; 
 
     if (!proveedorId) {
         return res.status(403).json({ msg: 'Acceso denegado. Solo proveedores pueden validar Órdenes.' });
     }
 
     try {
+        // 🔥 ACTUALIZACIÓN: Seleccionamos también 'porcentaje_impuesto'
         const result = await pool.query(`
-            SELECT id, codigo_oc, moneda, monto_subtotal, monto_igv, monto_total, estado 
+            SELECT id, codigo_oc, moneda, monto_subtotal, monto_igv, monto_total, estado, porcentaje_impuesto 
             FROM ordenes_compra 
             WHERE codigo_oc = $1 AND proveedor_id = $2
         `, [codigo.toUpperCase().trim(), proveedorId]);
@@ -347,15 +363,18 @@ exports.validarOrdenCompraB2B = async (req, res) => {
             return res.status(400).json({ msg: 'Esta Orden de Compra fue anulada y no puede ser facturada.' });
         }
 
-        // Si todo está bien, le devolvemos los montos exactos al frontend B2B para que autocomplete los inputs
+        // ✅ RESPUESTA ACTUALIZADA CON IMPUESTO DINÁMICO
         res.json({
             msg: 'Orden válida y lista para facturar.',
             orden: {
+                id: orden.id,
                 codigo: orden.codigo_oc,
                 moneda: orden.moneda,
                 subtotal: parseFloat(orden.monto_subtotal).toFixed(2),
                 igv: parseFloat(orden.monto_igv).toFixed(2),
-                total: parseFloat(orden.monto_total).toFixed(2)
+                total: parseFloat(orden.monto_total).toFixed(2),
+                // 🔥 ENVIAMOS EL PORCENTAJE REAL (Ej: 10.50 o 18.00)
+                porcentaje_impuesto: parseFloat(orden.porcentaje_impuesto || 18).toFixed(2)
             }
         });
 

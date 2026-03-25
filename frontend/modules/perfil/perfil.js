@@ -89,25 +89,36 @@
 
     // 4. PREVISUALIZAR FOTO
     function activarSubidaFoto() {
-        const uploadInput = document.getElementById('upload-avatar');
-        const previewImg = document.getElementById('profile-preview-img');
+        const uploadInput = document.getElementById('upload-avatar'); // El <input type="file">
+        const previewImg = document.getElementById('profile-preview-img'); // La <img> de la tarjeta
+        // Dentro de activarSubidaFoto, cuando el archivo existe:
+        const btnGuardar = document.querySelector('.btn-save');
+        if(btnGuardar) {
+            btnGuardar.classList.add('pulse-animation'); // Una animación para avisar que debe guardar
+        }
 
-        if(uploadInput && previewImg) {
+        if (uploadInput && previewImg) {
             uploadInput.onchange = function(e) {
                 const file = e.target.files[0];
                 if (file) {
-                    if (!file.type.startsWith('image/')) return alert("Solo imágenes JPG/PNG.");
-                    const reader = new FileReader();
-                    reader.onload = function(evt) {
-                        previewImg.src = evt.target.result;
-                    };
-                    reader.readAsDataURL(file);
+                    // 🛡️ Validación rápida de tipo
+                    if (!file.type.startsWith('image/')) {
+                        alert("Por favor, selecciona un archivo de imagen válido.");
+                        return;
+                    }
+
+                    // 🔥 LA MAGIA: Crea una URL temporal del archivo local
+                    const urlTemporal = URL.createObjectURL(file);
+                    previewImg.src = urlTemporal;
+
+                    // Opcional: Cambiar el estilo para mostrar que hay un cambio pendiente
+                    previewImg.style.border = "3px solid #3498db"; 
+                    console.log("📸 Vista previa actualizada localmente");
                 }
             };
         }
     }
 
-    // Exponemos la función al entorno global para que el HTML la pueda llamar
     window.actualizarMiPerfil = async function() {
         const formProfile = document.getElementById('form-update-profile');
         if(!formProfile) return;
@@ -115,69 +126,81 @@
         const btn = formProfile.querySelector('.btn-save');
         const txtOriginal = btn.innerHTML;
         
-        // Bloqueo visual del botón
         btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Guardando..."; 
         btn.disabled = true;
-
-        // Usamos JSON porque el endpoint 'actualizarPerfil' espera JSON.
-        // Nota: Para la foto habría que habilitar multer en el backend.
-        const data = {
-            nombres: document.getElementById('me-nombres').value,
-            apellidos: document.getElementById('me-apellidos').value,
-            telefono: document.getElementById('me-celular').value, // IMPORTANTE: El backend espera 'telefono', no 'celular'
-            direccion: document.getElementById('me-direccion').value,
-            cargo: document.getElementById('me-cargo').value,
-            password: document.getElementById('me-password').value
-        };
 
         try {
             const token = localStorage.getItem('token');
             
-            // PUT a /api/usuarios/perfil
+            // 🔥 CAMBIO CLAVE: Usamos FormData para poder enviar el archivo
+            const formData = new FormData();
+            
+            // Agregamos los campos de texto
+            formData.append('nombres', document.getElementById('me-nombres').value);
+            formData.append('apellidos', document.getElementById('me-apellidos').value);
+            formData.append('telefono', document.getElementById('me-celular').value); 
+            formData.append('direccion', document.getElementById('me-direccion').value);
+            formData.append('cargo', document.getElementById('me-cargo').value);
+            formData.append('password', document.getElementById('me-password').value);
+
+            // 🔥 AGREGAMOS LA FOTO (Si el usuario seleccionó una)
+            const fotoInput = document.getElementById('upload-avatar');
+            if (fotoInput && fotoInput.files.length > 0) {
+                // 'foto' debe coincidir con upload.single('foto') en tu backend/routes
+                formData.append('foto', fotoInput.files[0]); 
+            }
+
+            // Enviamos el PUT
             const res = await fetch('/api/usuarios/perfil', {
                 method: 'PUT',
                 headers: { 
-                    'Content-Type': 'application/json',
+                    // ⚠️ IMPORTANTE: NO pongas 'Content-Type' aquí. 
+                    // El navegador lo pondrá solo al detectar que es FormData.
                     'x-auth-token': token 
                 }, 
-                body: JSON.stringify(data)
+                body: formData // Enviamos el objeto FormData directamente
             });
 
             const result = await res.json();
 
             if (res.ok) {
-                // Usamos la función showToast que vimos en módulos anteriores para mantener la estética
-                if (typeof showToast === 'function') {
-                    showToast(result.msg, "success");
-                    setTimeout(() => location.reload(), 1500); // Recargamos para ver los cambios aplicados
-                } else {
-                    alert("✅ " + result.msg);
-                    location.reload();
+                // 1. Recopilamos los datos que el usuario acaba de escribir
+                const datosActualizados = {
+                    nombres: document.getElementById('me-nombres').value,
+                    apellidos: document.getElementById('me-apellidos').value,
+                    // Usamos la URL que nos devuelve Cloudinary en el JSON (result.foto_url)
+                    foto_url: result.foto_url || null 
+                };
+
+                // 2. Le avisamos al Dashboard que actualice el menú lateral
+                if (typeof window.actualizarSidebarUI === 'function') {
+                    window.actualizarSidebarUI(datosActualizados);
                 }
-            } else {
-                throw new Error(result.msg || "Error al actualizar perfil");
+
+                // 3. Notificación de éxito
+                if (typeof showMiniNotif === 'function') {
+                    showMiniNotif("Perfil actualizado con éxito", "success");
+                } else {
+                    alert("✅ Perfil actualizado");
+                }
             }
         } catch (error) {
             console.error(error);
-            if (typeof showToast === 'function') {
-                showToast(error.message, "error");
-            } else {
-                alert("❌ Error: " + error.message);
-            }
+            alert("❌ Error: " + error.message);
         } finally {
-            // Restaurar botón
             btn.innerHTML = txtOriginal; 
             btn.disabled = false;
         }
     };
 
 
-    // INICIO: Exponemos la función globalmente para que el Router de SuperNova la encuentre
     window.initPerfil = function() {
         console.log("▶️ Iniciando módulo Perfil...");
         cargarSedes().then(() => {
-            cargarDatosPerfil();
-            // setTimeout(activarSubidaFoto, 100); // (Puedes borrar esta línea si ocultaste el botón de foto)
+            cargarDatosPerfil().then(() => {
+                // 🔥 IMPORTANTE: Vinculamos el evento del input después de cargar los datos
+                activarSubidaFoto();
+            });
         });
     };
 

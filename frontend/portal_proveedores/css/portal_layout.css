@@ -214,7 +214,7 @@ body {
 /* Contenedor dinámico */
 .content-wrapper {
     flex: 1;
-    padding: 30px;
+    padding: 30px 10px;
     overflow-y: auto;
 }
 
@@ -335,6 +335,42 @@ body {
     pointer-events: auto;
 }
 
+/* --- ESTILOS DE LA CAMPANA Y DROPDOWN --- */
+.notification-box { position: relative; cursor: pointer; }
+
+.noti-dropdown-menu {
+    position: absolute; top: 45px; right: 0; width: 320px;
+    background: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    z-index: 3000; overflow: hidden; animation: fadeIn 0.2s ease;
+}
+
+.noti-header { padding: 15px; font-weight: 700; border-bottom: 1px solid #eee; color: #1e293b; }
+.noti-scroll { max-height: 350px; overflow-y: auto; }
+
+.noti-item { 
+    display: flex; gap: 12px; padding: 12px 15px; border-bottom: 1px solid #f8fafc;
+    transition: 0.2s; cursor: default;
+}
+.noti-item.unread { background-color: #f0f7ff; border-left: 3px solid #3b82f6; }
+.noti-item:hover { background-color: #f1f5f9; }
+
+.noti-item i { font-size: 1.4rem; margin-top: 2px; }
+.noti-content { flex: 1; }
+.noti-title { font-size: 0.85rem; font-weight: 700; margin: 0; color: #0f172a; }
+.noti-text { font-size: 0.8rem; color: #64748b; margin: 3px 0; line-height: 1.4; }
+.noti-time { font-size: 0.7rem; color: #94a3b8; }
+
+.noti-footer { 
+    padding: 10px; text-align: center; font-size: 0.8rem; 
+    color: #3b82f6; cursor: pointer; font-weight: 600; border-top: 1px solid #eee;
+}
+.noti-footer:hover { background: #eff6ff; }
+
+.text-danger { color: #ef4444; }
+.text-success { color: #10b981; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
 @media screen and (max-width: 768px) {
     .sidebar {
         position: fixed;
@@ -435,5 +471,188 @@ body {
     /* Previene que la capa oscura aparezca por error en PC */
     .sidebar-overlay {
         display: none !important;
+    }
+}
+
+/* =========================================
+   👤 FASE 3: MODAL DE PERFIL PREMIUM B2B
+   ========================================= */
+
+.modal-perfil-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(3px);
+    z-index: 9999;
+    display: none; /* Oculto por defecto */
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+/* Cuando JS le agrega la clase 'show', se vuelve visible */
+.modal-perfil-overlay.show {
+    display: flex !important;
+    opacity: 1;
+}
+
+.modal-perfil-content {
+    background: white; 
+    width: 90%;
+    max-width: 360px; 
+    border-radius: 16px; 
+    padding: 30px; 
+    box-shadow: 0 25px 50px rgba(0,0,0,0.25); 
+    transform: translateY(-20px);
+    transition: transform 0.3s ease;
+}
+
+.modal-perfil-overlay.show .modal-perfil-content {
+    transform: translateY(0); /* Efecto de caída suave */
+}
+
+/* Ajustes Responsive para Móvil (Perfil Premium) */
+@media screen and (max-width: 480px) {
+    .modal-perfil-content {
+        width: 95%;
+        padding: 20px;
+    }
+    
+    #topbar-avatar {
+        width: 30px !important;
+        height: 30px !important;
+    }
+}
+
+/* =========================================================
+   🔔 CORRECCIÓN DE NOTIFICACIONES (Móvil y Tablet)
+   ========================================================= */
+
+/* 1. Asegurar que el contenedor de la campana sea relativo */
+.notification-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+/* 2. Ajustes para Tablets y Desktop pequeño */
+@media screen and (max-width: 992px) {
+    /* Si tienes un dropdown (lista de notificaciones), lo centramos */
+    .notification-dropdown { /* Asumiendo que esta es la clase del panel que cae */
+        right: -100px !important;
+        width: 320px !important;
+    }
+}
+
+/* 3. Ajustes Críticos para Móviles (Pantalla de la imagen) */
+@media screen and (max-width: 768px) {
+    /* Ocultamos el texto del nombre del usuario para ganar espacio en la topbar */
+    #topbar-usuario-nombre {
+        display: none !important;
+    }
+
+    /* Reducimos el tamaño del título del panel para que no empuje la campana */
+    #topbar-titulo {
+        font-size: 0.95rem !important;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 130px;
+    }
+
+    /* EL PANEL DE NOTIFICACIONES: Lo volvemos casi pantalla completa */
+    .notification-dropdown { /* Ajustar con el ID o Clase real del panel que se ve en tu imagen */
+        position: fixed !important;
+        top: 60px !important; /* Altura de tu topbar */
+        left: 5% !important;
+        right: 5% !important;
+        width: 90% !important;
+        max-width: none !important;
+        transform: none !important;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.2) !important;
+        border-radius: 12px !important;
+        z-index: 9999 !important;
+    }
+
+    /* Ajuste de los elementos internos de la notificación para que no se corten */
+    .notification-item {
+        padding: 12px !important;
+        font-size: 0.85rem !important;
+    }
+
+    /* Ajuste del avatar en el topbar para que no use tanto espacio */
+    .user-profile {
+        gap: 5px !important;
+    }
+    
+    #topbar-avatar {
+        width: 30px !important;
+        height: 30px !important;
+    }
+}
+
+/* 4. Efecto de la campana al tener notificaciones */
+.notification-box .badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #ef4444;
+    color: white;
+    font-size: 0.7rem;
+    padding: 2px 5px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    font-weight: bold;
+}
+
+/* =========================================================
+   🚨 CORRECCIÓN DEFINITIVA DE NOTIFICACIONES EN MÓVIL
+   (Poner al final del archivo css)
+   ========================================================= */
+
+/* Usamos el ID exacto que veo en tus DevTools: noti-dropdown */
+@media screen and (max-width: 768px) {
+    
+    #noti-dropdown {
+        /* 1. Forzamos posición FIJA respecto a la pantalla */
+        position: fixed !important;
+        
+        /* 2. Lo despegamos de la topbar (ajusta este valor si tu topbar es más alta) */
+        top: 65px !important; 
+        
+        /* 3. ¡LA CLAVE! Anulamos cualquier 'left' o 'transform' previo */
+        left: 0 !important;
+        transform: none !important;
+        right: auto !important;
+
+        /* 4. Le damos ancho total de pantalla */
+        width: 100vw !important;
+        
+        /* 5. Quitamos sombras pesadas de desktop y ponemos una sutil */
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+        
+        /* 6. Opcional: Si quieres que tenga un pequeño margen lateral (look 'tarjeta') */
+        /*
+        left: 5% !important;
+        width: 90% !important;
+        border-radius: 8px !important;
+        */
+        
+        /* Aseguramos que no se corte el contenido interno */
+        overflow: hidden !important;
+        border-radius: 0 0 12px 12px !important; /* Solo bordes redondeados abajo */
+    }
+
+    /* Ajuste para que la cabecera "Notificaciones" no se pegue al borde */
+    .noti-header {
+        padding: 15px 20px !important;
+    }
+
+    /* Ajuste para los items de notificación */
+    #noti-content {
+        padding: 0 10px 10px 10px !important;
     }
 }

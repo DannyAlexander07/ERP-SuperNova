@@ -59,14 +59,14 @@
                 <tr id="row-filtros-gastos" class="filter-row-header">
                     <td></td> <td></td> <td></td>
                     <td>
-                        <input type="text" class="column-filter" placeholder="🔍 Proveedor..." 
+                        <input type="text" id="buscador-proveedor-compras" class="column-filter" placeholder="🔍 Proveedor..." 
                             onkeyup="filtrarColumna(this, 3, 'tabla-facturas-body')">
                     </td>
                     <td>
-                        <input type="text" class="column-filter" placeholder="🔍 N°..." 
+                        <input type="text" id="buscador-numero-compras" class="column-filter" placeholder="🔍 N°..." 
                             onkeyup="filtrarColumna(this, 4, 'tabla-facturas-body')">
                     </td>
-                    <td></td> <td></td> <td></td> <td></td> <td></td>
+                    <td></td> <td></td> <td></td> <td></td> <td></td> <td></td>
                 </tr>
             </thead>
             <tbody id="tabla-facturas-body"></tbody>
@@ -275,6 +275,11 @@
                         <div id="bloque-unico-input" class="input-group" style="display: none; grid-column: span 2;">
                             <input type="text" id="fac-doc-unico" placeholder="Ingrese N° o Código">
                             <label>N° Documento / Serie</label>
+                        </div>
+                        
+                        <div class="input-group" style="grid-column: span 2;">
+                            <input type="text" id="fac-oc" placeholder="Ej: OC-2026-0015" style="border: 1px dashed #3b82f6; background: #f8fafc;">
+                            <label style="color: #2563eb;">N° Orden de Compra (Opcional)</label>
                         </div>
                     </div>
 

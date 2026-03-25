@@ -7,24 +7,21 @@ const path = require('path'); // Auxiliar para rutas
 exports.crearUsuario = async (req, res) => {
     const { nombres, apellidos, dni, celular, direccion, cargo, sede_id, rol, email, password } = req.body;
 
-    // 🔥 CORRECCIÓN: Capturamos la URL de Cloudinary de forma ultra-segura
     const fotoUrl = req.file ? (req.file.secure_url || req.file.path) : null;
-
-    // 🛡️ Validación de sede_id para evitar que un string vacío rompa PostgreSQL
     const sedeIdFinal = (sede_id && sede_id !== 'null' && sede_id !== '') ? parseInt(sede_id) : null;
 
     try {
-        // 1. Validar si el usuario ya existe
-        const userExist = await pool.query('SELECT * FROM usuarios WHERE correo = $1', [email]);
+        // 1. Validar si el correo ya existe (Validación manual previa)
+        const userExist = await pool.query('SELECT id FROM usuarios WHERE correo = $1', [email]);
         if (userExist.rows.length > 0) {
-            return res.status(400).json({ msg: 'Este correo ya está registrado.' });
+            return res.status(400).json({ msg: 'Este correo electrónico ya está registrado.' });
         }
 
         // 2. Encriptar contraseña
         const salt = await bcrypt.genSalt(10);
         const passwordHash = await bcrypt.hash(password, salt);
 
-        // 3. Insertar en Base de Datos usando sedeIdFinal
+        // 3. Insertar en Base de Datos
         const nuevoUsuario = await pool.query(
             `INSERT INTO usuarios 
             (nombres, apellidos, documento_id, celular, direccion, cargo, sede_id, rol, correo, clave, foto_url, estado) 
@@ -36,8 +33,33 @@ exports.crearUsuario = async (req, res) => {
         res.json({ msg: 'Usuario creado exitosamente', usuario: nuevoUsuario.rows[0] });
 
     } catch (err) {
-        console.error("Error al crear usuario:", err.message);
-        res.status(500).send('Error al guardar usuario en base de datos');
+        console.error("❌ Error al crear usuario:", err);
+
+        // --- 🛡️ FILTRO DE ERRORES DE BASE DE DATOS ---
+        
+        // Error 23505: Llave duplicada (Primary Key o Unique Constraint)
+        if (err.code === '23505') {
+            // Si el error viene de la secuencia de IDs (usuarios_pkey)
+            if (err.constraint === 'usuarios_pkey') {
+                return res.status(400).json({ 
+                    msg: 'Error de sincronización de IDs. Por favor, intente de nuevo o contacte a soporte.' 
+                });
+            }
+            // Si el error viene del DNI
+            if (err.constraint && err.constraint.includes('documento_id')) {
+                return res.status(400).json({ msg: 'El DNI ingresado ya pertenece a otro usuario.' });
+            }
+            // Por si acaso el correo se coló al check manual
+            if (err.constraint && err.constraint.includes('correo')) {
+                return res.status(400).json({ msg: 'El correo electrónico ya existe.' });
+            }
+        }
+
+        // Respuesta estándar limpia en formato JSON
+        res.status(500).json({ 
+            msg: 'No se pudo guardar el usuario.', 
+            error: err.message 
+        });
     }
 };
 
@@ -264,49 +286,57 @@ exports.obtenerPerfil = async (req, res) => {
     console.log("------------------------------------------------");
 };
 
-// 5. ACTUALIZAR MI PERFIL (El usuario se edita a sí mismo)
+// 5. ACTUALIZAR MI PERFIL (El usuario se edita a sí mismo - SOPORTA FOTO)
 exports.actualizarPerfil = async (req, res) => {
-    // 🛡️ BLINDAJE: Extraemos solo campos no críticos.
-    // Ignoramos intencionalmente 'rol', 'estado' y 'sede_id' si vienen en el body para evitar auto-escalada de privilegios.
+    // Extraemos campos. Nota: El frontend debe enviar 'telefono'
     const { nombres, apellidos, cargo, telefono, direccion, password } = req.body;
-    const idUsuario = req.usuario.id; // ID del token (Nadie puede editar a otro desde aquí)
+    const idUsuario = req.usuario.id; 
+
+    // 🔥 Capturamos la foto de Cloudinary si existe
+    const fotoNuevaUrl = req.file ? (req.file.secure_url || req.file.path) : null;
 
     try {
-        // Validación básica
         if (!nombres || !apellidos) return res.status(400).json({ msg: 'Nombre y Apellido son obligatorios' });
 
-        let query = "";
-        let values = [];
+        // Iniciamos la base de la consulta
+        let query = `UPDATE usuarios SET nombres=$1, apellidos=$2, cargo=$3, celular=$4, direccion=$5`;
+        let values = [nombres, apellidos, cargo, telefono, direccion];
+        let contador = 6;
 
-        // Si manda contraseña, la encriptamos y actualizamos todo
-        if (password && password.length > 0) {
-            if (password.length < 8) return res.status(400).json({ msg: "La contraseña debe tener al menos 8 caracteres." });
+        // A. ¿Viene contraseña nueva?
+        if (password && password.trim().length >= 8) {
             const salt = await bcrypt.genSalt(10);
             const passwordHash = await bcrypt.hash(password, salt);
-            
-            query = `UPDATE usuarios 
-                     SET nombres=$1, apellidos=$2, cargo=$3, celular=$4, direccion=$5, clave=$6 
-                     WHERE id=$7 AND estado != 'eliminado' RETURNING id, nombres, apellidos`;
-            values = [nombres, apellidos, cargo, telefono, direccion, passwordHash, idUsuario];
-        } else {
-            // Si no, solo actualizamos datos
-            query = `UPDATE usuarios 
-                     SET nombres=$1, apellidos=$2, cargo=$3, celular=$4, direccion=$5 
-                     WHERE id=$6 AND estado != 'eliminado' RETURNING id, nombres, apellidos`;
-            values = [nombres, apellidos, cargo, telefono, direccion, idUsuario];
+            query += `, clave = $${contador}`;
+            values.push(passwordHash);
+            contador++;
         }
+
+        // B. ¿Viene foto nueva? (ESTO ES LO QUE FALTABA)
+        if (fotoNuevaUrl) {
+            query += `, foto_url = $${contador}`;
+            values.push(fotoNuevaUrl);
+            contador++;
+        }
+
+        // Finalizamos con el WHERE
+        query += ` WHERE id = $${contador} AND estado != 'eliminado' RETURNING id`;
+        values.push(idUsuario);
 
         const result = await pool.query(query, values);
         
         if (result.rowCount === 0) {
-            return res.status(404).json({ msg: 'Usuario no válido o eliminado.' });
+            return res.status(404).json({ msg: 'Usuario no encontrado o inactivo.' });
         }
         
-        res.json({ msg: 'Tus datos han sido actualizados.' });
+        res.json({ 
+            msg: 'Perfil actualizado correctamente.', 
+            foto_url: fotoNuevaUrl // Opcional: devolvemos la URL para actualizar el front sin recargar
+        });
 
     } catch (err) {
-        console.error("Error Update Perfil:", err.message);
-        res.status(500).send('Error al guardar cambios');
+        console.error("❌ Error Update Perfil:", err.message);
+        res.status(500).json({ msg: 'Error al guardar los cambios en el perfil.' });
     }
 };
 
