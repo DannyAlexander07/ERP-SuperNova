@@ -30,7 +30,7 @@
         const usuario = JSON.parse(usuarioStr);
         const rol = (usuario.rol || '').toLowerCase();
         
-        const esAdmin = rol === 'superadmin' || rol === 'admin' || rol === 'administrador' || rol === 'gerente';
+        const esAdmin = rol === 'superadmin' || rol === 'admin' || rol === 'administrador' || rol === 'gerente' || rol === 'director' || rol === 'finanzas' || rol === 'contabilidad';
         
         const select = document.getElementById('filtro-sede-caja');
         if (!select) return; 
@@ -188,12 +188,18 @@
             alert("Error de conexión");
         }
     }
-    // --- FUNCIÓN PARA SALIR DE CAJA SI HAY ALERTA ---
+
+    // --- FUNCIÓN PARA SALIR DE CAJA SI HAY ALERTA (CORREGIDA Y BLINDADA) ---
     window.salirAlInicio = function() {
-        // En lugar de ir a '/', recargamos la página actual.
-        // Como ya tienes el Token guardado, el sistema te mostrará el Dashboard (Inicio)
-        // y la alerta roja desaparecerá.
-        window.location.reload();
+        // 1. Ocultamos la pantalla roja a la fuerza y devolvemos el scroll
+        const alerta = document.getElementById('alerta-arqueo');
+        if (alerta) alerta.style.display = 'none';
+        document.body.style.overflow = 'auto';
+
+        // 2. 🛡️ BLINDAJE DEL NAVEGADOR:
+        // Usamos 'replace' en lugar de 'href' para borrar el historial actual.
+        // Así, si el cajero presiona la flecha de "Atrás", no podrá volver a la caja.
+        window.location.replace('/dashboard.html'); 
     }
 
     window.abrirModalAutorizacion = function() {

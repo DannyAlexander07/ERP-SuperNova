@@ -16,7 +16,7 @@ exports.obtenerResumen = async (req, res) => {
 
         // Si no es admin ni gerente, forzamos su propia sede (Seguridad)
         const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
-        if (rol !== 'superadmin' && rol !== 'admin' && rol !== 'gerente') {
+        if (rol !== 'superadmin' && rol !== 'admin' && rol !== 'gerente' && rol !== 'director' && rol !== 'finanzas' && rol !== 'contabilidad') {
             sedeId = req.usuario.sede_id;
         }
 

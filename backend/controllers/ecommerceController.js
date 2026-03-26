@@ -171,7 +171,7 @@ exports.obtenerHistorialWeb = async (req, res) => {
     try {
         const usuario = req.usuario || {};
         const rol = (usuario.rol || '').toLowerCase();
-        const esAdminTotal = rol === 'superadmin' || rol === 'gerente';
+        const esAdminTotal = rol === 'superadmin' || rol === 'gerente' || rol === 'admin' || rol === 'director' || rol === 'finanzas' || rol === 'contabilidad';
         
         let params = [];
         let filterCondition = "WHERE v.origen = 'WEB'";

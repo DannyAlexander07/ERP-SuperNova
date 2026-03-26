@@ -25,7 +25,7 @@ router.put('/b2b/mi-perfil', checkAuth, proveedoresController.actualizarMiPerfil
 router.put('/b2b/perfil', checkAuth, uploadCloud.single('foto'), proveedoresController.actualizarPerfilB2B);
 
 // Rutas Onboarding (Invitación B2B)
-router.post('/generar-invitacion', checkAuth, checkRole(['superadmin', 'admin', 'logistica', 'gerente', 'finanzas']), proveedoresController.generarCodigoInvitacion);
+router.post('/generar-invitacion', checkAuth, checkRole(['superadmin', 'admin', 'logistica', 'gerente', 'finanzas','director']), proveedoresController.generarCodigoInvitacion);
 
 // ==========================================
 // 2. RUTAS DINÁMICAS (Con /:id siempre al final)
@@ -33,10 +33,10 @@ router.post('/generar-invitacion', checkAuth, checkRole(['superadmin', 'admin', 
 
 router.put('/:id', checkAuth, proveedoresController.actualizarProveedor);
 router.delete('/:id', checkAuth, proveedoresController.eliminarProveedor);
-router.put('/:id/generar-codigo', checkAuth, checkRole(['superadmin', 'admin', 'logistica', 'gerente', 'finanzas']), proveedoresController.generarCodigoAcceso);
+router.put('/:id/generar-codigo', checkAuth, checkRole(['superadmin', 'admin', 'logistica', 'gerente', 'finanzas','director']), proveedoresController.generarCodigoAcceso);
 
 // Ruta: Forzar Contraseña B2B
-router.post('/:id/forzar-password', checkAuth, checkRole(['superadmin', 'admin', 'logistica', 'gerente', 'finanzas']), proveedoresController.forzarPasswordB2B);
+router.post('/:id/forzar-password', checkAuth, checkRole(['superadmin', 'admin', 'logistica', 'gerente', 'finanzas','director']), proveedoresController.forzarPasswordB2B);
 
 // Ruta: Obtener un solo proveedor (SOLUCIONA EL ERROR 404 DE LOS BANCOS)
 router.get('/:id', checkAuth, proveedoresController.obtenerProveedorPorId);

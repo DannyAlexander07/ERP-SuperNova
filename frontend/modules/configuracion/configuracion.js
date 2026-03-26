@@ -89,7 +89,7 @@
             usuarios.forEach(u => {
                 let badgeClass = 'role-colab';
                 const r = (u.rol || '').toLowerCase();
-                if (r.includes('admin') || r.includes('gerente')) badgeClass = 'role-admin';
+                if (r.includes('admin') || r.includes('gerente') ) badgeClass = 'role-admin';
                 else if (r.includes('logistica')) badgeClass = 'role-logis';
                 else if (r.includes('super')) badgeClass = 'role-superadmin'; // Asumiendo que tienes clase CSS para super
                 

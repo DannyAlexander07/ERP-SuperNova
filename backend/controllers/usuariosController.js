@@ -63,13 +63,13 @@ exports.crearUsuario = async (req, res) => {
     }
 };
 
-// 2. OBTENER LISTA DE USUARIOS
+// 2. OBTENER LISTA DE USUARIOS (FILTRADA SIN PROVEEDORES)
 exports.obtenerUsuarios = async (req, res) => {
     try {
         // 1. OBTENER PARÁMETROS
         const { q, page } = req.query;
         
-        // 🔥 CAMBIO: 10 usuarios por página
+        // 10 usuarios por página
         const limite = 10; 
         
         const paginaActual = parseInt(page) || 1;
@@ -79,9 +79,7 @@ exports.obtenerUsuarios = async (req, res) => {
         const termino = q ? `%${q.toLowerCase()}%` : '%';
 
         // 2. CONSULTA SQL PODEROSA
-        // - Busca en TODA la tabla (WHERE ...)
-        // - Cuenta el total de coincidencias (COUNT(*) OVER)
-        // - Recorta solo los 10 que necesitamos (LIMIT/OFFSET)
+        // 🔥 AQUÍ ESTÁ EL CANDADO: "AND u.rol != 'PROVEEDOR'"
         const result = await pool.query(`
             SELECT 
                 u.id, u.nombres, u.apellidos, u.correo, u.rol, u.cargo, u.celular, 
@@ -90,8 +88,9 @@ exports.obtenerUsuarios = async (req, res) => {
             FROM usuarios u
             LEFT JOIN sedes s ON u.sede_id = s.id
             WHERE 
-                u.estado != 'eliminado' AND 
-                (
+                u.estado != 'eliminado' 
+                AND u.rol != 'PROVEEDOR' 
+                AND (
                     LOWER(u.nombres) LIKE $1 OR 
                     LOWER(u.apellidos) LIKE $1 OR 
                     LOWER(u.correo) LIKE $1
@@ -101,7 +100,6 @@ exports.obtenerUsuarios = async (req, res) => {
         `, [termino, limite, offset]);
 
         // 3. RESPUESTA PARA PAGINACIÓN
-        // Si no hay resultados, totalRegistros es 0
         const totalRegistros = result.rows.length > 0 ? parseInt(result.rows[0].total_registros) : 0;
         const totalPaginas = Math.ceil(totalRegistros / limite);
 

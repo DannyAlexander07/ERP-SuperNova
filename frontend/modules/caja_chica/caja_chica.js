@@ -15,7 +15,7 @@
         if (userStr) {
             const user = JSON.parse(userStr);
             // Si es admin, mostramos el filtro y cargamos las sedes
-            if(user.rol === 'superadmin' || user.rol === 'admin' || user.rol === 'gerente') {
+            if(user.rol === 'superadmin' || user.rol === 'admin' || user.rol === 'gerente' || user.rol === 'director' || user.rol === 'finanzas' || user.rol === 'contabilidad') {
                 const filtro = document.getElementById('filtro-sede-chica');
                 if(filtro) {
                     filtro.style.display = 'block';

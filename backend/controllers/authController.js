@@ -13,7 +13,7 @@ exports.login = async (req, res) => {
     }
 
     try {
-        // 1. Verificar si el usuario existe y traer solo datos necesarios + validación de estado
+        // 1. Verificar si el usuario existe y traer solo datos necesarios
         const result = await pool.query(
             'SELECT id, nombres, apellidos, clave, rol, sede_id, foto_url, estado FROM usuarios WHERE correo = $1', 
             [email]
@@ -25,18 +25,25 @@ exports.login = async (req, res) => {
 
         const usuario = result.rows[0];
 
+        // 🛡️ EL GUARDIÁN: BLOQUEAR PROVEEDORES DEL SISTEMA PRINCIPAL
+        if (usuario.rol === 'PROVEEDOR') {
+            return res.status(403).json({ 
+                msg: 'Acceso Denegado. Los proveedores deben ingresar por el Portal B2B.' 
+            });
+        }
+
         // 🛡️ PROTECCIÓN DE ESTADO: Validar si el usuario está ACTIVO
-        if (usuario.estado !== 'activo') {
+        if (usuario.estado !== 'activo' && usuario.estado !== 'ACTIVO') {
             return res.status(403).json({ msg: 'Su cuenta está inhabilitada. Contacte al administrador.' });
         }
 
         // 2. Verificar contraseña
         const isMatch = await bcrypt.compare(password, usuario.clave);
         if (!isMatch) {
-            return res.status(400).json({ msg: 'Credenciales inválidas.' }); // Evitamos decir "contraseña incorrecta"
+            return res.status(400).json({ msg: 'Credenciales inválidas.' }); 
         }
 
-        // 🛡️ VALIDACIÓN DE SEDE LOGÍSTICA
+        // 🛡️ VALIDACIÓN DE SEDE LOGÍSTICA (Exigimos sede para empleados)
         if (!usuario.sede_id) {
             return res.status(403).json({ msg: 'Usuario sin Sede Logística asignada. No puede operar el sistema.' });
         }
@@ -76,7 +83,7 @@ exports.login = async (req, res) => {
                     console.error("⚠️ Error grabando auditoría de login:", auditErr.message);
                 }
 
-                // 4. RESPONDER AL FRONTEND (Mantenemos tu estructura original)
+                // 4. RESPONDER AL FRONTEND
                 res.json({ 
                     token, 
                     usuario: {

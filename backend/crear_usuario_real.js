@@ -7,7 +7,6 @@ async function crearUsuarioAlexander() {
         console.log("🔄 Iniciando configuración de SuperNova...");
 
         // PASO 1: Asegurar que exista la Sede Principal
-        // Buscamos si hay sedes, si no, creamos la primera.
         let sedeId;
         const sedeCheck = await pool.query("SELECT id FROM sedes WHERE nombre = 'Sede Principal'");
 
@@ -31,7 +30,7 @@ async function crearUsuarioAlexander() {
             console.log(`✅ Almacén Central creado.`);
         }
 
-        // PASO 2: Crear el Usuario Admin
+        // PASO 2: Crear el Usuario SuperAdmin
         console.log("🔄 Creando/Actualizando usuario Alexander Arellano...");
 
         const datos = {
@@ -39,7 +38,7 @@ async function crearUsuarioAlexander() {
             apellidos: "Arellano Sanchez",
             correo: "aarellano@gruposp.pe",
             clavePlana: "Java1234.",
-            rol: "admin",
+            rol: "superadmin", // 🔥 AQUÍ TE CONVERTIMOS EN DIOS DEL SISTEMA
             cargo: "Project Development Manager",
             estado: "activo",
             sede_id: sedeId 
@@ -53,18 +52,18 @@ async function crearUsuarioAlexander() {
         const userCheck = await pool.query("SELECT id FROM usuarios WHERE correo = $1", [datos.correo]);
 
         if (userCheck.rows.length > 0) {
-            // Si ya existe, solo le actualizamos la sede y la clave para asegurar acceso
+            // Si ya existe, lo ascendemos a superadmin
             await pool.query(
                 `UPDATE usuarios SET 
                     clave = $1, 
                     sede_id = $2, 
-                    rol = 'admin' 
+                    rol = 'superadmin' 
                  WHERE correo = $3`,
                 [passwordHash, datos.sede_id, datos.correo]
             );
-            console.log("✅ Usuario existente actualizado con permisos de Sede Principal.");
+            console.log("✅ Usuario existente actualizado con permisos de SUPERADMIN.");
         } else {
-            // Si no existe, lo creamos desde cero
+            // Si no existe, lo creamos desde cero como superadmin
             const res = await pool.query(
                 `INSERT INTO usuarios 
                 (nombres, apellidos, correo, clave, rol, cargo, estado, sede_id) 
@@ -72,10 +71,10 @@ async function crearUsuarioAlexander() {
                 RETURNING *`,
                 [datos.nombres, datos.apellidos, datos.correo, passwordHash, datos.rol, datos.cargo, datos.estado, datos.sede_id]
             );
-            console.log(`✅ ¡ÉXITO! Usuario creado (ID: ${res.rows[0].id})`);
+            console.log(`✅ ¡ÉXITO! Usuario SUPERADMIN creado (ID: ${res.rows[0].id})`);
         }
 
-        console.log("\n🚀 LISTO: Ya puedes iniciar sesión y ver el inventario correctamente.");
+        console.log("\n🚀 LISTO: Ya eres SUPERADMIN. Puedes iniciar sesión con todos los privilegios.");
         process.exit(0);
 
     } catch (err) {

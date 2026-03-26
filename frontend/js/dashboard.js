@@ -38,23 +38,23 @@ if (userStr && token) {
 
 // 2. DEFINICIÓN DE MENÚ Y PERMISOS
 const menuItems = [
-    { id: 'inicio', icon: 'bx-grid-alt', text: 'Dashboard', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'logistica', 'finanzas', 'contabilidad', 'director'] },
-    { id: 'calendario', icon: 'bx-calendar-event', text: 'Calendario', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'finanzas', 'contabilidad', 'director'] },
-    { id: 'ventas', icon: 'bx-cart-alt', text: 'Ventas', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'finanzas', 'contabilidad', 'director'] },
-    { id: 'despacho_web', icon: 'bx-shopping-bag', text: 'Despacho Web', roles: ['superadmin', 'admin', 'cajero', 'gerente'] },
-    { id: 'terceros', icon: 'bx-qr-scan', text: 'Canjes / Terceros', roles: ['superadmin', 'admin', 'gerente', 'cajero', 'finanzas', 'contabilidad'] },
-    { id: 'historial', icon: 'bx-history', text: 'Historial Ventas', roles: ['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad', 'director', 'cajero'] },
-    { id: 'caja', icon: 'bx-wallet', text: 'Flujo de Caja', roles: ['superadmin', 'admin', 'gerente', 'cajero', 'finanzas', 'contabilidad'] },
-    { id: 'caja_chica', icon: 'bx-wallet-alt', text: 'Caja Chica', roles: ['superadmin', 'admin', 'gerente', 'cajero', 'finanzas', 'contabilidad'] },
-    { id: 'inventario', icon: 'bx-box', text: 'Inventario', roles: ['superadmin', 'admin', 'cajero', 'logistica', 'gerente', 'director'] },
-    { id: 'proveedores', icon: 'bx-store-alt', text: 'Proveedores', roles: ['superadmin', 'admin', 'logistica', 'gerente', 'finanzas', 'contabilidad'] },
-    { id: 'ordenes_compra', icon: 'bx-cart-add', text: 'Órdenes de Compra', roles: ['superadmin', 'admin', 'logistica', 'gerente', 'finanzas'] },
+    { id: 'inicio', icon: 'bx-grid-alt', text: 'Dashboard', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'logistica', 'finanzas', 'contabilidad', 'director', 'lider'] },
+    { id: 'calendario', icon: 'bx-calendar-event', text: 'Calendario', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'finanzas', 'contabilidad', 'director', 'lider'] },
+    { id: 'ventas', icon: 'bx-cart-alt', text: 'Ventas', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'finanzas', 'contabilidad', 'lider'] },
+    { id: 'despacho_web', icon: 'bx-shopping-bag', text: 'Despacho Web', roles: ['superadmin', 'admin', 'contabilidad', 'gerente'] },
+    { id: 'terceros', icon: 'bx-qr-scan', text: 'Canjes / Terceros', roles: ['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad'] },
+    { id: 'historial', icon: 'bx-history', text: 'Historial Ventas', roles: ['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad', 'director', 'cajero', 'lider'] },
+    { id: 'caja', icon: 'bx-wallet', text: 'Flujo de Caja', roles: ['superadmin', 'admin', 'gerente', 'cajero', 'finanzas', 'contabilidad', 'lider'] },
+    { id: 'caja_chica', icon: 'bx-wallet-alt', text: 'Caja Chica', roles: ['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad', 'director'] },
+    { id: 'inventario', icon: 'bx-box', text: 'Inventario', roles: ['superadmin', 'admin', 'cajero', 'logistica', 'gerente', 'lider'] },
+    { id: 'proveedores', icon: 'bx-store-alt', text: 'Proveedores', roles: ['superadmin', 'admin', 'logistica', 'gerente', 'finanzas', 'contabilidad','director'] },
+    { id: 'ordenes_compra', icon: 'bx-cart-add', text: 'Órdenes de Compra', roles: ['superadmin', 'admin', 'logistica', 'gerente', 'finanzas', 'contabilidad','director'] },
     { id: 'facturas', icon: 'bx-receipt', text: 'Facturas', roles: ['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad', 'director'] },
     { id: 'prestamos', icon: 'bx-credit-card', text: 'Créditos', roles: ['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad'] },
-    { id: 'clientes', icon: 'bx-user-pin', text: 'Clientes', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'finanzas', 'contabilidad'] },
-    { id: 'crm', icon: 'bx-doughnut-chart', text: 'CRM / Leads', roles: ['superadmin', 'admin', 'cajero', 'gerente'] },
+    { id: 'clientes', icon: 'bx-user-pin', text: 'Clientes', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'finanzas', 'contabilidad', 'lider'] },
+    { id: 'crm', icon: 'bx-doughnut-chart', text: 'CRM / Leads', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'finanzas', 'contabilidad', 'director', 'lider'] },
     { id: 'analitica', icon: 'bx-bar-chart-alt-2', text: 'Analítica', roles: ['superadmin', 'admin', 'gerente', 'finanzas', 'contabilidad','director'] },
-    { id: 'configuracion', icon: 'bx-cog', text: 'Configuración', roles: ['superadmin', 'admin'] },
+    { id: 'configuracion', icon: 'bx-cog', text: 'Configuración', roles: ['superadmin'] },
     { id: 'perfil', icon: 'bx-user', text: 'Mi Perfil', roles: ['superadmin', 'admin', 'cajero', 'gerente', 'logistica', 'finanzas', 'contabilidad'], hidden: true }
 ];
 

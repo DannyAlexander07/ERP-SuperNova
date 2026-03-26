@@ -453,6 +453,9 @@
             // 🔥 AQUI LEEMOS EL CAMPO DONDE LA LUPA O EL USUARIO PUSO EL NOMBRE
             const nombreVal = document.getElementById('cliente-nombre-natural').value.trim();
             
+            // 🔥 REGLA SUNAT: Calcular el total final a pagar
+            const totalPagarParaSunat = totalVentaOriginal - (totalVentaOriginal * descuentoFactor);
+
             if(dniVal) {
                 // Si hay DNI escrito...
                 if(dniVal.length !== 8) {
@@ -470,8 +473,17 @@
 
                 docCliente = dniVal;
                 nombreCliente = nombreVal; 
-            } 
-            // Si dniVal está vacío, se mantienen los defaults ("00000000" y "CLIENTE VARIOS")
+            } else {
+                // 🔥 REGLA SUNAT: SI ESTÁ VACÍO, NO DEBE PASAR DE 700 SOLES
+                if (totalPagarParaSunat >= 700) {
+                    return mostrarModalResultado(
+                        "SUNAT: DNI Obligatorio", 
+                        `El monto total es S/ ${totalPagarParaSunat.toFixed(2)}. Por normativa de SUNAT, las ventas a partir de S/ 700 exigen DNI y Nombre del cliente.`, 
+                        "error"
+                    );
+                }
+                // Si dniVal está vacío y es menor a 700, se mantienen los defaults ("00000000" y "CLIENTE VARIOS")
+            }
         }
 
         // 4. CAPTURAR EMAIL

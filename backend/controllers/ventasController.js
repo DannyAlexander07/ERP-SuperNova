@@ -156,6 +156,12 @@ exports.registrarVenta = async (req, res) => {
         }
 
         totalCalculado = Number(totalCalculado.toFixed(2));
+
+        // 🔥 BLOQUEO DE SEGURIDAD SUNAT (BACKEND) 🔥
+        if ((!tipo_comprobante || tipo_comprobante === 'Boleta') && totalCalculado >= 700 && documentoLimpio === '00000000') {
+            throw new Error(`SUNAT: Las ventas de S/ 700 o más requieren obligatoriamente el DNI del cliente. (Total: S/ ${totalCalculado})`);
+        }
+
         const subtotalFactura = Number((totalCalculado / 1.18).toFixed(2));
         const igvFactura = Number((totalCalculado - subtotalFactura).toFixed(2));
         const lineaPrincipal = detalleAInsertar[0]?.lineaProd || 'GENERAL';
@@ -331,7 +337,7 @@ exports.registrarVenta = async (req, res) => {
 exports.obtenerHistorialVentas = async (req, res) => {
     try {
         const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
-        const esSuperAdmin = rol === 'superadmin' || rol === 'gerente';
+        const esSuperAdmin = rol === 'superadmin' || rol === 'gerente' || rol === 'director' || rol === 'finanzas' || rol === 'contabilidad';
         const usuarioSedeId = req.usuario.sede_id;
         const filtroSedeId = req.query.sede;
 
@@ -492,7 +498,7 @@ exports.eliminarVenta = async (req, res) => {
     
     // Normalización de Roles
     const rolUsuario = (req.usuario.rol || '').toLowerCase().trim();
-    const rolesPermitidos = ['superadmin', 'admin', 'administrador', 'super admin', 'gerente'];
+    const rolesPermitidos = ['superadmin', 'admin', 'administrador', 'super admin', 'gerente','director', 'finanzas', 'contabilidad'];
 
     const client = await pool.connect();
     try {
@@ -633,13 +639,15 @@ exports.eliminarVenta = async (req, res) => {
     }
 };
 
-// 5. OBTENER LISTA DE VENDEDORES (Para el Select)
+// 5. OBTENER LISTA DE VENDEDORES (Para el Select) - CORREGIDO (Filtro Proveedores)
 exports.obtenerVendedores = async (req, res) => {
     try {
+        // 🔥 AQUÍ ESTÁ EL CANDADO: "AND rol != 'PROVEEDOR'"
         const result = await pool.query(`
             SELECT id, nombres, apellidos, rol 
             FROM usuarios 
             WHERE UPPER(estado) = 'ACTIVO' 
+              AND rol != 'PROVEEDOR' 
             ORDER BY nombres ASC
         `);
 

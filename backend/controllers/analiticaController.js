@@ -4,7 +4,7 @@ const pool = require('../db');
 // 1. P&L Detallado (CORRECCIÓN FINAL: SIN DUPLICADOS)
 exports.obtenerPyL = async (req, res) => {
     const rol = req.usuario ? req.usuario.rol.toLowerCase() : '';
-    const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
+    const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin','director', 'finanzas', 'contabilidad'].includes(rol);
     const usuarioSedeId = req.usuario.sede_id;
 
     const startMonth = req.query.inicio || '2023-01-01'; 
@@ -140,7 +140,7 @@ exports.obtenerPyL = async (req, res) => {
 // 2. KPIs OPERATIVOS (CORREGIDO: Fechas dinámicas, Ticket Promedio separado y UPPER aplicado)
 exports.obtenerKpisEventos = async (req, res) => {
     const rol = req.usuario ? req.usuario.rol.toLowerCase() : '';
-    const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
+    const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin','director', 'finanzas', 'contabilidad'].includes(rol);
     const usuarioSedeId = req.usuario.sede_id;
 
     let sedeId = req.query.sede || null;
@@ -226,7 +226,7 @@ exports.obtenerResumenGlobal = async (req, res) => {
     // Por seguridad, te pongo la versión corregida de fechas:
     
     const rol = req.usuario ? req.usuario.rol.toLowerCase() : '';
-    const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
+    const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin','director', 'finanzas', 'contabilidad'].includes(rol);
     const usuarioSedeId = req.usuario.sede_id;
 
     let sedeId = req.query.sede || null;
@@ -265,7 +265,7 @@ exports.obtenerResumenGlobal = async (req, res) => {
 
 exports.obtenerResumenDia = async (req, res) => {
     const rol = (req.usuario && req.usuario.rol) ? req.usuario.rol.toLowerCase().trim() : '';
-    const esAdmin = ['admin', 'administrador', 'gerente', 'superadmin', 'director'].includes(rol); // aqui para que vean ingreso del dia
+    const esAdmin = ['admin', 'administrador', 'gerente', 'superadmin', 'director', 'finanzas', 'contabilidad'].includes(rol); // aqui para que vean ingreso del dia
     const usuarioSedeId = req.usuario ? req.usuario.sede_id : null; 
 
     try {
@@ -319,7 +319,7 @@ exports.obtenerResumenDia = async (req, res) => {
 exports.obtenerGraficosAvanzados = async (req, res) => {
     // Validar usuario y permisos de sede
     const rol = (req.usuario && req.usuario.rol) ? req.usuario.rol.toLowerCase() : '';
-    const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin'].includes(rol);
+    const esSuperAdmin = ['admin', 'administrador', 'gerente', 'superadmin','director', 'finanzas', 'contabilidad'].includes(rol);
     const usuarioSedeId = (req.usuario && req.usuario.sede_id) ? req.usuario.sede_id : null;
 
     let sedeId = req.query.sede || null;

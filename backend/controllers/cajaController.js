@@ -7,7 +7,7 @@ exports.obtenerMovimientos = async (req, res) => {
         if (!req.usuario) return res.status(401).json({ msg: "No autorizado" });
 
         const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
-        const esAdmin = ['superadmin', 'admin', 'administrador', 'gerente'].includes(rol);
+        const esAdmin = ['superadmin', 'admin', 'administrador', 'gerente','director', 'finanzas', 'contabilidad'].includes(rol);
         const usuarioSedeId = req.usuario.sede_id;
         const filtroSedeId = req.query.sede; 
 
@@ -111,7 +111,7 @@ exports.obtenerResumenCaja = async (req, res) => {
         if (!req.usuario) return res.status(401).json({msg: "Sin sesión"});
         
         const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
-        const esAdmin = ['superadmin', 'admin', 'administrador', 'gerente'].includes(rol);
+        const esAdmin = ['superadmin', 'admin', 'administrador', 'gerente','director', 'finanzas', 'contabilidad'].includes(rol);
         const usuarioSedeId = req.usuario.sede_id;
         const filtroSedeId = req.query.sede;
 
@@ -282,15 +282,16 @@ exports.obtenerResumenCaja = async (req, res) => {
     }
 };
 
-// --- REEMPLAZAR FUNCIÓN autorizarTope EN cajaController.js ---
+
 exports.autorizarTope = async (req, res) => {
-    // 1. Verificación de Roles: Solo niveles altos pueden autorizar
+    // 1. Verificación de Roles: Ahora incluimos 'lider' y aseguramos 'superadmin'
     const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
-    const esAdmin = ['superadmin', 'admin', 'administrador', 'gerente'].includes(rol);
+    const rolesPermitidos = ['superadmin', 'admin', 'administrador', 'gerente', 'director', 'lider', 'finanzas', 'contabilidad'];
+    const puedeAutorizar = rolesPermitidos.includes(rol);
     
-    if (!esAdmin) {
+    if (!puedeAutorizar) {
         return res.status(403).json({ 
-            msg: "⛔ No tienes permisos de nivel superior para autorizar este tope de efectivo." 
+            msg: "⛔ Solo un Líder de Tienda o un Administrador puede autorizar la ampliación de caja." 
         });
     }
 
@@ -313,7 +314,7 @@ exports.autorizarTope = async (req, res) => {
         );
 
         res.json({ 
-            msg: `✅ Autorización concedida. La caja de la sede ahora puede operar hasta S/ ${nuevoTope}` 
+            msg: `✅ Autorización concedida. La caja ahora puede operar hasta S/ ${nuevoTope}` 
         });
 
     } catch (err) {

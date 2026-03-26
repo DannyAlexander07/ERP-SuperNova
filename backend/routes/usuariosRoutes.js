@@ -23,18 +23,18 @@ router.put('/perfil', checkAuth, uploadCloud.single('foto'), usuariosController.
 // --- RUTAS ADMINISTRATIVAS (SOLO ADMINS / GERENTES) ---
 
 // 1. Crear usuario 
-router.post('/', checkAuth, checkRole(['superadmin', 'admin', 'administrador', 'gerente']), uploadCloud.single('foto'), usuariosController.crearUsuario);
+router.post('/', checkAuth, checkRole(['superadmin', 'admin', 'administrador', 'gerente','director']), uploadCloud.single('foto'), usuariosController.crearUsuario);
 
 // 2. Listar usuarios
-router.get('/', checkAuth, checkRole(['superadmin', 'admin', 'administrador', 'gerente']), usuariosController.obtenerUsuarios);
+router.get('/', checkAuth, checkRole(['superadmin', 'admin', 'administrador', 'gerente','director']), usuariosController.obtenerUsuarios);
 
 // 5. Rutas dinámicas por ID (Genérico va AL FINAL)
-router.get('/:id', checkAuth, checkRole(['superadmin', 'admin', 'gerente']), usuariosController.obtenerUsuarioPorId);
+router.get('/:id', checkAuth, checkRole(['superadmin', 'admin', 'gerente','director']), usuariosController.obtenerUsuarioPorId);
 
 // Actualizar OTRO usuario (Solo admins)
-router.put('/:id', checkAuth, checkRole(['superadmin', 'admin', 'administrador', 'gerente']), uploadCloud.single('foto'), usuariosController.actualizarUsuario);
+router.put('/:id', checkAuth, checkRole(['superadmin', 'admin', 'administrador', 'gerente','director']), uploadCloud.single('foto'), usuariosController.actualizarUsuario);
 
 // Eliminar usuario
-router.delete('/:id', checkAuth, checkRole(['superadmin', 'admin']), usuariosController.eliminarUsuario);
+router.delete('/:id', checkAuth, checkRole(['superadmin', 'admin','director','gerente']), usuariosController.eliminarUsuario);
 
 module.exports = router;

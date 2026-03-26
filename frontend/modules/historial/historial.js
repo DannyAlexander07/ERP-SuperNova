@@ -28,7 +28,7 @@
         const rol = (usuario.rol || '').toLowerCase();
         
         // Solo Superadmin o Gerente ven el filtro
-        const esSuperAdmin = rol === 'superadmin' || rol === 'gerente';
+        const esSuperAdmin = rol === 'superadmin' || rol === 'gerente' || rol === 'admin' || rol === 'director' || rol === 'finanzas' || rol === 'contabilidad';
         
         const select = document.getElementById('filtro-sede-historial');
         if (!select) return;

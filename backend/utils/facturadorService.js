@@ -84,7 +84,7 @@ const enviarFactura = async (data) => {
             totalImporteTotal += totalItem;
 
             // E. Código del producto
-            let codigoReal = item.codigo_visual || item.codigo_producto || `P-${item.producto_id}`;
+            let codigoReal = item.codigo_visual || item.codigo_producto || (item.producto_id ? `P-${item.producto_id}` : 'P-0000');
 
             return {
                 unidad_de_medida: item.unidad_medida || "NIU",

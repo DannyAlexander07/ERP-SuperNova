@@ -336,7 +336,8 @@ exports.registrarPagoLead = async (req, res) => {
         await client.query(
             `INSERT INTO detalle_ventas (venta_id, producto_id, nombre_producto_historico, cantidad, precio_unitario, subtotal)
              VALUES ($1, $2, $3, 1, $4, $5)`,
-            [ventaId, null, `ADELANTO RESERVA: ${nombrePaquete} (${lead.cantidad_ninos || 15} pax)`, montoAbono, montoAbono]
+            // 🔥 CORRECCIÓN: Pasamos el paqueteId en lugar de 'null'
+            [ventaId, paqueteId || null, `ADELANTO RESERVA: ${nombrePaquete} (${lead.cantidad_ninos || 15} pax)`, montoAbono, montoAbono]
         );
 
         // 6. Registrar en CAJA CHICA

@@ -182,7 +182,7 @@ exports.obtenerKardex = async (req, res) => {
     try {
         const rol = req.usuario.rol ? req.usuario.rol.toLowerCase() : '';
         const usuarioSedeId = req.usuario.sede_id;
-        const esSuperAdmin = rol === 'superadmin' || rol === 'gerente';
+        const esSuperAdmin = rol === 'superadmin' || rol === 'gerente' || rol === 'admin' || rol === 'director';
         const filtroSedeId = req.query.sede;
         
         let query = `

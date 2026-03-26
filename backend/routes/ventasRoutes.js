@@ -18,6 +18,6 @@ router.get('/historial', checkAuth, ventasController.obtenerHistorialVentas);
 router.get('/detalle/:id', checkAuth, ventasController.obtenerDetalleVenta);
 
 // 5. Eliminar Venta (Solo Admin)
-router.delete('/:id', checkAuth, checkRole(['admin', 'administrador', 'superadmin']), ventasController.eliminarVenta);
+router.delete('/:id', checkAuth, checkRole(['admin', 'administrador', 'superadmin','director']), ventasController.eliminarVenta);
 
 module.exports = router;
